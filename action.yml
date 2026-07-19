@@ -12,7 +12,7 @@ inputs:
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
-    default: 'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'
+    default: 'deepseek-ai/deepseek-v4-pro,minimaxai/minimax-m3,deepseek-ai/deepseek-v4-flash,z-ai/glm-5.2,qwen/qwen3.5-397b-a17b,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron'
   max_files:
     description: 'Max files to review per PR'
     default: '100'

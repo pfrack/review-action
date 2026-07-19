@@ -1,0 +1,219 @@
+/**
+ * bench-reorder.ts
+ *
+ * After a benchmark run, this script:
+ * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
+ * 2. Ranks models by SWE-bench score with latency penalty
+ * 3. Updates nim_models in action.yml
+ */
+
+import { readFileSync, writeFileSync } from 'node:fs';
+
+export interface ParsedRow {
+  model: string;
+  ttftMs: number;
+  latencyMs: number;
+  tokensPerSec: number;
+  errors: number;
+}
+
+/**
+ * Parse the markdown table output from bench-entry.ts
+ */
+export function parseMarkdownTable(table: string): ParsedRow[] {
+  const lines = table.trim().split('\n');
+  const rows: ParsedRow[] = [];
+
+  for (const line of lines) {
+    if (!line.startsWith('|') || line.includes('---') || line.includes('Model')) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+    if (cells.length < 5) continue;
+
+    const model = cells[0].replace(/`/g, '');
+    const ttftMs = parseDuration(cells[1]);
+    const latencyMs = parseDuration(cells[2]);
+    const tokensPerSec = parseFloat(cells[3]) || 0;
+    const errors = parseInt(cells[4], 10) || 0;
+
+    rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
+  }
+
+  return rows;
+}
+
+function parseDuration(s: string): number {
+  s = s.trim();
+  if (s === 'N/A') return Infinity;
+  if (s.endsWith('μs')) return parseFloat(s) / 1000;
+  if (s.endsWith('ms')) return parseFloat(s);
+  if (s.endsWith('s')) return parseFloat(s) * 1000;
+  return parseFloat(s) || Infinity;
+}
+
+/**
+ * Known SWE-bench Verified scores for models available on NIM.
+ * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ */
+export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  'deepseek-ai/deepseek-v4-flash': 0.790,
+  'minimaxai/minimax-m3': 0.805,
+  'minimaxai/minimax-m2.7': 0.802,
+  'moonshotai/kimi-k2.6': 0.802,
+  'z-ai/glm-5.2': 0.778,
+  'mistralai/mistral-medium-3.5-128b': 0.776,
+  'qwen/qwen3.5-397b-a17b': 0.764,
+  'stepfun-ai/step-3.7-flash': 0.744,
+  'qwen/qwen3.5-122b-a10b': 0.734,
+  'bytedance/seed-oss-36b-instruct': 0.735,
+  'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
+  'mistralai/mistral-nemotron': 0.720,
+  'qwen/qwen3-next-80b-a3b-instruct': 0.720,
+  'openai/gpt-oss-120b': 0.720,
+  'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
+  'mistralai/mistral-large': 0.700,
+  'mistralai/mistral-large-2-instruct': 0.700,
+  'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
+  'nvidia/nemotron-3-super-120b-a12b': 0.680,
+  'mistralai/mistral-small-4-119b-2603': 0.680,
+  'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
+  'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
+  'nvidia/nemotron-4-340b-instruct': 0.650,
+  'openai/gpt-oss-20b': 0.650,
+  'meta/llama-4-maverick-17b-128e-instruct': 0.650,
+  'thinkingmachines/inkling': 0.650,
+  'meta/llama-3.3-70b-instruct': 0.620,
+  'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
+  'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
+  'meta/llama-3.1-70b-instruct': 0.600,
+  'poolside/laguna-xs-2.1': 0.600,
+  'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
+  'microsoft/phi-3.5-moe-instruct': 0.580,
+  'databricks/dbrx-instruct': 0.550,
+  'ai21labs/jamba-1.5-large-instruct': 0.550,
+};
+
+/**
+ * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ */
+export function getSweBenchScore(model: string): number {
+  return SWE_BENCH_SCORES[model] ?? 0.5;
+}
+
+/**
+ * Effective score = SWE-bench score × latency multiplier.
+ * - Under 60s: no penalty (1.0)
+ * - 60-120s: linear penalty (1.0 → 0.7)
+ * - Over 120s: heavy penalty (0.5)
+ */
+export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = 60_000): number {
+  const swe = getSweBenchScore(model);
+  if (!latencies || !(model in latencies)) return swe;
+
+  const lat = latencies[model];
+  if (lat <= maxLatencyMs) return swe;
+  if (lat <= maxLatencyMs * 2) {
+    const ratio = (lat - maxLatencyMs) / maxLatencyMs;
+    return swe * (1.0 - 0.3 * ratio);
+  }
+  return swe * 0.5;
+}
+
+/**
+ * Rank models by effective score (SWE-bench + latency penalty).
+ * Only includes models that worked today (tokensPerSec > 0).
+ */
+export function rankModels(
+  rows: ParsedRow[],
+  latencies?: Record<string, number>,
+): string[] {
+  const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+
+  return alive
+    .map(r => r.model)
+    .sort((a, b) => {
+      const effA = getEffectiveScore(a, latencies);
+      const effB = getEffectiveScore(b, latencies);
+      if (effB !== effA) return effB - effA;
+      // Tiebreaker: faster today wins
+      const latA = latencies?.[a] ?? Infinity;
+      const latB = latencies?.[b] ?? Infinity;
+      return latA - latB;
+    });
+}
+
+/**
+ * Update action.yml with new model order.
+ */
+export function updateActionYml(actionPath: string, orderedModels: string[]): void {
+  const content = readFileSync(actionPath, 'utf-8');
+  const modelString = orderedModels.join(',');
+
+  const updated = content.replace(
+    /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+    `$1${modelString}$3`,
+  );
+
+  if (updated === content) {
+    console.warn('Warning: could not find nim_models default in action.yml, no changes made');
+    return;
+  }
+
+  writeFileSync(actionPath, updated, 'utf-8');
+}
+
+/**
+ * Main entry point — reads table from stdin, ranks, updates action.yml.
+ */
+async function main(): Promise<void> {
+  const actionPath = process.env.ACTION_PATH || 'action.yml';
+
+  // Read benchmark table from stdin
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk);
+  }
+  const table = Buffer.concat(chunks).toString('utf-8');
+
+  if (!table.trim()) {
+    console.error('No benchmark output received on stdin');
+    process.exit(1);
+  }
+
+  const rows = parseMarkdownTable(table);
+  if (rows.length === 0) {
+    console.error('Could not parse any rows from benchmark output');
+    process.exit(1);
+  }
+
+  // Extract latencies
+  const latencies: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+      latencies[row.model] = row.latencyMs;
+    }
+  }
+
+  const ranked = rankModels(rows, latencies);
+
+  console.log('Model ranking (SWE-bench × latency):');
+  for (const model of ranked) {
+    const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
+    const swe = getSweBenchScore(model).toFixed(3);
+    const eff = getEffectiveScore(model, latencies).toFixed(3);
+    console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+  }
+
+  updateActionYml(actionPath, ranked);
+  console.log(`\naction.yml updated with ${ranked.length} models.`);
+}
+
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
+if (isMainModule) {
+  main().catch(err => {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  });
+}

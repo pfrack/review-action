@@ -1,6 +1,7 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { NimClient } from './nim-client.js';
 import { runBenchmark, formatMarkdownTable } from './bench.js';
+import { SWE_BENCH_SCORES } from './bench-reorder.js';
 function envOrDefault(key, def) {
     return process.env[key] || def;
 }
@@ -25,6 +26,27 @@ func processOrder(items []Item, discount float64) Order {
     }
 }
 \`\`\``;
+const TARGET_COUNT = 7;
+/**
+ * Read current models from action.yml
+ */
+function readCurrentModels(actionPath) {
+    const content = readFileSync(actionPath, 'utf-8');
+    const match = content.match(/nim_models:\n\s+description:[^\n]*\n\s+default:\s*'([^']*)'/);
+    if (!match)
+        return [];
+    return splitCSV(match[1]);
+}
+/**
+ * Get SWE-bench ranked candidates not already in the active list
+ */
+function getReplacements(activeModels) {
+    const activeSet = new Set(activeModels);
+    return Object.entries(SWE_BENCH_SCORES)
+        .filter(([model]) => !activeSet.has(model))
+        .sort((a, b) => b[1] - a[1])
+        .map(([model]) => model);
+}
 async function probe(baseURL, apiKey, models) {
     const client = new NimClient(baseURL, apiKey);
     for (const model of models) {
@@ -46,13 +68,35 @@ async function main() {
         throw new Error('NIM_API_KEY is required');
     }
     const baseURL = envOrDefault('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1');
-    const models = splitCSV(envOrDefault('NIM_MODELS', 'meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'));
+    const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
+    const client = new NimClient(baseURL, apiKey);
+    // Determine models to benchmark
+    let models;
+    const modelsEnv = process.env.NIM_MODELS;
+    if (modelsEnv) {
+        models = splitCSV(modelsEnv);
+    }
+    else {
+        // Read current top from action.yml
+        models = readCurrentModels(actionPath);
+        if (models.length === 0) {
+            // First run — seed from SWE-bench top models
+            models = Object.entries(SWE_BENCH_SCORES)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, TARGET_COUNT)
+                .map(([model]) => model);
+            process.stderr.write(`First run — seeding with top ${TARGET_COUNT} SWE-bench models\n`);
+        }
+        else {
+            process.stderr.write(`Benchmarking current ${models.length} models from action.yml\n`);
+        }
+    }
     // --probe mode
     if (process.argv.includes('--probe')) {
         await probe(baseURL, apiKey, models);
         return;
     }
-    let iterations = 5;
+    let iterations = 2;
     const iterEnv = process.env.NIM_BENCH_ITERATIONS;
     if (iterEnv) {
         const n = parseInt(iterEnv, 10);
@@ -61,9 +105,10 @@ async function main() {
         iterations = n;
     }
     const benchPrompt = envOrDefault('NIM_BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
-    const client = new NimClient(baseURL, apiKey);
-    process.stderr.write(`Benchmarking ${models.length} models with ${iterations} iterations each...\n\n`);
+    process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations...\n\n`);
+    // Benchmark current models
     const results = [];
+    const failed = [];
     for (const model of models) {
         process.stderr.write(`  ${model} ...`);
         const start = Date.now();
@@ -75,10 +120,62 @@ async function main() {
         });
         const elapsed = Date.now() - start;
         const errCount = result.iterations.filter(it => it.error !== null).length;
-        process.stderr.write(` done in ${Math.round(elapsed / 1000)}s (${errCount} errors)\n`);
+        const allFailed = errCount === iterations;
+        if (allFailed) {
+            process.stderr.write(` FAILED (${Math.round(elapsed / 1000)}s)\n`);
+            failed.push(model);
+        }
+        else {
+            process.stderr.write(` done in ${Math.round(elapsed / 1000)}s (${errCount} errors)\n`);
+        }
         results.push(result);
     }
-    const table = formatMarkdownTable(results);
+    // Replace failed models with next best from SWE-bench
+    if (failed.length > 0) {
+        process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
+        const replacements = getReplacements(models);
+        for (const deadModel of failed) {
+            let replaced = false;
+            for (const candidate of replacements) {
+                if (models.includes(candidate))
+                    continue;
+                process.stderr.write(`  Probing ${candidate} ...`);
+                const ok = await client.probeModel(candidate);
+                if (!ok) {
+                    process.stderr.write(' FAIL, skipping\n');
+                    continue;
+                }
+                process.stderr.write(' ok, benchmarking...');
+                const result = await runBenchmark(client, candidate, {
+                    prompt: benchPrompt,
+                    iterations,
+                    temperature: 0.2,
+                    maxTokens: 1024,
+                });
+                const errCount = result.iterations.filter(it => it.error !== null).length;
+                if (errCount === iterations) {
+                    process.stderr.write(' FAILED\n');
+                    continue;
+                }
+                process.stderr.write(` done (replacing ${deadModel})\n`);
+                results.push(result);
+                // Replace in models list
+                const idx = models.indexOf(deadModel);
+                models[idx] = candidate;
+                replaced = true;
+                break;
+            }
+            if (!replaced) {
+                process.stderr.write(`  No replacement found for ${deadModel}\n`);
+            }
+        }
+    }
+    // Output results table
+    const successResults = results.filter(r => {
+        const errCount = r.iterations.filter(it => it.error !== null).length;
+        return errCount < r.iterations.length;
+    });
+    const table = formatMarkdownTable(successResults);
     console.log(table);
     // Write to GITHUB_STEP_SUMMARY if set
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;

@@ -1,0 +1,56 @@
+name: Daily Model Benchmark
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run benchmark
+        env:
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+          NIM_BENCH_ITERATIONS: '2'
+        run: node dist/bench-entry.js > benchmark-output.txt 2>&1 || true
+
+      - name: Show results
+        run: cat benchmark-output.txt
+
+      - name: Reorder models
+        env:
+          ACTION_PATH: action.yml
+        run: |
+          grep '^|' benchmark-output.txt > table.txt || true
+          if [ -s table.txt ]; then
+            node dist/bench-reorder.js < table.txt
+          else
+            echo "No benchmark table found, skipping reorder"
+          fi
+
+      - name: Commit updated model order
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update model order from daily benchmark [skip ci]"
+            git push
+          fi

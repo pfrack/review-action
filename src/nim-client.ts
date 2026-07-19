@@ -170,4 +170,21 @@ export class NimClient {
       return false;
     }
   }
+
+  async listModels(): Promise<string[]> {
+    const resp = await fetch(`${this.baseURL}/models`, {
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      throw new Error(`NIM /models returned ${resp.status}`);
+    }
+
+    const data = await resp.json() as { data: { id: string }[] };
+    return data.data.map(m => m.id);
+  }
 }
