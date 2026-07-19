@@ -27,4 +27,4 @@ inputs:
     default: 'append'
 runs:
   using: 'node24'
-  main: 'dist/index.js'
+  main: 'dist/bundle/index.js'
