@@ -9,7 +9,11 @@ async function run() {
     // Validate custom URL protocol first (more specific error)
     if (config.customApiUrl) {
         const url = new URL(config.customApiUrl);
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1'))) {
+        const isLoopback = url.hostname === 'localhost'
+            || url.hostname === '127.0.0.1'
+            || url.hostname === '::1'
+            || url.hostname === '0.0.0.0';
+        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
             throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
         }
     }
@@ -18,7 +22,7 @@ async function run() {
     }
     // Informational: custom-only means no fallback if custom model fails
     if (hasCustom && !config.apiKey && !config.mistralApiKey) {
-        core.warning('Running with only custom API configured — no fallback chain available if custom model fails');
+        core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
