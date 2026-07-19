@@ -27757,6 +27757,9 @@ function loadConfig() {
         apiKey: core.getInput('nim_api_key'),
         models: splitCSV(core.getInput('nim_models') ||
             'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+        mistralApiKey: core.getInput('mistral_api_key') || '',
+        mistralModels: splitCSV(core.getInput('mistral_models') ||
+            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
@@ -27957,10 +27960,10 @@ Respond in concise markdown with findings for each file. For each finding use:
 If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey) {
-        throw new Error('NIM_API_KEY is required');
+    if (!config.apiKey && !config.mistralApiKey) {
+        throw new Error('At least one of nim_api_key or mistral_api_key is required');
     }
-    const client = new NimClient(config.baseURL, config.apiKey);
+    const client = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -28004,23 +28007,25 @@ async function run() {
     // Try models in order, stop at first success
     let review = '';
     let usedModel = '';
-    for (const model of config.models) {
-        try {
-            core.info(`Trying ${model}...`);
-            const result = await client.chat(model, [
-                { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
-                { role: 'user', content: userMsg },
-            ], { temperature: 0.2, maxTokens: 4096 });
-            if (result.content && result.content.trim()) {
-                review = result.content;
-                usedModel = model;
-                core.info(`Done with ${model}`);
-                break;
+    if (client) {
+        for (const model of config.models) {
+            try {
+                core.info(`Trying ${model}...`);
+                const result = await client.chat(model, [
+                    { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
+                    { role: 'user', content: userMsg },
+                ], { temperature: 0.2, maxTokens: 4096 });
+                if (result.content && result.content.trim()) {
+                    review = result.content;
+                    usedModel = model;
+                    core.info(`Done with ${model}`);
+                    break;
+                }
+                core.info(`${model} returned empty, trying next...`);
             }
-            core.info(`${model} returned empty, trying next...`);
-        }
-        catch (err) {
-            core.info(`${model} failed: ${err}`);
+            catch (err) {
+                core.info(`${model} failed: ${err}`);
+            }
         }
     }
     if (!review) {

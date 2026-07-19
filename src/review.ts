@@ -18,6 +18,8 @@ export interface Config {
   baseURL: string;
   apiKey: string;
   models: string[];
+  mistralApiKey: string;
+  mistralModels: string[];
   maxFiles: number;
   excludePatterns: string[];
   systemPrompt: string;
@@ -34,6 +36,9 @@ export function loadConfig(): Config {
     apiKey: core.getInput('nim_api_key'),
     models: splitCSV(core.getInput('nim_models') ||
       'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+    mistralApiKey: core.getInput('mistral_api_key') || '',
+    mistralModels: splitCSV(core.getInput('mistral_models') ||
+      'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
     maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
     systemPrompt: core.getInput('nim_system_prompt'),

@@ -27,10 +27,10 @@ Respond in concise markdown with findings for each file. For each finding use:
 If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey) {
-        throw new Error('NIM_API_KEY is required');
+    if (!config.apiKey && !config.mistralApiKey) {
+        throw new Error('At least one of nim_api_key or mistral_api_key is required');
     }
-    const client = new NimClient(config.baseURL, config.apiKey);
+    const client = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -74,23 +74,25 @@ async function run() {
     // Try models in order, stop at first success
     let review = '';
     let usedModel = '';
-    for (const model of config.models) {
-        try {
-            core.info(`Trying ${model}...`);
-            const result = await client.chat(model, [
-                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
-                { role: 'user', content: userMsg },
-            ], { temperature: 0.2, maxTokens: 4096 });
-            if (result.content && result.content.trim()) {
-                review = result.content;
-                usedModel = model;
-                core.info(`Done with ${model}`);
-                break;
+    if (client) {
+        for (const model of config.models) {
+            try {
+                core.info(`Trying ${model}...`);
+                const result = await client.chat(model, [
+                    { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                    { role: 'user', content: userMsg },
+                ], { temperature: 0.2, maxTokens: 4096 });
+                if (result.content && result.content.trim()) {
+                    review = result.content;
+                    usedModel = model;
+                    core.info(`Done with ${model}`);
+                    break;
+                }
+                core.info(`${model} returned empty, trying next...`);
             }
-            core.info(`${model} returned empty, trying next...`);
-        }
-        catch (err) {
-            core.info(`${model} failed: ${err}`);
+            catch (err) {
+                core.info(`${model} failed: ${err}`);
+            }
         }
     }
     if (!review) {

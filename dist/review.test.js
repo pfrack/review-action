@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, resolveSystemPrompt } from './review.js';
+import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig } from './review.js';
 describe('parseDiff', () => {
     it('splits multi-file diffs', () => {
         const raw = `diff --git a/main.go b/main.go
@@ -50,6 +50,8 @@ describe('resolveSystemPrompt', () => {
         baseURL: '',
         apiKey: '',
         models: [],
+        mistralApiKey: '',
+        mistralModels: [],
         maxFiles: 15,
         excludePatterns: [],
         systemPrompt: '',
@@ -91,5 +93,61 @@ describe('resolveSystemPrompt', () => {
         });
         assert.ok(prompt.includes('Focus on security.'));
         assert.ok(prompt.includes('code review'));
+    });
+});
+describe('loadConfig — mistral fields', () => {
+    it('reads mistralApiKey and mistralModels from inputs', () => {
+        // loadConfig uses @actions/core.getInput which reads INPUT_* env vars
+        // Set them to simulate action inputs
+        process.env['INPUT_MISTRAL_API_KEY'] = 'test-mistral-key';
+        process.env['INPUT_MISTRAL_MODELS'] = 'mistral-medium-3.5,codestral-2508';
+        process.env['INPUT_NIM_API_KEY'] = 'test-nim-key';
+        process.env['INPUT_NIM_BASE_URL'] = 'https://integrate.api.nvidia.com/v1';
+        process.env['INPUT_NIM_MODELS'] = 'deepseek-ai/deepseek-v4-pro';
+        process.env['INPUT_MAX_FILES'] = '50';
+        process.env['INPUT_EXCLUDE_PATTERNS'] = '*.lock';
+        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+        process.env['INPUT_NIM_PROMPT_MODE'] = 'append';
+        const config = loadConfig();
+        assert.strictEqual(config.mistralApiKey, 'test-mistral-key');
+        assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'codestral-2508']);
+        assert.strictEqual(config.apiKey, 'test-nim-key');
+        assert.deepStrictEqual(config.models, ['deepseek-ai/deepseek-v4-pro']);
+        // Cleanup
+        delete process.env['INPUT_MISTRAL_API_KEY'];
+        delete process.env['INPUT_MISTRAL_MODELS'];
+        delete process.env['INPUT_NIM_API_KEY'];
+        delete process.env['INPUT_NIM_BASE_URL'];
+        delete process.env['INPUT_NIM_MODELS'];
+        delete process.env['INPUT_MAX_FILES'];
+        delete process.env['INPUT_EXCLUDE_PATTERNS'];
+        delete process.env['INPUT_NIM_SYSTEM_PROMPT'];
+        delete process.env['INPUT_NIM_PROMPT_MODE'];
+    });
+    it('defaults mistral fields to empty when not provided', () => {
+        // Clear all inputs
+        process.env['INPUT_MISTRAL_API_KEY'] = '';
+        process.env['INPUT_MISTRAL_MODELS'] = '';
+        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
+        process.env['INPUT_NIM_BASE_URL'] = '';
+        process.env['INPUT_NIM_MODELS'] = '';
+        process.env['INPUT_MAX_FILES'] = '';
+        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
+        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+        process.env['INPUT_NIM_PROMPT_MODE'] = '';
+        const config = loadConfig();
+        assert.strictEqual(config.mistralApiKey, '');
+        // Should get defaults when empty string provided
+        assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
+        // Cleanup
+        delete process.env['INPUT_MISTRAL_API_KEY'];
+        delete process.env['INPUT_MISTRAL_MODELS'];
+        delete process.env['INPUT_NIM_API_KEY'];
+        delete process.env['INPUT_NIM_BASE_URL'];
+        delete process.env['INPUT_NIM_MODELS'];
+        delete process.env['INPUT_MAX_FILES'];
+        delete process.env['INPUT_EXCLUDE_PATTERNS'];
+        delete process.env['INPUT_NIM_SYSTEM_PROMPT'];
+        delete process.env['INPUT_NIM_PROMPT_MODE'];
     });
 });
