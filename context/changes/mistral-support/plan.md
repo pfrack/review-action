@@ -426,9 +426,9 @@ Add comprehensive tests for the new combined chain logic and update the README w
 
 #### Automated
 
-- [ ] 4.1 `npm run build` passes
-- [ ] 4.2 `npm test` passes
-- [ ] 4.3 Workflow YAML is valid
+- [x] 4.1 `npm run build` passes — 5b0c25b
+- [x] 4.2 `npm test` passes — 5b0c25b
+- [x] 4.3 Workflow YAML is valid — 5b0c25b
 
 #### Manual
 
