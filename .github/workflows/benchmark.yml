@@ -27,9 +27,10 @@ jobs:
         env:
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
           NIM_BENCH_ITERATIONS: '2'
-        run: node dist/bench-entry.js > benchmark-output.txt 2>&1 || true
+        run: node dist/bench-entry.js > benchmark-output.txt
 
       - name: Show results
+        if: always()
         run: cat benchmark-output.txt
 
       - name: Reorder models
