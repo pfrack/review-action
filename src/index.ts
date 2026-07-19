@@ -1,7 +1,33 @@
 import * as core from '@actions/core';
 import { NimClient } from './nim-client.js';
-import { loadConfig, fetchDiff, postComment, reviewFileWithFallback } from './review.js';
+import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
+
+function globMatch(str: string, pattern: string): boolean {
+  const regex = new RegExp(
+    '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+  );
+  return regex.test(str);
+}
+
+function shouldExclude(filePath: string, patterns: string[]): boolean {
+  for (const pat of patterns) {
+    if (globMatch(filePath, pat)) return true;
+    if (globMatch(filePath.split('/').pop() || '', pat)) return true;
+  }
+  return false;
+}
+
+const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+Respond in concise markdown with findings for each file. For each finding use:
+- **File:** path
+- **Severity:** Critical | Warning | Suggestion
+- **Line (approx):** number or range
+- **Issue:** short description
+- **Suggestion:** how to fix
+
+If the code looks fine, say "No issues found."`;
 
 async function run(): Promise<void> {
   const config = loadConfig();
@@ -35,40 +61,69 @@ async function run(): Promise<void> {
     return;
   }
 
-  let reviewed = 0;
-  const sections: string[] = [`### NIM Code Review\n\n_Models: \`${config.models.join(' -> ')}\`_\n`];
-
+  // Filter files and build combined diff
   const filenames = Object.keys(filesDiff).sort();
+  const reviewableFiles: string[] = [];
+  let combinedDiff = '';
 
   for (const filePath of filenames) {
-    const diff = filesDiff[filePath];
-
-    if (reviewed >= config.maxFiles) {
-      sections.push(`\n---\nReached max file limit (${config.maxFiles}); remaining files skipped.`);
-      break;
-    }
-
-    if (filePath.split('/').pop() && config.excludePatterns.some(pat => {
-      const re = new RegExp('^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-      return re.test(filePath) || re.test(filePath.split('/').pop() || '');
-    })) {
+    if (shouldExclude(filePath, config.excludePatterns)) {
       continue;
     }
+    reviewableFiles.push(filePath);
+    combinedDiff += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
+  }
 
-    core.info(`Reviewing ${filePath} ...`);
+  if (reviewableFiles.length === 0) {
+    const msg = '### NIM Code Review\n\nNo reviewable files found in this PR (all excluded).';
+    await postComment(repo, prNumber, token, msg);
+    return;
+  }
 
+  // Truncate if too many files
+  const filesToReview = reviewableFiles.slice(0, config.maxFiles);
+  const truncated = reviewableFiles.length > config.maxFiles;
+
+  core.info(`Reviewing ${filesToReview.length} files...`);
+
+  // Build the diff for the files we'll actually review
+  let diffToSend = '';
+  for (const filePath of filesToReview) {
+    diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
+  }
+
+  // Send the whole diff at once
+  const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
+
+  let review = '';
+  for (const model of config.models) {
     try {
-      const review = await reviewFileWithFallback(client, filePath, diff, config);
-      if (review && review.trim()) {
-        sections.push(`\n#### \`${filePath}\`\n\n${review}`);
-        reviewed++;
-      } else {
-        core.info(`Skipping ${filePath} - no review content returned`);
+      core.info(`Trying model: ${model}`);
+      const result = await client.chat(model, [
+        { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+        { role: 'user', content: userMsg },
+      ], { temperature: 0.2, maxTokens: 4096 });
+
+      if (result.content && result.content.trim()) {
+        review = result.content;
+        core.info(`Review completed with ${model}`);
+        break;
       }
+      core.info(`Model ${model} returned empty content, trying next...`);
     } catch (err) {
-      sections.push(`\n#### \`${filePath}\`\n\nReview failed: \`${err}\``);
-      reviewed++;
+      core.info(`Model ${model} failed: ${err}`);
     }
+  }
+
+  if (!review) {
+    review = 'No review content returned from any model.';
+  }
+
+  const sections: string[] = [`### NIM Code Review\n\n_Models: \`${config.models.join(' -> ')}\`_\n`];
+  sections.push(`\n${review}`);
+
+  if (truncated) {
+    sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
   }
 
   await postComment(repo, prNumber, token, sections.join('\n'));

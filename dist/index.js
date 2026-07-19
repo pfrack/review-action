@@ -27698,7 +27698,7 @@ Respond in concise markdown. For each finding use:
 If the code looks fine, say "No issues found."`,
 };
 function languageForFile(filePath) {
-    const ext = (0,external_node_path_namespaceObject.extname)(filePath).toLowerCase();
+    const ext = extname(filePath).toLowerCase();
     switch (ext) {
         case '.go': return 'go';
         case '.py': return 'python';
@@ -27715,7 +27715,7 @@ function languageForFile(filePath) {
         default: return 'generic';
     }
 }
-function languageForTemplate(filePath) {
+function prompts_languageForTemplate(filePath) {
     const lang = languageForFile(filePath);
     return languagePrompts[lang] ?? '';
 }
@@ -27723,7 +27723,7 @@ function languageForTemplate(filePath) {
 ;// CONCATENATED MODULE: ./src/review.ts
 
 
-const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (`You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns.
 Respond in concise markdown. For each finding use:
@@ -27733,7 +27733,7 @@ Respond in concise markdown. For each finding use:
 - **Issue:** short description
 - **Suggestion:** how to fix
 
-If the code looks fine, say "No issues found."`;
+If the code looks fine, say "No issues found."`));
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -27871,6 +27871,29 @@ function loadEvent() {
 
 
 
+function src_globMatch(str, pattern) {
+    const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    return regex.test(str);
+}
+function src_shouldExclude(filePath, patterns) {
+    for (const pat of patterns) {
+        if (src_globMatch(filePath, pat))
+            return true;
+        if (src_globMatch(filePath.split('/').pop() || '', pat))
+            return true;
+    }
+    return false;
+}
+const src_BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+Respond in concise markdown with findings for each file. For each finding use:
+- **File:** path
+- **Severity:** Critical | Warning | Suggestion
+- **Line (approx):** number or range
+- **Issue:** short description
+- **Suggestion:** how to fix
+
+If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
     if (!config.apiKey) {
@@ -27895,36 +27918,59 @@ async function run() {
         await postComment(repo, prNumber, token, msg);
         return;
     }
-    let reviewed = 0;
-    const sections = [`### NIM Code Review\n\n_Models: \`${config.models.join(' -> ')}\`_\n`];
+    // Filter files and build combined diff
     const filenames = Object.keys(filesDiff).sort();
+    const reviewableFiles = [];
+    let combinedDiff = '';
     for (const filePath of filenames) {
-        const diff = filesDiff[filePath];
-        if (reviewed >= config.maxFiles) {
-            sections.push(`\n---\nReached max file limit (${config.maxFiles}); remaining files skipped.`);
-            break;
-        }
-        if (filePath.split('/').pop() && config.excludePatterns.some(pat => {
-            const re = new RegExp('^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-            return re.test(filePath) || re.test(filePath.split('/').pop() || '');
-        })) {
+        if (src_shouldExclude(filePath, config.excludePatterns)) {
             continue;
         }
-        core.info(`Reviewing ${filePath} ...`);
+        reviewableFiles.push(filePath);
+        combinedDiff += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
+    }
+    if (reviewableFiles.length === 0) {
+        const msg = '### NIM Code Review\n\nNo reviewable files found in this PR (all excluded).';
+        await postComment(repo, prNumber, token, msg);
+        return;
+    }
+    // Truncate if too many files
+    const filesToReview = reviewableFiles.slice(0, config.maxFiles);
+    const truncated = reviewableFiles.length > config.maxFiles;
+    core.info(`Reviewing ${filesToReview.length} files...`);
+    // Build the diff for the files we'll actually review
+    let diffToSend = '';
+    for (const filePath of filesToReview) {
+        diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
+    }
+    // Send the whole diff at once
+    const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
+    let review = '';
+    for (const model of config.models) {
         try {
-            const review = await reviewFileWithFallback(client, filePath, diff, config);
-            if (review && review.trim()) {
-                sections.push(`\n#### \`${filePath}\`\n\n${review}`);
-                reviewed++;
+            core.info(`Trying model: ${model}`);
+            const result = await client.chat(model, [
+                { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
+                { role: 'user', content: userMsg },
+            ], { temperature: 0.2, maxTokens: 4096 });
+            if (result.content && result.content.trim()) {
+                review = result.content;
+                core.info(`Review completed with ${model}`);
+                break;
             }
-            else {
-                core.info(`Skipping ${filePath} - no review content returned`);
-            }
+            core.info(`Model ${model} returned empty content, trying next...`);
         }
         catch (err) {
-            sections.push(`\n#### \`${filePath}\`\n\nReview failed: \`${err}\``);
-            reviewed++;
+            core.info(`Model ${model} failed: ${err}`);
         }
+    }
+    if (!review) {
+        review = 'No review content returned from any model.';
+    }
+    const sections = [`### NIM Code Review\n\n_Models: \`${config.models.join(' -> ')}\`_\n`];
+    sections.push(`\n${review}`);
+    if (truncated) {
+        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
     }
     await postComment(repo, prNumber, token, sections.join('\n'));
 }
