@@ -152,8 +152,19 @@ export function updateActionYml(actionPath, orderedModels, target = 'nim_models'
     const content = readFileSync(actionPath, 'utf-8');
     const modelString = orderedModels.join(',');
     const config = TARGET_CONFIG[target];
+    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
     if (!config.pattern.test(content)) {
-        console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+        // Show context around the target key for debugging
+        const key = config.label + ':';
+        const idx = content.indexOf(key);
+        if (idx === -1) {
+            console.warn(`Warning: '${key}' not found in ${actionPath}`);
+        }
+        else {
+            const snippet = content.substring(idx, idx + 200);
+            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
+            console.warn(`Content around '${key}':\n${snippet}`);
+        }
         return;
     }
     const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
