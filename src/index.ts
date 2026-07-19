@@ -51,7 +51,28 @@ async function run(): Promise<void> {
   }
 
   core.info(`Reviewing PR #${prNumber} in ${repo}`);
-  core.info(`Models: ${config.models.join(' -> ')}`);
+
+  // Probe models to find alive ones (like the Go version did)
+  core.startGroup('Probing NIM models');
+  const aliveModels: string[] = [];
+  for (const model of config.models) {
+    try {
+      const alive = await client.probeModel(model);
+      if (alive) {
+        aliveModels.push(model);
+        core.info(`${model} ok`);
+      } else {
+        core.info(`${model} FAIL`);
+      }
+    } catch {
+      core.info(`${model} FAIL`);
+    }
+  }
+  core.endGroup();
+
+  // Fall back to full list if no models responded
+  const modelsToUse = aliveModels.length > 0 ? aliveModels : config.models;
+  core.info(`Alive models: ${modelsToUse.join(' -> ')}`);
 
   const filesDiff = await fetchDiff(repo, prNumber, token);
 
@@ -96,7 +117,7 @@ async function run(): Promise<void> {
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
 
   let review = '';
-  for (const model of config.models) {
+  for (const model of modelsToUse) {
     try {
       core.info(`Trying model: ${model}`);
       const result = await client.chat(model, [
