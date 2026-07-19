@@ -33,7 +33,7 @@ export function loadConfig(): Config {
     baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
     apiKey: core.getInput('nim_api_key'),
     models: splitCSV(core.getInput('nim_models') ||
-      'meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+      'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
     maxFiles: parseInt(core.getInput('max_files') || '15', 10) || 15,
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum'),
     systemPrompt: core.getInput('nim_system_prompt'),
