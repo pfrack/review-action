@@ -2,6 +2,8 @@ import * as core from '@actions/core';
 import { NimClient } from './nim-client.js';
 import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
+import { buildCombinedChain } from './model-chain.js';
+export const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 function globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
@@ -30,7 +32,13 @@ async function run() {
     if (!config.apiKey && !config.mistralApiKey) {
         throw new Error('At least one of nim_api_key or mistral_api_key is required');
     }
-    const client = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
+    const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
+    const mistralClient = config.mistralApiKey ? new NimClient(MISTRAL_BASE_URL, config.mistralApiKey) : null;
+    const clients = {
+        nim: nimClient,
+        mistral: mistralClient,
+    };
+    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey);
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -42,6 +50,7 @@ async function run() {
         throw new Error('GITHUB_TOKEN not set');
     }
     core.info(`Reviewing PR #${prNumber} in ${repo}`);
+    core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
     const filesDiff = await fetchDiff(repo, prNumber, token);
     if (Object.keys(filesDiff).length === 0) {
         const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
@@ -71,28 +80,29 @@ async function run() {
         diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
     }
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
-    // Try models in order, stop at first success
+    // Try models from combined chain in order, stop at first success
     let review = '';
     let usedModel = '';
-    if (client) {
-        for (const model of config.models) {
-            try {
-                core.info(`Trying ${model}...`);
-                const result = await client.chat(model, [
-                    { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
-                    { role: 'user', content: userMsg },
-                ], { temperature: 0.2, maxTokens: 4096 });
-                if (result.content && result.content.trim()) {
-                    review = result.content;
-                    usedModel = model;
-                    core.info(`Done with ${model}`);
-                    break;
-                }
-                core.info(`${model} returned empty, trying next...`);
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
+        try {
+            core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const result = await client.chat(tagged.id, [
+                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                { role: 'user', content: userMsg },
+            ], { temperature: 0.2, maxTokens: 4096 });
+            if (result.content && result.content.trim()) {
+                review = result.content;
+                usedModel = tagged.id;
+                core.info(`Done with ${tagged.id} (${tagged.provider})`);
+                break;
             }
-            catch (err) {
-                core.info(`${model} failed: ${err}`);
-            }
+            core.info(`${tagged.id} returned empty, trying next...`);
+        }
+        catch (err) {
+            core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
         }
     }
     if (!review) {

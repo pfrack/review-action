@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { NimClient, type ChatMessage } from './nim-client.js';
+import { type TaggedModel, type Provider } from './model-chain.js';
 import { languageForTemplate } from './prompts.js';
 
 const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
@@ -210,19 +211,23 @@ export async function reviewFile(
 }
 
 export async function reviewFileWithFallback(
-  client: NimClient,
+  clients: Record<Provider, NimClient | null>,
   filePath: string,
   diff: string,
+  chain: TaggedModel[],
   config: Config,
 ): Promise<string> {
   let lastErr: Error | null = null;
 
-  for (const model of config.models) {
+  for (const tagged of chain) {
+    const client = clients[tagged.provider];
+    if (!client) continue;
+
     try {
-      return await reviewFile(client, filePath, diff, model, config);
+      return await reviewFile(client, filePath, diff, tagged.id, config);
     } catch (err) {
       lastErr = err as Error;
-      console.error(`Model ${model} failed for ${filePath}: ${err}, trying next...`);
+      console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
     }
   }
 

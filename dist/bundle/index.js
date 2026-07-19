@@ -27418,12 +27418,34 @@ module.exports = parseParams
 /******/ }
 /******/ 
 /************************************************************************/
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__nccwpck_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
 /******/ /* webpack/runtime/compat */
 /******/ 
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
 /******/ 
 /************************************************************************/
 var __webpack_exports__ = {};
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  r: () => (/* binding */ MISTRAL_BASE_URL)
+});
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
@@ -27899,15 +27921,18 @@ async function reviewFile(client, filePath, diff, model, config) {
     ], { temperature: 0.2, maxTokens: 1024 });
     return result.content;
 }
-async function reviewFileWithFallback(client, filePath, diff, config) {
+async function reviewFileWithFallback(clients, filePath, diff, chain, config) {
     let lastErr = null;
-    for (const model of config.models) {
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
         try {
-            return await reviewFile(client, filePath, diff, model, config);
+            return await reviewFile(client, filePath, diff, tagged.id, config);
         }
         catch (err) {
             lastErr = err;
-            console.error(`Model ${model} failed for ${filePath}: ${err}, trying next...`);
+            console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
         }
     }
     throw new Error(`All models failed for ${filePath}: ${lastErr?.message}`);
@@ -27930,11 +27955,232 @@ function loadEvent() {
     return event;
 }
 
+;// CONCATENATED MODULE: ./src/bench-reorder.ts
+/**
+ * bench-reorder.ts
+ *
+ * After a benchmark run, this script:
+ * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
+ * 2. Ranks models by SWE-bench score with latency penalty
+ * 3. Updates nim_models in action.yml
+ */
+
+/**
+ * Parse the markdown table output from bench-entry.ts
+ */
+function parseMarkdownTable(table) {
+    const lines = table.trim().split('\n');
+    const rows = [];
+    for (const line of lines) {
+        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
+            continue;
+        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+        if (cells.length < 5)
+            continue;
+        const model = cells[0].replace(/`/g, '');
+        const ttftMs = parseDuration(cells[1]);
+        const latencyMs = parseDuration(cells[2]);
+        const tokensPerSec = parseFloat(cells[3]) || 0;
+        const errors = parseInt(cells[4], 10) || 0;
+        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
+    }
+    return rows;
+}
+function parseDuration(s) {
+    s = s.trim();
+    if (s === 'N/A')
+        return Infinity;
+    if (s.endsWith('μs'))
+        return parseFloat(s) / 1000;
+    if (s.endsWith('ms'))
+        return parseFloat(s);
+    if (s.endsWith('s'))
+        return parseFloat(s) * 1000;
+    return parseFloat(s) || Infinity;
+}
+/**
+ * Known SWE-bench Verified scores for models available on NIM.
+ * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ */
+const SWE_BENCH_SCORES = {
+    'deepseek-ai/deepseek-v4-pro': 0.806,
+    'deepseek-ai/deepseek-v4-flash': 0.790,
+    'minimaxai/minimax-m3': 0.805,
+    'minimaxai/minimax-m2.7': 0.802,
+    'moonshotai/kimi-k2.6': 0.802,
+    'z-ai/glm-5.2': 0.778,
+    'mistralai/mistral-medium-3.5-128b': 0.776,
+    'qwen/qwen3.5-397b-a17b': 0.764,
+    'stepfun-ai/step-3.7-flash': 0.744,
+    'qwen/qwen3.5-122b-a10b': 0.734,
+    'bytedance/seed-oss-36b-instruct': 0.735,
+    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
+    'mistralai/mistral-nemotron': 0.720,
+    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
+    'openai/gpt-oss-120b': 0.720,
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
+    'mistralai/mistral-large': 0.700,
+    'mistralai/mistral-large-2-instruct': 0.700,
+    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
+    'nvidia/nemotron-3-super-120b-a12b': 0.680,
+    'mistralai/mistral-small-4-119b-2603': 0.680,
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
+    'nvidia/nemotron-4-340b-instruct': 0.650,
+    'openai/gpt-oss-20b': 0.650,
+    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
+    'thinkingmachines/inkling': 0.650,
+    'meta/llama-3.3-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
+    'meta/llama-3.1-70b-instruct': 0.600,
+    'poolside/laguna-xs-2.1': 0.600,
+    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
+    'microsoft/phi-3.5-moe-instruct': 0.580,
+    'databricks/dbrx-instruct': 0.550,
+    'ai21labs/jamba-1.5-large-instruct': 0.550,
+};
+/**
+ * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ */
+function getSweBenchScore(model) {
+    return SWE_BENCH_SCORES[model] ?? 0.5;
+}
+/**
+ * Effective score = SWE-bench score × latency multiplier.
+ * - Under 60s: no penalty (1.0)
+ * - 60-120s: linear penalty (1.0 → 0.7)
+ * - Over 120s: heavy penalty (0.5)
+ */
+function getEffectiveScore(model, latencies, maxLatencyMs = 60_000) {
+    const swe = getSweBenchScore(model);
+    if (!latencies || !(model in latencies))
+        return swe;
+    const lat = latencies[model];
+    if (lat <= maxLatencyMs)
+        return swe;
+    if (lat <= maxLatencyMs * 2) {
+        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
+}
+/**
+ * Rank models by effective score (SWE-bench + latency penalty).
+ * Only includes models that worked today (tokensPerSec > 0).
+ */
+function rankModels(rows, latencies) {
+    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    return alive
+        .map(r => r.model)
+        .sort((a, b) => {
+        const effA = getEffectiveScore(a, latencies);
+        const effB = getEffectiveScore(b, latencies);
+        if (effB !== effA)
+            return effB - effA;
+        // Tiebreaker: faster today wins
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+}
+/**
+ * Update action.yml with new model order.
+ */
+function updateActionYml(actionPath, orderedModels) {
+    const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
+    const modelString = orderedModels.join(',');
+    const updated = content.replace(/(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
+    if (updated === content) {
+        console.warn('Warning: could not find nim_models default in action.yml, no changes made');
+        return;
+    }
+    (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
+}
+/**
+ * Main entry point — reads table from stdin, ranks, updates action.yml.
+ */
+async function main() {
+    const actionPath = process.env.ACTION_PATH || 'action.yml';
+    // Read benchmark table from stdin
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    const table = Buffer.concat(chunks).toString('utf-8');
+    if (!table.trim()) {
+        console.error('No benchmark output received on stdin');
+        process.exit(1);
+    }
+    const rows = parseMarkdownTable(table);
+    if (rows.length === 0) {
+        console.error('Could not parse any rows from benchmark output');
+        process.exit(1);
+    }
+    // Extract latencies
+    const latencies = {};
+    for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+            latencies[row.model] = row.latencyMs;
+        }
+    }
+    const ranked = rankModels(rows, latencies);
+    console.log('Model ranking (SWE-bench × latency):');
+    for (const model of ranked) {
+        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
+        const swe = getSweBenchScore(model).toFixed(3);
+        const eff = getEffectiveScore(model, latencies).toFixed(3);
+        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+    }
+    updateActionYml(actionPath, ranked);
+    console.log(`\naction.yml updated with ${ranked.length} models.`);
+}
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
+if (isMainModule) {
+    main().catch(err => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+    });
+}
+
+;// CONCATENATED MODULE: ./src/model-chain.ts
+
+/**
+ * Build a combined fallback chain from NIM and Mistral model lists,
+ * sorted by SWE-bench score descending. Only includes models whose
+ * provider key is available.
+ *
+ * Stable sort — preserves original order within same score.
+ */
+function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) {
+    const chain = [];
+    if (hasNimKey) {
+        for (const id of nimModels) {
+            chain.push({ id, provider: 'nim' });
+        }
+    }
+    if (hasMistralKey) {
+        for (const id of mistralModels) {
+            chain.push({ id, provider: 'mistral' });
+        }
+    }
+    // Stable sort by SWE-bench score descending
+    chain.sort((a, b) => {
+        const scoreA = getSweBenchScore(a.id);
+        const scoreB = getSweBenchScore(b.id);
+        return scoreB - scoreA;
+    });
+    return chain;
+}
+
 ;// CONCATENATED MODULE: ./src/index.ts
 
 
 
 
+
+const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 function src_globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
@@ -27963,7 +28209,13 @@ async function run() {
     if (!config.apiKey && !config.mistralApiKey) {
         throw new Error('At least one of nim_api_key or mistral_api_key is required');
     }
-    const client = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
+    const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
+    const mistralClient = config.mistralApiKey ? new NimClient(MISTRAL_BASE_URL, config.mistralApiKey) : null;
+    const clients = {
+        nim: nimClient,
+        mistral: mistralClient,
+    };
+    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey);
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -27975,6 +28227,7 @@ async function run() {
         throw new Error('GITHUB_TOKEN not set');
     }
     core.info(`Reviewing PR #${prNumber} in ${repo}`);
+    core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
     const filesDiff = await fetchDiff(repo, prNumber, token);
     if (Object.keys(filesDiff).length === 0) {
         const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
@@ -28004,28 +28257,29 @@ async function run() {
         diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
     }
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
-    // Try models in order, stop at first success
+    // Try models from combined chain in order, stop at first success
     let review = '';
     let usedModel = '';
-    if (client) {
-        for (const model of config.models) {
-            try {
-                core.info(`Trying ${model}...`);
-                const result = await client.chat(model, [
-                    { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
-                    { role: 'user', content: userMsg },
-                ], { temperature: 0.2, maxTokens: 4096 });
-                if (result.content && result.content.trim()) {
-                    review = result.content;
-                    usedModel = model;
-                    core.info(`Done with ${model}`);
-                    break;
-                }
-                core.info(`${model} returned empty, trying next...`);
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
+        try {
+            core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const result = await client.chat(tagged.id, [
+                { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
+                { role: 'user', content: userMsg },
+            ], { temperature: 0.2, maxTokens: 4096 });
+            if (result.content && result.content.trim()) {
+                review = result.content;
+                usedModel = tagged.id;
+                core.info(`Done with ${tagged.id} (${tagged.provider})`);
+                break;
             }
-            catch (err) {
-                core.info(`${model} failed: ${err}`);
-            }
+            core.info(`${tagged.id} returned empty, trying next...`);
+        }
+        catch (err) {
+            core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
         }
     }
     if (!review) {
@@ -28043,3 +28297,5 @@ run().catch(err => {
     core.setFailed(err instanceof Error ? err.message : String(err));
 });
 
+var __webpack_exports__MISTRAL_BASE_URL = __webpack_exports__.r;
+export { __webpack_exports__MISTRAL_BASE_URL as MISTRAL_BASE_URL };

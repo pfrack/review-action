@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, type Config } from './review.js';
+import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, reviewFileWithFallback, type Config } from './review.js';
+import { type TaggedModel, type Provider } from './model-chain.js';
+import { NimClient } from './nim-client.js';
 
 describe('parseDiff', () => {
   it('splits multi-file diffs', () => {
@@ -167,5 +169,195 @@ describe('loadConfig — mistral fields', () => {
     delete process.env['INPUT_EXCLUDE_PATTERNS'];
     delete process.env['INPUT_NIM_SYSTEM_PROMPT'];
     delete process.env['INPUT_NIM_PROMPT_MODE'];
+  });
+});
+
+describe('reviewFileWithFallback — routing', () => {
+  const testConfig: Config = {
+    baseURL: 'http://nim.test',
+    apiKey: 'nim-key',
+    models: ['nim-model'],
+    mistralApiKey: 'mistral-key',
+    mistralModels: ['mistral-model'],
+    maxFiles: 10,
+    excludePatterns: [],
+    systemPrompt: '',
+    promptMode: 'append',
+  };
+
+  it('routes to correct client based on provider tag', async () => {
+    // Create a mock HTTP server to simulate both providers
+    const { createServer } = await import('node:http');
+
+    let nimCalled = false;
+    let mistralCalled = false;
+
+    const server = createServer((req, res) => {
+      const url = new URL(req.url!, `http://localhost`);
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        const parsed = JSON.parse(body);
+        if (parsed.model === 'nim-model') nimCalled = true;
+        if (parsed.model === 'mistral-model') mistralCalled = true;
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: `Review from ${parsed.model}` } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }));
+      });
+    });
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://localhost:${port}`;
+
+    const nimClient = new NimClient(baseUrl, 'nim-key');
+    const mistralClient = new NimClient(baseUrl, 'mistral-key');
+
+    const clients: Record<Provider, NimClient | null> = {
+      nim: nimClient,
+      mistral: mistralClient,
+    };
+
+    // Mistral first in chain
+    const chain: TaggedModel[] = [
+      { id: 'mistral-model', provider: 'mistral' },
+      { id: 'nim-model', provider: 'nim' },
+    ];
+
+    const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+
+    assert.ok(result.includes('mistral-model'));
+    assert.strictEqual(mistralCalled, true);
+    assert.strictEqual(nimCalled, false); // shouldn't reach NIM since Mistral succeeds
+
+    server.close();
+  });
+
+  it('falls through to next provider on failure', async () => {
+    const { createServer } = await import('node:http');
+
+    let callCount = 0;
+
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        callCount++;
+        const parsed = JSON.parse(body);
+
+        if (parsed.model === 'fail-model') {
+          res.writeHead(500);
+          res.end('Internal Error');
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: `Review from ${parsed.model}` } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }));
+      });
+    });
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://localhost:${port}`;
+
+    const nimClient = new NimClient(baseUrl, 'nim-key');
+    const mistralClient = new NimClient(baseUrl, 'mistral-key');
+
+    const clients: Record<Provider, NimClient | null> = {
+      nim: nimClient,
+      mistral: mistralClient,
+    };
+
+    const chain: TaggedModel[] = [
+      { id: 'fail-model', provider: 'mistral' },
+      { id: 'nim-model', provider: 'nim' },
+    ];
+
+    const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+
+    assert.ok(result.includes('nim-model'));
+    assert.strictEqual(callCount, 2);
+
+    server.close();
+  });
+
+  it('skips models whose client is null', async () => {
+    const { createServer } = await import('node:http');
+
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        const parsed = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: `Review from ${parsed.model}` } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }));
+      });
+    });
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://localhost:${port}`;
+
+    const nimClient = new NimClient(baseUrl, 'nim-key');
+
+    const clients: Record<Provider, NimClient | null> = {
+      nim: nimClient,
+      mistral: null, // No Mistral client
+    };
+
+    const chain: TaggedModel[] = [
+      { id: 'mistral-model', provider: 'mistral' },
+      { id: 'nim-model', provider: 'nim' },
+    ];
+
+    const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+
+    assert.ok(result.includes('nim-model'));
+
+    server.close();
+  });
+
+  it('throws when all models fail', async () => {
+    const { createServer } = await import('node:http');
+
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        res.writeHead(500);
+        res.end('Error');
+      });
+    });
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://localhost:${port}`;
+
+    const nimClient = new NimClient(baseUrl, 'nim-key');
+
+    const clients: Record<Provider, NimClient | null> = {
+      nim: nimClient,
+      mistral: null,
+    };
+
+    const chain: TaggedModel[] = [
+      { id: 'nim-model', provider: 'nim' },
+    ];
+
+    await assert.rejects(
+      () => reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig),
+      /All models failed for test.ts/,
+    );
+
+    server.close();
   });
 });

@@ -390,9 +390,9 @@ Add comprehensive tests for the new combined chain logic and update the README w
 
 #### Automated
 
-- [ ] 1.1 TypeScript compiles: `npm run build`
-- [ ] 1.2 Existing tests pass: `npm test`
-- [ ] 1.3 Config correctly reads new inputs (unit test)
+- [x] 1.1 TypeScript compiles: `npm run build` — 9b8d8c0
+- [x] 1.2 Existing tests pass: `npm test` — 9b8d8c0
+- [x] 1.3 Config correctly reads new inputs (unit test) — 9b8d8c0
 
 #### Manual
 

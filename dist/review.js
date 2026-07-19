@@ -162,15 +162,18 @@ export async function reviewFile(client, filePath, diff, model, config) {
     ], { temperature: 0.2, maxTokens: 1024 });
     return result.content;
 }
-export async function reviewFileWithFallback(client, filePath, diff, config) {
+export async function reviewFileWithFallback(clients, filePath, diff, chain, config) {
     let lastErr = null;
-    for (const model of config.models) {
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
         try {
-            return await reviewFile(client, filePath, diff, model, config);
+            return await reviewFile(client, filePath, diff, tagged.id, config);
         }
         catch (err) {
             lastErr = err;
-            console.error(`Model ${model} failed for ${filePath}: ${err}, trying next...`);
+            console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
         }
     }
     throw new Error(`All models failed for ${filePath}: ${lastErr?.message}`);
