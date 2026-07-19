@@ -224,6 +224,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: null,
       };
 
       // Mistral first in chain
@@ -277,6 +278,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: null,
       };
 
       const chain: TaggedModel[] = [
@@ -317,6 +319,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: null, // No Mistral client
+        custom: null,
       };
 
       const chain: TaggedModel[] = [
@@ -352,6 +355,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: null,
+        custom: null,
       };
 
       const chain: TaggedModel[] = [

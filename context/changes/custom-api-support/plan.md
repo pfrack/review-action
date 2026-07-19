@@ -203,15 +203,15 @@ No performance impact — the custom model is one additional attempt at position
 
 #### Automated
 
-- [x] 1.1 TypeScript compiles: `npm run build`
-- [x] 1.2 Tests pass: `npm test`
+- [x] 1.1 TypeScript compiles: `npm run build` — 0e4d5aa
+- [x] 1.2 Tests pass: `npm test` — 0e4d5aa
 
 ### Phase 2: Provider Type & Chain Building
 
 #### Automated
 
-- [ ] 2.1 TypeScript compiles: `npm run build`
-- [ ] 2.2 Tests pass: `npm test`
+- [x] 2.1 TypeScript compiles: `npm run build`
+- [x] 2.2 Tests pass: `npm test`
 
 ### Phase 3: Client Instantiation & Integration
 

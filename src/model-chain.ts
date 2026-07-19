@@ -1,6 +1,6 @@
 import { getSweBenchScore } from './bench-reorder.js';
 
-export type Provider = 'nim' | 'mistral';
+export type Provider = 'nim' | 'mistral' | 'custom';
 
 export interface TaggedModel {
   id: string;
@@ -19,6 +19,8 @@ export function buildCombinedChain(
   mistralModels: string[],
   hasNimKey: boolean,
   hasMistralKey: boolean,
+  customModel?: string,
+  hasCustomKey?: boolean,
 ): TaggedModel[] {
   const chain: TaggedModel[] = [];
 
@@ -40,6 +42,11 @@ export function buildCombinedChain(
     const scoreB = getSweBenchScore(b.id);
     return scoreB - scoreA;
   });
+
+  // Prepend custom model — always tried first regardless of score
+  if (customModel && hasCustomKey) {
+    chain.unshift({ id: customModel, provider: 'custom' });
+  }
 
   return chain;
 }

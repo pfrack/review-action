@@ -99,4 +99,50 @@ describe('buildCombinedChain', () => {
     assert.strictEqual(chain[0].id, 'mistralai/mistral-nemotron');
     assert.strictEqual(chain[1].id, 'mistralai/mistral-large-3-675b-instruct-2512');
   });
+
+  it('custom model is prepended before scored models', () => {
+    const chain = buildCombinedChain(
+      ['deepseek-ai/deepseek-v4-pro'],
+      ['mistralai/mistral-medium-3.5-128b'],
+      true,
+      true,
+      'my-custom/model',
+      true,
+    );
+
+    assert.strictEqual(chain.length, 3);
+    assert.strictEqual(chain[0].id, 'my-custom/model');
+    assert.strictEqual(chain[0].provider, 'custom');
+    // Remaining models sorted by score
+    assert.strictEqual(chain[1].id, 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(chain[2].id, 'mistralai/mistral-medium-3.5-128b');
+  });
+
+  it('custom model absent when params not provided', () => {
+    const chain = buildCombinedChain(
+      ['deepseek-ai/deepseek-v4-pro'],
+      [],
+      true,
+      false,
+    );
+
+    assert.strictEqual(chain.length, 1);
+    assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(chain[0].provider, 'nim');
+  });
+
+  it('custom model absent when hasCustomKey is false', () => {
+    const chain = buildCombinedChain(
+      ['deepseek-ai/deepseek-v4-pro'],
+      [],
+      true,
+      false,
+      'my-custom/model',
+      false,
+    );
+
+    assert.strictEqual(chain.length, 1);
+    assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(chain[0].provider, 'nim');
+  });
 });

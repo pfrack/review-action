@@ -42,6 +42,7 @@ async function run(): Promise<void> {
   const clients: Record<Provider, NimClient | null> = {
     nim: nimClient,
     mistral: mistralClient,
+    custom: null,
   };
 
   const chain = buildCombinedChain(
