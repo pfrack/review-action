@@ -96,7 +96,60 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
   return parseDiff(raw);
 }
 
+const COMMENT_MARKER = '### AI Code Review';
+
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
+  // Try to find and update an existing review comment
+  const existingId = await findExistingComment(repo, prNumber, token);
+
+  if (existingId) {
+    await updateComment(repo, existingId, token, body);
+  } else {
+    await createComment(repo, prNumber, token, body);
+  }
+}
+
+async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
+  const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`;
+  const resp = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!resp.ok) return null;
+
+  const comments = await resp.json() as { id: number; body: string }[];
+  for (const comment of comments) {
+    if (comment.body.startsWith(COMMENT_MARKER)) {
+      return comment.id;
+    }
+  }
+  return null;
+}
+
+async function updateComment(repo: string, commentId: number, token: string, body: string): Promise<void> {
+  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github+json',
+    },
+    body: JSON.stringify({ body }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!resp.ok) {
+    const respBody = await resp.text();
+    throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
+  }
+}
+
+async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
   const resp = await fetch(url, {
     method: 'POST',
