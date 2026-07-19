@@ -4,12 +4,12 @@ import { buildCombinedChain, type TaggedModel } from './model-chain.js';
 
 describe('buildCombinedChain', () => {
   it('NIM-only: includes only NIM models when only NIM key is available', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
-      ['mistral-medium-3.5', 'codestral-2508'],
-      true,
-      false,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
+      mistralModels: ['mistral-medium-3.5', 'codestral-2508'],
+      hasNimKey: true,
+      hasMistralKey: false,
+    });
 
     assert.strictEqual(chain.length, 2);
     assert.ok(chain.every(m => m.provider === 'nim'));
@@ -18,12 +18,12 @@ describe('buildCombinedChain', () => {
   });
 
   it('Mistral-only: includes only Mistral models when only Mistral key is available', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro'],
-      ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
-      false,
-      true,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+      hasNimKey: false,
+      hasMistralKey: true,
+    });
 
     assert.strictEqual(chain.length, 3);
     assert.ok(chain.every(m => m.provider === 'mistral'));
@@ -34,12 +34,12 @@ describe('buildCombinedChain', () => {
   });
 
   it('combined: merges both lists sorted by SWE-bench score', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
-      ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603'],
-      true,
-      true,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
+      mistralModels: ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603'],
+      hasNimKey: true,
+      hasMistralKey: true,
+    });
 
     assert.strictEqual(chain.length, 4);
     // Expected order by score: deepseek(0.806), mistral-medium-nim(0.776), mistral-small-nim(0.680), llama(0.620)
@@ -54,28 +54,28 @@ describe('buildCombinedChain', () => {
   });
 
   it('empty: returns empty array when neither key is available', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro'],
-      ['mistral-medium-3.5'],
-      false,
-      false,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: ['mistral-medium-3.5'],
+      hasNimKey: false,
+      hasMistralKey: false,
+    });
 
     assert.strictEqual(chain.length, 0);
   });
 
   it('empty models: returns empty when model lists are empty', () => {
-    const chain = buildCombinedChain([], [], true, true);
+    const chain = buildCombinedChain({ nimModels: [], mistralModels: [], hasNimKey: true, hasMistralKey: true });
     assert.strictEqual(chain.length, 0);
   });
 
   it('unknown models get default score 0.5', () => {
-    const chain = buildCombinedChain(
-      ['unknown/model-a'],
-      ['unknown-mistral-model'],
-      true,
-      true,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['unknown/model-a'],
+      mistralModels: ['unknown-mistral-model'],
+      hasNimKey: true,
+      hasMistralKey: true,
+    });
 
     assert.strictEqual(chain.length, 2);
     // Both have same score (0.5), stable sort preserves insertion order
@@ -86,12 +86,12 @@ describe('buildCombinedChain', () => {
 
   it('preserves order among models with same score', () => {
     // mistralai/mistral-nemotron and mistralai/mistral-large-3-675b-instruct-2512 both have 0.720
-    const chain = buildCombinedChain(
-      ['mistralai/mistral-nemotron'],
-      ['mistralai/mistral-large-3-675b-instruct-2512'],
-      true,
-      true,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['mistralai/mistral-nemotron'],
+      mistralModels: ['mistralai/mistral-large-3-675b-instruct-2512'],
+      hasNimKey: true,
+      hasMistralKey: true,
+    });
 
     assert.strictEqual(chain.length, 2);
     // Both have score 0.720 — stable sort preserves original push order
@@ -101,14 +101,14 @@ describe('buildCombinedChain', () => {
   });
 
   it('custom model is prepended before scored models', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro'],
-      ['mistralai/mistral-medium-3.5-128b'],
-      true,
-      true,
-      'my-custom/model',
-      true,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: ['mistralai/mistral-medium-3.5-128b'],
+      hasNimKey: true,
+      hasMistralKey: true,
+      customModel: 'my-custom/model',
+      hasCustomConfig: true,
+    });
 
     assert.strictEqual(chain.length, 3);
     assert.strictEqual(chain[0].id, 'my-custom/model');
@@ -119,27 +119,27 @@ describe('buildCombinedChain', () => {
   });
 
   it('custom model absent when params not provided', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro'],
-      [],
-      true,
-      false,
-    );
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: [],
+      hasNimKey: true,
+      hasMistralKey: false,
+    });
 
     assert.strictEqual(chain.length, 1);
     assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
     assert.strictEqual(chain[0].provider, 'nim');
   });
 
-  it('custom model absent when hasCustomKey is false', () => {
-    const chain = buildCombinedChain(
-      ['deepseek-ai/deepseek-v4-pro'],
-      [],
-      true,
-      false,
-      'my-custom/model',
-      false,
-    );
+  it('custom model absent when hasCustomConfig is false', () => {
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: [],
+      hasNimKey: true,
+      hasMistralKey: false,
+      customModel: 'my-custom/model',
+      hasCustomConfig: false,
+    });
 
     assert.strictEqual(chain.length, 1);
     assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');

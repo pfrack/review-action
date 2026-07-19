@@ -7,6 +7,15 @@ export interface TaggedModel {
   provider: Provider;
 }
 
+export interface ChainOptions {
+  nimModels: string[];
+  mistralModels: string[];
+  hasNimKey: boolean;
+  hasMistralKey: boolean;
+  customModel?: string;
+  hasCustomConfig?: boolean;
+}
+
 /**
  * Build a combined fallback chain from NIM and Mistral model lists,
  * sorted by SWE-bench score descending. Only includes models whose
@@ -14,24 +23,17 @@ export interface TaggedModel {
  *
  * Stable sort — preserves original order within same score.
  */
-export function buildCombinedChain(
-  nimModels: string[],
-  mistralModels: string[],
-  hasNimKey: boolean,
-  hasMistralKey: boolean,
-  customModel?: string,
-  hasCustomKey?: boolean,
-): TaggedModel[] {
+export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   const chain: TaggedModel[] = [];
 
-  if (hasNimKey) {
-    for (const id of nimModels) {
+  if (opts.hasNimKey) {
+    for (const id of opts.nimModels) {
       chain.push({ id, provider: 'nim' });
     }
   }
 
-  if (hasMistralKey) {
-    for (const id of mistralModels) {
+  if (opts.hasMistralKey) {
+    for (const id of opts.mistralModels) {
       chain.push({ id, provider: 'mistral' });
     }
   }
@@ -44,8 +46,8 @@ export function buildCombinedChain(
   });
 
   // Prepend custom model — always tried first regardless of score
-  if (customModel && hasCustomKey) {
-    chain.unshift({ id: customModel, provider: 'custom' });
+  if (opts.customModel && opts.hasCustomConfig) {
+    chain.unshift({ id: opts.customModel, provider: 'custom' });
   }
 
   return chain;
