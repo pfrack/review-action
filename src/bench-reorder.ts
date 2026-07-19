@@ -173,10 +173,15 @@ export function updateActionYml(actionPath: string, orderedModels: string[], tar
   const modelString = orderedModels.join(',');
   const config = TARGET_CONFIG[target];
 
+  if (!config.pattern.test(content)) {
+    console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+    return;
+  }
+
   const updated = content.replace(config.pattern, (_, p1: string, _p2: string, p3: string) => p1 + modelString + p3);
 
   if (updated === content) {
-    console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+    console.log(`${config.label} models already in desired order, no changes needed`);
     return;
   }
 

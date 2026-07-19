@@ -28096,9 +28096,13 @@ function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
     const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
     const modelString = orderedModels.join(',');
     const config = TARGET_CONFIG[target];
+    if (!config.pattern.test(content)) {
+        console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+        return;
+    }
     const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
     if (updated === content) {
-        console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+        console.log(`${config.label} models already in desired order, no changes needed`);
         return;
     }
     (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
