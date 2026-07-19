@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, type ParsedRow } from './bench-reorder.js';
+import { writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, updateActionYmlMistral, type ParsedRow } from './bench-reorder.js';
 
 describe('parseMarkdownTable', () => {
   it('parses a well-formed benchmark table', () => {
@@ -114,5 +117,84 @@ describe('rankModels', () => {
     const ranked = rankModels(rows);
     assert.strictEqual(ranked.length, 1);
     assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+  });
+});
+
+describe('getSweBenchScore — Mistral direct-API IDs', () => {
+  it('returns 0.776 for mistral-medium-3.5', () => {
+    assert.strictEqual(getSweBenchScore('mistral-medium-3.5'), 0.776);
+  });
+
+  it('returns 0.776 for mistral-medium-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-medium-latest'), 0.776);
+  });
+
+  it('returns 0.720 for mistral-large-2512', () => {
+    assert.strictEqual(getSweBenchScore('mistral-large-2512'), 0.720);
+  });
+
+  it('returns 0.720 for mistral-large-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-large-latest'), 0.720);
+  });
+
+  it('returns 0.680 for mistral-small-2603', () => {
+    assert.strictEqual(getSweBenchScore('mistral-small-2603'), 0.680);
+  });
+
+  it('returns 0.680 for mistral-small-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-small-latest'), 0.680);
+  });
+
+  it('returns 0.650 for codestral-2508', () => {
+    assert.strictEqual(getSweBenchScore('codestral-2508'), 0.650);
+  });
+
+  it('returns 0.650 for codestral-latest', () => {
+    assert.strictEqual(getSweBenchScore('codestral-latest'), 0.650);
+  });
+});
+
+describe('updateActionYmlMistral', () => {
+  it('correctly replaces mistral_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    const actionPath = join(tmpDir, 'action.yml');
+
+    const content = `name: 'NIM Code Review'
+inputs:
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+    writeFileSync(actionPath, content, 'utf-8');
+
+    updateActionYmlMistral(actionPath, ['codestral-2508', 'mistral-medium-3.5']);
+
+    const result = readFileSync(actionPath, 'utf-8');
+    assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
+    // nim_models should be unchanged
+    assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+  });
+
+  it('does not modify file when mistral_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    const actionPath = join(tmpDir, 'action.yml');
+
+    const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+    writeFileSync(actionPath, content, 'utf-8');
+
+    updateActionYmlMistral(actionPath, ['codestral-2508']);
+
+    const result = readFileSync(actionPath, 'utf-8');
+    assert.strictEqual(result, content); // unchanged
   });
 });

@@ -402,10 +402,10 @@ Add comprehensive tests for the new combined chain logic and update the README w
 
 #### Automated
 
-- [ ] 2.1 TypeScript compiles: `npm run build`
-- [ ] 2.2 All tests pass: `npm test`
-- [ ] 2.3 Unit tests for `buildCombinedChain()` cover NIM-only, Mistral-only, combined, empty
-- [ ] 2.4 Unit tests for updated `reviewFileWithFallback()` verify routing
+- [x] 2.1 TypeScript compiles: `npm run build` — f59fd8b
+- [x] 2.2 All tests pass: `npm test` — f59fd8b
+- [x] 2.3 Unit tests for `buildCombinedChain()` cover NIM-only, Mistral-only, combined, empty — f59fd8b
+- [x] 2.4 Unit tests for updated `reviewFileWithFallback()` verify routing — f59fd8b
 
 #### Manual
 
