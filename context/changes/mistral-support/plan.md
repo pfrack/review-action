@@ -439,8 +439,8 @@ Add comprehensive tests for the new combined chain logic and update the README w
 
 #### Automated
 
-- [ ] 5.1 `npm test` passes with all new tests
-- [ ] 5.2 `npm run build` passes
+- [x] 5.1 `npm test` passes with all new tests — 25a4264
+- [x] 5.2 `npm run build` passes — 25a4264
 
 #### Manual
 
