@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { NimClient, type ChatMessage } from './nim-client.js';
 import { languageForTemplate } from './prompts.js';
 
@@ -23,33 +24,20 @@ export interface Config {
   promptMode: string;
 }
 
-function envOrDefault(key: string, def: string): string {
-  return process.env[key] || def;
-}
-
-function envIntOrDefault(key: string, def: number): number {
-  const v = process.env[key];
-  if (v) {
-    const n = parseInt(v, 10);
-    if (!isNaN(n) && n > 0) return n;
-  }
-  return def;
-}
-
 function splitCSV(s: string): string[] {
   return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 
 export function loadConfig(): Config {
   return {
-    baseURL: envOrDefault('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1'),
-    apiKey: process.env.NIM_API_KEY || '',
-    models: splitCSV(envOrDefault('NIM_MODELS',
-      'meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2')),
-    maxFiles: envIntOrDefault('NIM_MAX_FILES', 15),
-    excludePatterns: splitCSV(envOrDefault('NIM_EXCLUDE_PATTERNS', '*.lock,*.md,*.txt,*.svg,*.png,*.sum')),
-    systemPrompt: envOrDefault('NIM_SYSTEM_PROMPT', ''),
-    promptMode: envOrDefault('NIM_PROMPT_MODE', 'append'),
+    baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
+    apiKey: core.getInput('nim_api_key'),
+    models: splitCSV(core.getInput('nim_models') ||
+      'meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+    maxFiles: parseInt(core.getInput('max_files') || '15', 10) || 15,
+    excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum'),
+    systemPrompt: core.getInput('nim_system_prompt'),
+    promptMode: core.getInput('nim_prompt_mode') || 'append',
   };
 }
 
