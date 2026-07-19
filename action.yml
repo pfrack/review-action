@@ -25,7 +25,7 @@ inputs:
     default: '100'
   exclude_patterns:
     description: 'Comma-separated glob patterns to skip'
-    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'
+    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod,dist/*'
   nim_system_prompt:
     description: 'Custom system prompt (overrides or appends to default)'
     default: ''
