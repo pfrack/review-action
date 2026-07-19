@@ -135,38 +135,43 @@ export function rankModels(rows, latencies) {
         return latA - latB;
     });
 }
+const TARGET_CONFIG = {
+    nim_models: {
+        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'nim_models',
+    },
+    mistral_models: {
+        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'mistral_models',
+    },
+};
 /**
- * Update action.yml with new model order.
+ * Update action.yml with new model order for the given target.
  */
-export function updateActionYml(actionPath, orderedModels) {
+export function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
     const content = readFileSync(actionPath, 'utf-8');
     const modelString = orderedModels.join(',').replace(/\$/g, '$$');
-    const updated = content.replace(/(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
+    const config = TARGET_CONFIG[target];
+    const updated = content.replace(config.pattern, `$1${modelString}$3`);
     if (updated === content) {
-        console.warn('Warning: could not find nim_models default in action.yml, no changes made');
+        console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
         return;
     }
     writeFileSync(actionPath, updated, 'utf-8');
 }
-/**
- * Update action.yml with new Mistral model order.
- */
 export function updateActionYmlMistral(actionPath, orderedModels) {
-    const content = readFileSync(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',').replace(/\$/g, '$$');
-    const updated = content.replace(/(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
-    if (updated === content) {
-        console.warn('Warning: could not find mistral_models default in action.yml, no changes made');
-        return;
-    }
-    writeFileSync(actionPath, updated, 'utf-8');
+    updateActionYml(actionPath, orderedModels, 'mistral_models');
 }
 /**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
  */
 async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
-    const target = process.env.ACTION_TARGET || 'nim_models';
+    const target = (process.env.ACTION_TARGET || 'nim_models');
+    if (!(target in TARGET_CONFIG)) {
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+        process.exit(1);
+    }
     // Read benchmark table from stdin
     const chunks = [];
     for await (const chunk of process.stdin) {
@@ -197,12 +202,7 @@ async function main() {
         const eff = getEffectiveScore(model, latencies).toFixed(3);
         console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
     }
-    if (target === 'mistral_models') {
-        updateActionYmlMistral(actionPath, ranked);
-    }
-    else {
-        updateActionYml(actionPath, ranked);
-    }
+    updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
 }
 // Only run when executed directly
