@@ -77,9 +77,6 @@ jobs:
 
   benchmark-mistral:
     runs-on: ubuntu-latest
-    env:
-      HAS_MISTRAL_KEY: ${{ secrets.MISTRAL_API_KEY }}
-    if: env.HAS_MISTRAL_KEY != ''
     steps:
       - uses: actions/checkout@v4
 
