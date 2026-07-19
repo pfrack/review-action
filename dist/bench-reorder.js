@@ -140,7 +140,7 @@ export function rankModels(rows, latencies) {
  */
 export function updateActionYml(actionPath, orderedModels) {
     const content = readFileSync(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
+    const modelString = orderedModels.join(',').replace(/\$/g, '$$');
     const updated = content.replace(/(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
     if (updated === content) {
         console.warn('Warning: could not find nim_models default in action.yml, no changes made');
@@ -153,7 +153,7 @@ export function updateActionYml(actionPath, orderedModels) {
  */
 export function updateActionYmlMistral(actionPath, orderedModels) {
     const content = readFileSync(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
+    const modelString = orderedModels.join(',').replace(/\$/g, '$$');
     const updated = content.replace(/(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
     if (updated === content) {
         console.warn('Warning: could not find mistral_models default in action.yml, no changes made');

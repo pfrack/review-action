@@ -157,7 +157,7 @@ export function rankModels(
  */
 export function updateActionYml(actionPath: string, orderedModels: string[]): void {
   const content = readFileSync(actionPath, 'utf-8');
-  const modelString = orderedModels.join(',');
+  const modelString = orderedModels.join(',').replace(/\$/g, '$$');
 
   const updated = content.replace(
     /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
@@ -177,7 +177,7 @@ export function updateActionYml(actionPath: string, orderedModels: string[]): vo
  */
 export function updateActionYmlMistral(actionPath: string, orderedModels: string[]): void {
   const content = readFileSync(actionPath, 'utf-8');
-  const modelString = orderedModels.join(',');
+  const modelString = orderedModels.join(',').replace(/\$/g, '$$');
 
   const updated = content.replace(
     /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,

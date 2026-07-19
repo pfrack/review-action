@@ -27777,8 +27777,7 @@ function loadConfig() {
     return {
         baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
         apiKey: core.getInput('nim_api_key'),
-        models: splitCSV(core.getInput('nim_models') ||
-            'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+        models: splitCSV(core.getInput('nim_models')),
         mistralApiKey: core.getInput('mistral_api_key') || '',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
@@ -28098,7 +28097,7 @@ function rankModels(rows, latencies) {
  */
 function updateActionYml(actionPath, orderedModels) {
     const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
+    const modelString = orderedModels.join(',').replace(/\$/g, '$$');
     const updated = content.replace(/(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
     if (updated === content) {
         console.warn('Warning: could not find nim_models default in action.yml, no changes made');
@@ -28111,7 +28110,7 @@ function updateActionYml(actionPath, orderedModels) {
  */
 function updateActionYmlMistral(actionPath, orderedModels) {
     const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
+    const modelString = orderedModels.join(',').replace(/\$/g, '$$');
     const updated = content.replace(/(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/, `$1${modelString}$3`);
     if (updated === content) {
         console.warn('Warning: could not find mistral_models default in action.yml, no changes made');
