@@ -18,8 +18,11 @@ export function loadConfig() {
     return {
         baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
         apiKey: core.getInput('nim_api_key'),
-        models: splitCSV(core.getInput('nim_models') ||
-            'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+        models: splitCSV(core.getInput('nim_models')),
+        mistralApiKey: core.getInput('mistral_api_key') || '',
+        mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
+        mistralModels: splitCSV(core.getInput('mistral_models') ||
+            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
@@ -72,7 +75,62 @@ export async function fetchDiff(repo, prNumber, token) {
     const raw = await resp.text();
     return parseDiff(raw);
 }
+const COMMENT_MARKER = '### AI Code Review';
 export async function postComment(repo, prNumber, token, body) {
+    // Try to find and update an existing review comment
+    const existingId = await findExistingComment(repo, prNumber, token);
+    if (existingId) {
+        await updateComment(repo, existingId, token, body);
+    }
+    else {
+        await createComment(repo, prNumber, token, body);
+    }
+}
+async function findExistingComment(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 10;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
+        const resp = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(30_000),
+        });
+        if (!resp.ok)
+            return null;
+        const comments = await resp.json();
+        for (const comment of comments) {
+            if (comment.body.startsWith(COMMENT_MARKER)) {
+                return comment.id;
+            }
+        }
+        if (comments.length < perPage)
+            break;
+        page++;
+    }
+    return null;
+}
+async function updateComment(repo, commentId, token, body) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    const resp = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify({ body }),
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (!resp.ok) {
+        const respBody = await resp.text();
+        throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
+    }
+}
+async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
     const resp = await fetch(url, {
         method: 'POST',
@@ -112,15 +170,18 @@ export async function reviewFile(client, filePath, diff, model, config) {
     ], { temperature: 0.2, maxTokens: 1024 });
     return result.content;
 }
-export async function reviewFileWithFallback(client, filePath, diff, config) {
+export async function reviewFileWithFallback(clients, filePath, diff, chain, config) {
     let lastErr = null;
-    for (const model of config.models) {
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
         try {
-            return await reviewFile(client, filePath, diff, model, config);
+            return await reviewFile(client, filePath, diff, tagged.id, config);
         }
         catch (err) {
             lastErr = err;
-            console.error(`Model ${model} failed for ${filePath}: ${err}, trying next...`);
+            console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
         }
     }
     throw new Error(`All models failed for ${filePath}: ${lastErr?.message}`);

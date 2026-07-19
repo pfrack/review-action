@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { NimClient, type ChatMessage } from './nim-client.js';
+import { type TaggedModel, type Provider } from './model-chain.js';
 import { languageForTemplate } from './prompts.js';
 
 const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
@@ -18,6 +19,9 @@ export interface Config {
   baseURL: string;
   apiKey: string;
   models: string[];
+  mistralApiKey: string;
+  mistralBaseUrl: string;
+  mistralModels: string[];
   maxFiles: number;
   excludePatterns: string[];
   systemPrompt: string;
@@ -32,8 +36,11 @@ export function loadConfig(): Config {
   return {
     baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
     apiKey: core.getInput('nim_api_key'),
-    models: splitCSV(core.getInput('nim_models') ||
-      'stepfun-ai/step-3.7-flash,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'),
+    models: splitCSV(core.getInput('nim_models')),
+    mistralApiKey: core.getInput('mistral_api_key') || '',
+    mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
+    mistralModels: splitCSV(core.getInput('mistral_models') ||
+      'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
     maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
     systemPrompt: core.getInput('nim_system_prompt'),
@@ -110,23 +117,33 @@ export async function postComment(repo: string, prNumber: number, token: string,
 }
 
 async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
-  const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`;
-  const resp = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
-    },
-    signal: AbortSignal.timeout(30_000),
-  });
+  let page = 1;
+  const perPage = 100;
+  const maxPages = 10;
 
-  if (!resp.ok) return null;
+  while (page <= maxPages) {
+    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
+    const resp = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  const comments = await resp.json() as { id: number; body: string }[];
-  for (const comment of comments) {
-    if (comment.body.startsWith(COMMENT_MARKER)) {
-      return comment.id;
+    if (!resp.ok) return null;
+
+    const comments = await resp.json() as { id: number; body: string }[];
+    for (const comment of comments) {
+      if (comment.body.startsWith(COMMENT_MARKER)) {
+        return comment.id;
+      }
     }
+
+    if (comments.length < perPage) break;
+    page++;
   }
+
   return null;
 }
 
@@ -205,19 +222,23 @@ export async function reviewFile(
 }
 
 export async function reviewFileWithFallback(
-  client: NimClient,
+  clients: Record<Provider, NimClient | null>,
   filePath: string,
   diff: string,
+  chain: TaggedModel[],
   config: Config,
 ): Promise<string> {
   let lastErr: Error | null = null;
 
-  for (const model of config.models) {
+  for (const tagged of chain) {
+    const client = clients[tagged.provider];
+    if (!client) continue;
+
     try {
-      return await reviewFile(client, filePath, diff, model, config);
+      return await reviewFile(client, filePath, diff, tagged.id, config);
     } catch (err) {
       lastErr = err as Error;
-      console.error(`Model ${model} failed for ${filePath}: ${err}, trying next...`);
+      console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
     }
   }
 

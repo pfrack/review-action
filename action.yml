@@ -6,19 +6,29 @@ branding:
 inputs:
   nim_api_key:
     description: 'NVIDIA NIM API key'
-    required: true
+    required: false
+    default: ''
   nim_base_url:
     description: 'NIM API base URL'
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
     default: 'minimaxai/minimax-m3,minimaxai/minimax-m2.7,deepseek-ai/deepseek-v4-flash,z-ai/glm-5.2,qwen/qwen3.5-397b-a17b,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron'
+  mistral_api_key:
+    description: 'Mistral API key (enables Mistral models in fallback chain)'
+    default: ''
+  mistral_base_url:
+    description: 'Mistral API base URL'
+    default: 'https://api.mistral.ai/v1'
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
   max_files:
     description: 'Max files to review per PR'
     default: '100'
   exclude_patterns:
     description: 'Comma-separated glob patterns to skip'
-    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'
+    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod,dist/*'
   nim_system_prompt:
     description: 'Custom system prompt (overrides or appends to default)'
     default: ''

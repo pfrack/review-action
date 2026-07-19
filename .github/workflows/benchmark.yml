@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: benchmark-commit
+  cancel-in-progress: false
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -36,6 +40,7 @@ jobs:
       - name: Reorder models
         env:
           ACTION_PATH: action.yml
+          ACTION_TARGET: nim_models
         run: |
           grep '^|' benchmark-output.txt > table.txt || true
           if [ -s table.txt ]; then
@@ -52,7 +57,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            # Amend if last commit was a benchmark commit, otherwise create new
             LAST_MSG=$(git log -1 --format=%s)
             if echo "$LAST_MSG" | grep -q "chore: update model order from daily benchmark"; then
               git commit --amend --no-edit --date="$(date -R)"
@@ -63,7 +67,70 @@ jobs:
               git pull --rebase origin main
               git push
             fi
-            # Move the latest version tag to this commit
+            LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Moving tag $LATEST_TAG to current commit"
+              git tag -f "$LATEST_TAG"
+              git push origin "$LATEST_TAG" --force
+            fi
+          fi
+
+  benchmark-mistral:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run Mistral benchmark
+        env:
+          NIM_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          NIM_BASE_URL: 'https://api.mistral.ai/v1'
+          NIM_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+          NIM_BENCH_ITERATIONS: '1'
+        run: node dist/bench-entry.js > benchmark-output.txt
+
+      - name: Show results
+        if: always()
+        run: cat benchmark-output.txt
+
+      - name: Reorder Mistral models
+        env:
+          ACTION_PATH: action.yml
+          ACTION_TARGET: mistral_models
+        run: |
+          grep '^|' benchmark-output.txt > table.txt || true
+          if [ -s table.txt ]; then
+            node dist/bench-reorder.js < table.txt
+          else
+            echo "No benchmark table found, skipping reorder"
+          fi
+
+      - name: Commit updated Mistral model order
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            LAST_MSG=$(git log -1 --format=%s)
+            if echo "$LAST_MSG" | grep -q "chore: update mistral model order from daily benchmark"; then
+              git commit --amend --no-edit --date="$(date -R)"
+              git pull --rebase origin main
+              git push --force
+            else
+              git commit -m "chore: update mistral model order from daily benchmark [skip ci]"
+              git pull --rebase origin main
+              git push
+            fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
               echo "Moving tag $LATEST_TAG to current commit"

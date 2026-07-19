@@ -92,6 +92,15 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'microsoft/phi-3.5-moe-instruct': 0.580,
   'databricks/dbrx-instruct': 0.550,
   'ai21labs/jamba-1.5-large-instruct': 0.550,
+  // Direct Mistral API model IDs
+  'mistral-medium-3.5': 0.776,
+  'mistral-medium-latest': 0.776,
+  'mistral-large-2512': 0.720,
+  'mistral-large-latest': 0.720,
+  'mistral-small-2603': 0.680,
+  'mistral-small-latest': 0.680,
+  'codestral-2508': 0.650,
+  'codestral-latest': 0.650,
 };
 
 /**
@@ -143,24 +152,39 @@ export function rankModels(
     });
 }
 
+type ActionTarget = 'nim_models' | 'mistral_models';
+
+const TARGET_CONFIG: Record<ActionTarget, { pattern: RegExp; label: string }> = {
+  nim_models: {
+    pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+    label: 'nim_models',
+  },
+  mistral_models: {
+    pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+    label: 'mistral_models',
+  },
+};
+
 /**
- * Update action.yml with new model order.
+ * Update action.yml with new model order for the given target.
  */
-export function updateActionYml(actionPath: string, orderedModels: string[]): void {
+export function updateActionYml(actionPath: string, orderedModels: string[], target: ActionTarget = 'nim_models'): void {
   const content = readFileSync(actionPath, 'utf-8');
   const modelString = orderedModels.join(',');
+  const config = TARGET_CONFIG[target];
 
-  const updated = content.replace(
-    /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-    `$1${modelString}$3`,
-  );
+  const updated = content.replace(config.pattern, (_, p1: string, _p2: string, p3: string) => p1 + modelString + p3);
 
   if (updated === content) {
-    console.warn('Warning: could not find nim_models default in action.yml, no changes made');
+    console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
     return;
   }
 
   writeFileSync(actionPath, updated, 'utf-8');
+}
+
+export function updateActionYmlMistral(actionPath: string, orderedModels: string[]): void {
+  updateActionYml(actionPath, orderedModels, 'mistral_models');
 }
 
 /**
@@ -168,6 +192,12 @@ export function updateActionYml(actionPath: string, orderedModels: string[]): vo
  */
 async function main(): Promise<void> {
   const actionPath = process.env.ACTION_PATH || 'action.yml';
+  const target = (process.env.ACTION_TARGET || 'nim_models') as ActionTarget;
+
+  if (!(target in TARGET_CONFIG)) {
+    console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+    process.exit(1);
+  }
 
   // Read benchmark table from stdin
   const chunks: Buffer[] = [];
@@ -197,7 +227,7 @@ async function main(): Promise<void> {
 
   const ranked = rankModels(rows, latencies);
 
-  console.log('Model ranking (SWE-bench × latency):');
+  console.log(`Model ranking for ${target} (SWE-bench × latency):`);
   for (const model of ranked) {
     const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
     const swe = getSweBenchScore(model).toFixed(3);
@@ -205,8 +235,8 @@ async function main(): Promise<void> {
     console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
   }
 
-  updateActionYml(actionPath, ranked);
-  console.log(`\naction.yml updated with ${ranked.length} models.`);
+  updateActionYml(actionPath, ranked, target);
+  console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
 }
 
 // Only run when executed directly

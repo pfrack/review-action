@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import { NimClient } from './nim-client.js';
 import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
+import { buildCombinedChain, type Provider } from './model-chain.js';
 
 function globMatch(str: string, pattern: string): boolean {
   const regex = new RegExp(
@@ -31,11 +32,24 @@ If the code looks fine, say "No issues found."`;
 
 async function run(): Promise<void> {
   const config = loadConfig();
-  if (!config.apiKey) {
-    throw new Error('NIM_API_KEY is required');
+  if (!config.apiKey && !config.mistralApiKey) {
+    throw new Error('At least one of nim_api_key or mistral_api_key is required');
   }
 
-  const client = new NimClient(config.baseURL, config.apiKey);
+  const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
+  const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+
+  const clients: Record<Provider, NimClient | null> = {
+    nim: nimClient,
+    mistral: mistralClient,
+  };
+
+  const chain = buildCombinedChain(
+    config.models,
+    config.mistralModels,
+    !!config.apiKey,
+    !!config.mistralApiKey,
+  );
 
   const event = loadEvent();
   const prNumber = event.pull_request.number;
@@ -51,6 +65,7 @@ async function run(): Promise<void> {
   }
 
   core.info(`Reviewing PR #${prNumber} in ${repo}`);
+  core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
 
   const filesDiff = await fetchDiff(repo, prNumber, token);
 
@@ -90,26 +105,29 @@ async function run(): Promise<void> {
 
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
 
-  // Try models in order, stop at first success
+  // Try models from combined chain in order, stop at first success
   let review = '';
   let usedModel = '';
-  for (const model of config.models) {
+  for (const tagged of chain) {
+    const client = clients[tagged.provider];
+    if (!client) continue;
+
     try {
-      core.info(`Trying ${model}...`);
-      const result = await client.chat(model, [
+      core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+      const result = await client.chat(tagged.id, [
         { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
         { role: 'user', content: userMsg },
       ], { temperature: 0.2, maxTokens: 4096 });
 
       if (result.content && result.content.trim()) {
         review = result.content;
-        usedModel = model;
-        core.info(`Done with ${model}`);
+        usedModel = tagged.id;
+        core.info(`Done with ${tagged.id} (${tagged.provider})`);
         break;
       }
-      core.info(`${model} returned empty, trying next...`);
+      core.info(`${tagged.id} returned empty, trying next...`);
     } catch (err) {
-      core.info(`${model} failed: ${err}`);
+      core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
     }
   }
 
