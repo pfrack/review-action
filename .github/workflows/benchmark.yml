@@ -54,7 +54,11 @@ jobs:
           else
             git commit -m "chore: update model order from daily benchmark [skip ci]"
             git push
-            # Move v1 tag to latest commit so action consumers get updated models
-            git tag -f v1
-            git push origin v1 --force
+            # Move the latest version tag to this commit so action consumers get updated models
+            LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Moving tag $LATEST_TAG to current commit"
+              git tag -f "$LATEST_TAG"
+              git push origin "$LATEST_TAG" --force
+            fi
           fi
