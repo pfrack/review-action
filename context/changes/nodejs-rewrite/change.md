@@ -1,7 +1,7 @@
 ---
 id: nodejs-rewrite
 title: "Rewrite GitHub Action from Go to Node.js"
-status: implemented
+status: impl_reviewed
 created: 2026-07-19
 updated: 2026-07-19
 ---

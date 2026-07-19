@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "test": "node --test dist/**/*.test.js",
-    "package": "ncc build src/index.ts -o dist"
+    "package": "ncc build src/index.ts -o dist && cp -r src/prompts dist/prompts"
   },
   "dependencies": {
     "@actions/core": "^1.10.1"

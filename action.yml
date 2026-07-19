@@ -26,5 +26,5 @@ inputs:
     description: 'How to use custom prompt: append (default) or replace'
     default: 'append'
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
