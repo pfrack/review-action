@@ -13,7 +13,7 @@ inputs:
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
-    default: 'minimaxai/minimax-m3,minimaxai/minimax-m2.7,deepseek-ai/deepseek-v4-flash,z-ai/glm-5.2,qwen/qwen3.5-397b-a17b,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron'
+    default: 'minimaxai/minimax-m2.7,minimaxai/minimax-m3,z-ai/glm-5.2,qwen/qwen3.5-397b-a17b,deepseek-ai/deepseek-v4-flash,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron'
   mistral_api_key:
     description: 'Mistral API key (enables Mistral models in fallback chain)'
     default: ''
