@@ -1,8 +1,7 @@
 import { extname } from 'node:path';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
-
-const languagePrompts: Record<string, string> = {
-  go: `You are an expert senior software engineer performing a code review of Go code.
+const languagePrompts = {
+    go: `You are an expert senior software engineer performing a code review of Go code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to Go.
@@ -20,8 +19,7 @@ Go-specific focus areas:
 - Effective use of context for cancellation and timeouts
 
 ${JSON_SCHEMA_DEFINITION}`,
-
-  python: `You are an expert senior software engineer performing a code review of Python code.
+    python: `You are an expert senior software engineer performing a code review of Python code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to Python.
@@ -39,8 +37,7 @@ Python-specific focus areas:
 - Pythonic idioms vs anti-patterns
 
 ${JSON_SCHEMA_DEFINITION}`,
-
-  typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
+    typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to TypeScript/JavaScript.
@@ -58,8 +55,7 @@ TypeScript/JavaScript-specific focus areas:
 - React-specific: useEffect cleanup, memo usage, key props
 
 ${JSON_SCHEMA_DEFINITION}`,
-
-  java: `You are an expert senior software engineer performing a code review of Java code.
+    java: `You are an expert senior software engineer performing a code review of Java code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to Java.
@@ -77,8 +73,7 @@ Java-specific focus areas:
 - Dependency injection and lifecycle management
 
 ${JSON_SCHEMA_DEFINITION}`,
-
-  rust: `You are an expert senior software engineer performing a code review of Rust code.
+    rust: `You are an expert senior software engineer performing a code review of Rust code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to Rust.
@@ -96,8 +91,7 @@ Rust-specific focus areas:
 - Clippy warnings and idiomatic Rust patterns
 
 ${JSON_SCHEMA_DEFINITION}`,
-
-  cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
+    cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
 
 Analyse the diff provided for bugs, security issues, performance
 problems, and style/readability concerns specific to C/C++.
@@ -116,22 +110,21 @@ C/C++-specific focus areas:
 
 ${JSON_SCHEMA_DEFINITION}`,
 };
-
-export function languageForFile(filePath: string): string {
-  const ext = extname(filePath).toLowerCase();
-  switch (ext) {
-    case '.go': return 'go';
-    case '.py': return 'python';
-    case '.ts':
-    case '.tsx':
-    case '.js':
-    case '.jsx': return 'typescript';
-    case '.java': return 'java';
-    case '.rs': return 'rust';
-    case '.cpp':
-    case '.c':
-    case '.h':
-    case '.hpp': return 'cpp';
-    default: return 'generic';
-  }
+export function languageForFile(filePath) {
+    const ext = extname(filePath).toLowerCase();
+    switch (ext) {
+        case '.go': return 'go';
+        case '.py': return 'python';
+        case '.ts':
+        case '.tsx':
+        case '.js':
+        case '.jsx': return 'typescript';
+        case '.java': return 'java';
+        case '.rs': return 'rust';
+        case '.cpp':
+        case '.c':
+        case '.h':
+        case '.hpp': return 'cpp';
+        default: return 'generic';
+    }
 }

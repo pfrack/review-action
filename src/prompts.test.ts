@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { languageForFile, languageForTemplate } from './prompts.js';
+import { languageForFile } from './prompts.js';
 
 describe('languageForFile', () => {
   const tests: [string, string][] = [
@@ -28,28 +28,4 @@ describe('languageForFile', () => {
       assert.strictEqual(languageForFile(fp), want);
     });
   }
-});
-
-describe('languageForTemplate', () => {
-  it('returns Go prompt for .go files', () => {
-    const prompt = languageForTemplate('main.go');
-    assert.ok(prompt.includes('Go code'));
-    assert.ok(prompt.includes('Goroutine'));
-  });
-
-  it('returns Python prompt for .py files', () => {
-    const prompt = languageForTemplate('app.py');
-    assert.ok(prompt.includes('Python code'));
-    assert.ok(prompt.includes('Mutable default'));
-  });
-
-  it('returns TypeScript prompt for .ts files', () => {
-    const prompt = languageForTemplate('index.ts');
-    assert.ok(prompt.includes('TypeScript'));
-    assert.ok(prompt.toLowerCase().includes('async/await'));
-  });
-
-  it('returns empty string for unknown extensions', () => {
-    assert.strictEqual(languageForTemplate('README.md'), '');
-  });
 });

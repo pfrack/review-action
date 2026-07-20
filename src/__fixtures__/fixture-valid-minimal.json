@@ -1,0 +1,10 @@
+{
+  "rawResponse": "{\"findings\":[{\"file\":\"app.py\",\"severity\":\"Suggestion\",\"issue\":\"Add type hints to function parameters\"}]}",
+  "expectedParsed": {
+    "findings": [
+      {"file": "app.py", "severity": "Suggestion", "issue": "Add type hints to function parameters"}
+    ]
+  },
+  "shouldParse": true,
+  "notes": "Minimal valid response with only required fields"
+}

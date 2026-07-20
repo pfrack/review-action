@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && cp -r src/prompts dist/prompts && ncc build src/index.ts -o dist/bundle",
-    "test": "node --test dist/*.test.js",
-    "package": "ncc build src/index.ts -o dist && cp -r src/prompts dist/prompts"
+    "build": "tsc && cp -r src/__fixtures__ dist/src/__fixtures__ && ncc build src/index.ts -o dist/bundle",
+    "test": "node --test dist/**/*.test.js",
+    "package": "ncc build dist/index.js -o dist"
   },
   "dependencies": {
-    "@actions/core": "^1.10.1"
+    "@actions/core": "^1.10.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

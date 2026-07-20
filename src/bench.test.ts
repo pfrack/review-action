@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { NimClient } from './nim-client.js';
+import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, median, countErrors, formatDuration, formatMarkdownTable, type BenchmarkResult } from './bench.js';
 
 function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ url: string; close: () => void }> {
@@ -45,7 +45,7 @@ describe('runBenchmark', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       const result = await runBenchmark(client, 'test-model', {
         prompt: 'review this code',
         iterations: 3,
@@ -78,7 +78,7 @@ describe('runBenchmark', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       const result = await runBenchmark(client, 'test-model', {
         prompt: 'test',
         iterations: 2,

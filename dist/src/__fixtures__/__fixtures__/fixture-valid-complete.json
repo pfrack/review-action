@@ -1,0 +1,13 @@
+{
+  "rawResponse": "{\"findings\":[{\"file\":\"src/main.ts\",\"severity\":\"Critical\",\"line_start\":10,\"line_end\":12,\"issue\":\"Unused variable 'temp' declared but never read\",\"suggestion\":\"Remove the unused variable or use it in the logic.\"},{\"file\":\"src/utils.ts\",\"severity\":\"Warning\",\"line_start\":5,\"line_end\":5,\"issue\":\"Missing error handling for async call\",\"suggestion\":\"Wrap in try-catch or add .catch() handler.\"},{\"file\":\"src/main.ts\",\"severity\":\"Suggestion\",\"issue\":\"Consider extracting this logic into a helper function\",\"suggestion\":null}],\"summary\":\"Found 3 issues across 2 files.\"}",
+  "expectedParsed": {
+    "findings": [
+      {"file": "src/main.ts", "severity": "Critical", "line_start": 10, "line_end": 12, "issue": "Unused variable 'temp' declared but never read", "suggestion": "Remove the unused variable or use it in the logic."},
+      {"file": "src/utils.ts", "severity": "Warning", "line_start": 5, "line_end": 5, "issue": "Missing error handling for async call", "suggestion": "Wrap in try-catch or add .catch() handler."},
+      {"file": "src/main.ts", "severity": "Suggestion", "line_start": null, "line_end": null, "issue": "Consider extracting this logic into a helper function", "suggestion": null}
+    ],
+    "summary": "Found 3 issues across 2 files."
+  },
+  "shouldParse": true,
+  "notes": "Full response with all fields populated across multiple files"
+}

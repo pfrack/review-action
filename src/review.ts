@@ -1,18 +1,11 @@
 import * as core from '@actions/core';
-import { NimClient, type ChatMessage } from './nim-client.js';
-import { type TaggedModel, type Provider } from './model-chain.js';
-import { languageForTemplate } from './prompts.js';
+import { JSON_SCHEMA_DEFINITION, type ReviewType } from './review-schema.js';
+import { withRetry, RetryableError } from './retry.js';
 
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-Respond in concise markdown with findings for each file. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
 
-If the code looks fine, say "No issues found."`;
+${JSON_SCHEMA_DEFINITION}`;
 
 export interface Config {
   baseURL: string;
@@ -74,6 +67,101 @@ export function parseDiff(raw: string): Record<string, string> {
   return files;
 }
 
+const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+
+export function parseDiffHunks(diffText: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const line of diffText.split('\n')) {
+    const m = line.match(hunkHeaderRe);
+    if (m) {
+      const start = parseInt(m[1], 10);
+      const count = m[2] ? parseInt(m[2], 10) : 1;
+      ranges.push({ start, end: start + count - 1 });
+    }
+  }
+  return ranges;
+}
+
+export function getFileHunks(filesDiff: Record<string, string>): Map<string, Array<{ start: number; end: number }>> {
+  const map = new Map<string, Array<{ start: number; end: number }>>();
+  for (const [file, diffText] of Object.entries(filesDiff)) {
+    map.set(file, parseDiffHunks(diffText));
+  }
+  return map;
+}
+
+export function validateFindings(
+  review: ReviewType,
+  filesDiff: Record<string, string>,
+  changedFiles: Set<string>,
+): { valid: ReviewType; warnings: string[] } {
+  const warnings: string[] = [];
+  const hunks = getFileHunks(filesDiff);
+  const validFindings: typeof review.findings = [];
+
+  for (const f of review.findings) {
+    if (!changedFiles.has(f.file)) {
+      warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
+      continue;
+    }
+    if (f.line_end != null && f.line_start == null) {
+      warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
+      continue;
+    }
+    if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
+      warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
+      continue;
+    }
+    if (f.line_start != null) {
+      const fileHunks = hunks.get(f.file) || [];
+      const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
+      if (!overlaps) {
+        warnings.push(`Warning: finding line ${f.line_start} outside changed hunks in "${f.file}", dropping`);
+        continue;
+      }
+    }
+    validFindings.push(f);
+  }
+
+  if (validFindings.length === 0 && !review.summary) {
+    return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
+  }
+
+  return { valid: { findings: validFindings, summary: review.summary }, warnings };
+}
+
+export function renderReview(review: ReviewType): string {
+  if (review.findings.length === 0) {
+    return review.summary || 'No issues found.';
+  }
+
+  const byFile = new Map<string, typeof review.findings>();
+  for (const f of review.findings) {
+    const list = byFile.get(f.file) || [];
+    list.push(f);
+    byFile.set(f.file, list);
+  }
+
+  const lines: string[] = [];
+  for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`**File:** \`${file}\``);
+    for (const f of findings) {
+      const lineInfo = f.line_start != null
+        ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+        : '';
+      const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
+      lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    }
+    lines.push('');
+  }
+
+  if (review.summary) {
+    lines.push(`**Summary:** ${review.summary}`);
+  }
+
+  return lines.join('\n');
+}
+
 function globMatch(str: string, pattern: string): boolean {
   const regex = new RegExp(
     '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
@@ -89,22 +177,37 @@ export function shouldExclude(filePath: string, patterns: string[]): boolean {
   return false;
 }
 
+export class DiffTooLargeError extends Error {
+  sizeMB: string;
+  constructor(sizeMB: string) {
+    super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+    this.name = 'DiffTooLargeError';
+    this.sizeMB = sizeMB;
+  }
+}
+
 export async function fetchDiff(repo: string, prNumber: number, token: string): Promise<Record<string, string>> {
   const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
-  const resp = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github.v3.diff',
-    },
-    signal: AbortSignal.timeout(30_000),
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3.diff',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+    return response;
   });
 
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${body}`);
-  }
-
   const raw = await resp.text();
+  if (raw.length > 5 * 1024 * 1024) {
+    throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
+  }
   return parseDiff(raw);
 }
 
@@ -124,19 +227,32 @@ export async function postComment(repo: string, prNumber: number, token: string,
 async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
   let page = 1;
   const perPage = 100;
-  const maxPages = 10;
+  const maxPages = 50;
 
   while (page <= maxPages) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-    const resp = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github+json',
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
+    let resp: Response;
+    try {
+      resp = await withRetry(async () => {
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+          },
+          signal: AbortSignal.timeout(30_000),
+        });
 
-    if (!resp.ok) return null;
+        if (!response.ok) {
+          const body = await response.text();
+          throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+        return response;
+      });
+    } catch (err) {
+      // 404 means PR doesn't exist or token lacks access — skip comment update
+      if (err instanceof RetryableError && err.status === 404) return null;
+      throw err;
+    }
 
     const comments = await resp.json() as { id: number; body: string }[];
     for (const comment of comments) {
@@ -154,98 +270,44 @@ async function findExistingComment(repo: string, prNumber: number, token: string
 
 async function updateComment(repo: string, commentId: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-  const resp = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/vnd.github+json',
-    },
-    body: JSON.stringify({ body }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ body }),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  if (!resp.ok) {
-    const respBody = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-  }
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+    return response;
+  });
 }
 
 async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/vnd.github+json',
-    },
-    body: JSON.stringify({ body }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ body }),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  if (!resp.ok) {
-    const respBody = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-  }
-}
-
-export function resolveSystemPrompt(filePath: string, config: Config): string {
-  const langTemplate = languageForTemplate(filePath);
-
-  if (!config.systemPrompt) {
-    return langTemplate || BASE_SYSTEM_PROMPT;
-  }
-
-  if (config.promptMode === 'replace') {
-    return config.systemPrompt;
-  }
-
-  // append mode
-  if (langTemplate) {
-    return config.systemPrompt + '\n\n' + langTemplate;
-  }
-  return config.systemPrompt + '\n\n' + BASE_SYSTEM_PROMPT;
-}
-
-export async function reviewFile(
-  client: NimClient,
-  filePath: string,
-  diff: string,
-  model: string,
-  config: Config,
-): Promise<string> {
-  const userMsg = `Review the following changes to \`${filePath}\`:\n\n\`\`\`diff\n${diff}\n\`\`\``;
-  const sysPrompt = resolveSystemPrompt(filePath, config);
-
-  const result = await client.chat(model, [
-    { role: 'system', content: sysPrompt },
-    { role: 'user', content: userMsg },
-  ], { temperature: 0.2, maxTokens: 1024 });
-
-  return result.content;
-}
-
-export async function reviewFileWithFallback(
-  clients: Record<Provider, NimClient | null>,
-  filePath: string,
-  diff: string,
-  chain: TaggedModel[],
-  config: Config,
-): Promise<string> {
-  let lastErr: Error | null = null;
-
-  for (const tagged of chain) {
-    const client = clients[tagged.provider];
-    if (!client) continue;
-
-    try {
-      return await reviewFile(client, filePath, diff, tagged.id, config);
-    } catch (err) {
-      lastErr = err as Error;
-      console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
     }
-  }
-
-  throw new Error(`All models failed for ${filePath}: ${lastErr?.message}`);
+    return response;
+  });
 }

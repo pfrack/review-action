@@ -1,0 +1,5 @@
+{
+  "rawResponse": "I'm sorry, but I cannot review this code. The diff appears to contain sensitive information or the request is outside my capabilities.",
+  "shouldParse": false,
+  "notes": "Model refusal — should fail safeParse and be treated as model failure"
+}

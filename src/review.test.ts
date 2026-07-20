@@ -1,9 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer, type Server } from 'node:http';
-import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, reviewFileWithFallback, type Config } from './review.js';
-import { type TaggedModel, type Provider } from './model-chain.js';
-import { NimClient } from './nim-client.js';
+import { parseDiff, shouldExclude, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, type Config } from './review.js';
 
 describe('parseDiff', () => {
   it('splits multi-file diffs', () => {
@@ -51,66 +48,6 @@ describe('shouldExclude', () => {
       assert.strictEqual(shouldExclude(tt.filepath, tt.patterns), tt.want);
     });
   }
-});
-
-describe('resolveSystemPrompt', () => {
-  const baseConfig: Config = {
-    baseURL: '',
-    apiKey: '',
-    models: [],
-    mistralApiKey: '',
-    mistralBaseUrl: '',
-    mistralModels: [],
-    customApiUrl: '',
-    customModel: '',
-    customApiKey: '',
-    maxFiles: 15,
-    excludePatterns: [],
-    systemPrompt: '',
-    promptMode: 'append',
-  };
-
-  it('returns base prompt when no env and no lang match', () => {
-    const prompt = resolveSystemPrompt('config.yaml', baseConfig);
-    assert.ok(prompt.includes('code review'));
-    assert.ok(prompt.includes('Severity'));
-  });
-
-  it('returns lang prompt when no env and lang matches', () => {
-    const prompt = resolveSystemPrompt('main.go', baseConfig);
-    assert.ok(prompt.includes('Go code'));
-    assert.ok(prompt.includes('Goroutine'));
-  });
-
-  it('returns env prompt in replace mode', () => {
-    const prompt = resolveSystemPrompt('main.go', {
-      ...baseConfig,
-      systemPrompt: 'You are a security auditor.',
-      promptMode: 'replace',
-    });
-    assert.strictEqual(prompt, 'You are a security auditor.');
-  });
-
-  it('appends env prompt to lang template in append mode', () => {
-    const prompt = resolveSystemPrompt('app.py', {
-      ...baseConfig,
-      systemPrompt: 'Focus on security.',
-      promptMode: 'append',
-    });
-    assert.ok(prompt.includes('Focus on security.'));
-    assert.ok(prompt.includes('Python code'));
-    assert.ok(prompt.includes('Mutable default'));
-  });
-
-  it('appends env prompt to base when no lang match', () => {
-    const prompt = resolveSystemPrompt('config.yaml', {
-      ...baseConfig,
-      systemPrompt: 'Focus on security.',
-      promptMode: 'append',
-    });
-    assert.ok(prompt.includes('Focus on security.'));
-    assert.ok(prompt.includes('code review'));
-  });
 });
 
 describe('loadConfig — mistral fields', () => {
@@ -237,199 +174,170 @@ describe('loadConfig — custom fields', () => {
   });
 });
 
-describe('reviewFileWithFallback — routing', () => {
-  const testConfig: Config = {
-    baseURL: 'http://nim.test',
-    apiKey: 'nim-key',
-    models: ['nim-model'],
-    mistralApiKey: 'mistral-key',
-    mistralBaseUrl: 'https://api.mistral.ai/v1',
-    mistralModels: ['mistral-model'],
-    customApiUrl: '',
-    customModel: '',
-    customApiKey: '',
-    maxFiles: 10,
-    excludePatterns: [],
-    systemPrompt: '',
-    promptMode: 'append',
+describe('parseDiffHunks', () => {
+  it('extracts hunk ranges from diff text', () => {
+    const diff = `diff --git a/foo.ts b/foo.ts
+--- a/foo.ts
++++ b/foo.ts
+@@ -1,3 +1,4 @@
+ line1
++line2
+ line3
+@@ -10,5 +11,6 @@
+ old
++new
+ old2`;
+    const hunks = parseDiffHunks(diff);
+    assert.strictEqual(hunks.length, 2);
+    assert.deepStrictEqual(hunks[0], { start: 1, end: 4 });
+    assert.deepStrictEqual(hunks[1], { start: 11, end: 16 });
+  });
+
+  it('returns empty array for no hunks', () => {
+    assert.deepStrictEqual(parseDiffHunks('no hunks here'), []);
+  });
+});
+
+describe('getFileHunks', () => {
+  it('maps files to their hunk ranges', () => {
+    const filesDiff: Record<string, string> = {
+      'a.ts': 'diff --git a/a.ts b/a.ts\n@@ -1,2 +1,3 @@\n+x\n',
+      'b.ts': 'diff --git b/b.ts b/b.ts\n@@ -5,1 +5,2 @@\n+y\n',
+    };
+    const map = getFileHunks(filesDiff);
+    assert.strictEqual(map.size, 2);
+    assert.deepStrictEqual(map.get('a.ts'), [{ start: 1, end: 3 }]);
+    assert.deepStrictEqual(map.get('b.ts'), [{ start: 5, end: 6 }]);
+  });
+});
+
+describe('validateFindings', () => {
+  const filesDiff: Record<string, string> = {
+    'src/main.ts': 'diff --git a/src/main.ts b/src/main.ts\n@@ -10,3 +10,5 @@\n old\n+new1\n+new2\n old2\n',
   };
+  const changedFiles = new Set(['src/main.ts']);
 
-  it('routes to correct client based on provider tag', async () => {
-    let nimCalled = false;
-    let mistralCalled = false;
-
-    const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost`);
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
-        const parsed = JSON.parse(body);
-        if (parsed.model === 'nim-model') nimCalled = true;
-        if (parsed.model === 'mistral-model') mistralCalled = true;
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          choices: [{ message: { content: `Review from ${parsed.model}` } }],
-          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-        }));
-      });
-    });
-
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    try {
-      const port = (server.address() as any).port;
-      const baseUrl = `http://localhost:${port}`;
-
-      const nimClient = new NimClient(baseUrl, 'nim-key');
-      const mistralClient = new NimClient(baseUrl, 'mistral-key');
-
-      const clients: Record<Provider, NimClient | null> = {
-        nim: nimClient,
-        mistral: mistralClient,
-        custom: null,
-      };
-
-      // Mistral first in chain
-      const chain: TaggedModel[] = [
-        { id: 'mistral-model', provider: 'mistral' },
-        { id: 'nim-model', provider: 'nim' },
-      ];
-
-      const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-
-      assert.ok(result.includes('mistral-model'));
-      assert.strictEqual(mistralCalled, true);
-      assert.strictEqual(nimCalled, false); // shouldn't reach NIM since Mistral succeeds
-    } finally {
-      server.close();
-    }
+  it('drops finding for file not in changed set', () => {
+    const review = { findings: [{ file: 'unknown.ts', severity: 'Warning' as const, issue: 'bad', line_start: 11, line_end: 12 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
+    assert.ok(result.warnings.some(w => w.includes('unknown.ts')));
   });
 
-  it('falls through to next provider on failure', async () => {
-    let callCount = 0;
-
-    const server = createServer((req, res) => {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
-        callCount++;
-        const parsed = JSON.parse(body);
-
-        if (parsed.model === 'fail-model') {
-          res.writeHead(500);
-          res.end('Internal Error');
-          return;
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          choices: [{ message: { content: `Review from ${parsed.model}` } }],
-          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-        }));
-      });
-    });
-
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    try {
-      const port = (server.address() as any).port;
-      const baseUrl = `http://localhost:${port}`;
-
-      const nimClient = new NimClient(baseUrl, 'nim-key');
-      const mistralClient = new NimClient(baseUrl, 'mistral-key');
-
-      const clients: Record<Provider, NimClient | null> = {
-        nim: nimClient,
-        mistral: mistralClient,
-        custom: null,
-      };
-
-      const chain: TaggedModel[] = [
-        { id: 'fail-model', provider: 'mistral' },
-        { id: 'nim-model', provider: 'nim' },
-      ];
-
-      const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-
-      assert.ok(result.includes('nim-model'));
-      assert.strictEqual(callCount, 2);
-    } finally {
-      server.close();
-    }
+  it('drops finding with line outside all hunks', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Critical' as const, issue: 'bad', line_start: 100, line_end: 105 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
+    assert.ok(result.warnings.some(w => w.includes('100')));
   });
 
-  it('skips models whose client is null', async () => {
-    const server = createServer((req, res) => {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
-        const parsed = JSON.parse(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          choices: [{ message: { content: `Review from ${parsed.model}` } }],
-          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-        }));
-      });
-    });
-
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    try {
-      const port = (server.address() as any).port;
-      const baseUrl = `http://localhost:${port}`;
-
-      const nimClient = new NimClient(baseUrl, 'nim-key');
-
-      const clients: Record<Provider, NimClient | null> = {
-        nim: nimClient,
-        mistral: null, // No Mistral client
-        custom: null,
-      };
-
-      const chain: TaggedModel[] = [
-        { id: 'mistral-model', provider: 'mistral' },
-        { id: 'nim-model', provider: 'nim' },
-      ];
-
-      const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-
-      assert.ok(result.includes('nim-model'));
-    } finally {
-      server.close();
-    }
+  it('keeps finding with line inside hunk', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Warning' as const, issue: 'ok', line_start: 11, line_end: 12 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1);
+    assert.strictEqual(result.valid.findings[0].issue, 'ok');
+    assert.strictEqual(result.warnings.length, 0);
   });
 
-  it('throws when all models fail', async () => {
-    const server = createServer((req, res) => {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
-        res.writeHead(500);
-        res.end('Error');
-      });
+  it('keeps file-wide finding (no line)', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Suggestion' as const, issue: 'no tests' }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1);
+    assert.strictEqual(result.warnings.length, 0);
+  });
+
+  it('drops finding with line_end but no line_start', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Warning' as const, issue: 'bad', line_end: 12 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.warnings.some(w => w.includes('line_end but no line_start')));
+  });
+
+  it('returns summary when all findings dropped', () => {
+    const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x' }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
+    assert.ok(result.warnings.length > 0);
+  });
+
+  it('returns empty valid finding for clean review with summary', () => {
+    const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x' }], summary: 'All good' };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.strictEqual(result.valid.summary, 'All good');
+  });
+});
+
+describe('renderReview', () => {
+  it('starts with comment marker', () => {
+    const output = renderReview({ findings: [] });
+    assert.ok(output.startsWith('### AI Code Review') || output === 'No issues found.');
+  });
+
+  it('renders no-issues for empty findings', () => {
+    const output = renderReview({ findings: [] });
+    assert.strictEqual(output, 'No issues found.');
+  });
+
+  it('renders model name in header', () => {
+    const output = renderReview({
+      findings: [{ file: 'a.ts', severity: 'Warning', issue: 'x' }],
     });
+    // renderReview doesn't include model name — that's added by index.ts
+    // but it should contain the finding
+    assert.ok(output.includes('Warning'));
+    assert.ok(output.includes('a.ts'));
+  });
 
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    try {
-      const port = (server.address() as any).port;
-      const baseUrl = `http://localhost:${port}`;
+  it('groups findings by file', () => {
+    const output = renderReview({
+      findings: [
+        { file: 'b.ts', severity: 'Critical', issue: 'issue1' },
+        { file: 'a.ts', severity: 'Warning', issue: 'issue2' },
+        { file: 'a.ts', severity: 'Suggestion', issue: 'issue3' },
+      ],
+    });
+    // Files should be sorted alphabetically
+    const aPos = output.indexOf('a.ts');
+    const bPos = output.indexOf('b.ts');
+    assert.ok(aPos < bPos, 'a.ts should appear before b.ts');
+    // a.ts should have two findings
+    assert.ok(output.includes('issue2'));
+    assert.ok(output.includes('issue3'));
+  });
 
-      const nimClient = new NimClient(baseUrl, 'nim-key');
+  it('includes suggestion when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', suggestion: 'fix it' }],
+    });
+    assert.ok(output.includes('fix it'));
+  });
 
-      const clients: Record<Provider, NimClient | null> = {
-        nim: nimClient,
-        mistral: null,
-        custom: null,
-      };
+  it('includes summary when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'y' }],
+      summary: 'All done.',
+    });
+    assert.ok(output.includes('All done.'));
+  });
 
-      const chain: TaggedModel[] = [
-        { id: 'nim-model', provider: 'nim' },
-      ];
+  it('renders line numbers when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Critical', issue: 'bad', line_start: 10, line_end: 15 }],
+    });
+    assert.ok(output.includes('10'));
+    assert.ok(output.includes('15'));
+  });
 
-      await assert.rejects(
-        () => reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig),
-        /All models failed for test.ts/,
-      );
-    } finally {
-      server.close();
-    }
+  it('renders single line when line_end equals line_start', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', line_start: 5, line_end: 5 }],
+    });
+    assert.ok(output.includes('5'));
+    // Should not include dash range
+    assert.ok(!output.includes('5-5'));
   });
 });
