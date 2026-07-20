@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
@@ -72,7 +72,7 @@ async function run(): Promise<void> {
   try {
     filesDiff = await fetchDiff(repo, prNumber, token);
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Diff too large')) {
+    if (err instanceof DiffTooLargeError) {
       const msg = `### AI Code Review\n\n${err.message}`;
       try {
         await postComment(repo, prNumber, token, msg);

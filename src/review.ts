@@ -177,6 +177,15 @@ export function shouldExclude(filePath: string, patterns: string[]): boolean {
   return false;
 }
 
+export class DiffTooLargeError extends Error {
+  sizeMB: string;
+  constructor(sizeMB: string) {
+    super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+    this.name = 'DiffTooLargeError';
+    this.sizeMB = sizeMB;
+  }
+}
+
 export async function fetchDiff(repo: string, prNumber: number, token: string): Promise<Record<string, string>> {
   const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
   const resp = await withRetry(async () => {
@@ -197,7 +206,7 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
 
   const raw = await resp.text();
   if (raw.length > 5 * 1024 * 1024) {
-    throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
+    throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
   }
   return parseDiff(raw);
 }

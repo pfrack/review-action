@@ -82,6 +82,12 @@ export class OpenAIClient {
       stream: false,
     };
 
+    if (opts.format === 'json_schema' || opts.format === 'tools') {
+      if (!opts.schema) {
+        throw new Error(`format "${opts.format}" requires a schema to be provided`);
+      }
+    }
+
     if (opts.schema && opts.format && opts.format !== 'text') {
       if (opts.format === 'json_schema') {
         payload.response_format = {
@@ -126,7 +132,7 @@ export class OpenAIClient {
 
     const data = await resp.json() as ChatResponse;
     if (!data.choices || data.choices.length === 0) {
-      throw new Error('NIM returned no choices');
+      throw new Error('API returned no choices');
     }
 
     const choice = data.choices[0];
@@ -241,7 +247,7 @@ export class OpenAIClient {
     });
 
     if (!resp.ok) {
-      throw new Error(`NIM /models returned ${resp.status}`);
+      throw new Error(`/models returned ${resp.status}`);
     }
 
     const data = await resp.json() as { data: { id: string }[] };
