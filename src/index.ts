@@ -1,8 +1,51 @@
 import * as core from '@actions/core';
-import { NimClient } from './nim-client.js';
+import { NimClient, type ResponseFormat } from './nim-client.js';
 import { loadConfig, fetchDiff, postComment, shouldExclude, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
+import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
+
+function safeParseJson(content: string): unknown {
+  const trimmed = content.trim();
+  if (!trimmed) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+}
+
+function renderReview(review: ReviewType): string {
+  if (review.findings.length === 0) {
+    return 'No issues found.';
+  }
+
+  const byFile = new Map<string, typeof review.findings>();
+  for (const f of review.findings) {
+    const list = byFile.get(f.file) || [];
+    list.push(f);
+    byFile.set(f.file, list);
+  }
+
+  const lines: string[] = [];
+  for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`**File:** \`${file}\``);
+    for (const f of findings) {
+      const lineInfo = f.line_start != null
+        ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+        : '';
+      const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
+      lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    }
+    lines.push('');
+  }
+
+  if (review.summary) {
+    lines.push(`**Summary:** ${review.summary}`);
+  }
+
+  return lines.join('\n');
+}
 
 async function run(): Promise<void> {
   const config = loadConfig();
@@ -104,9 +147,15 @@ async function run(): Promise<void> {
 
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
 
+  function providerToFormat(provider: Provider): ResponseFormat {
+    if (provider === 'mistral') return 'tools';
+    return 'json_schema';
+  }
+
   // Try models from combined chain in order, stop at first success
-  let review = '';
+  let review: ReviewType | null = null;
   let usedModel = '';
+  let lastRawContent = '';
   for (const tagged of chain) {
     const client = clients[tagged.provider];
     if (!client) continue;
@@ -116,27 +165,75 @@ async function run(): Promise<void> {
       const result = await client.chat(tagged.id, [
         { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
         { role: 'user', content: userMsg },
-      ], { temperature: 0.2, maxTokens: 4096 });
+      ], {
+        temperature: 0.2,
+        maxTokens: 4096,
+        schema: ReviewJsonSchema,
+        format: providerToFormat(tagged.provider),
+      });
 
-      if (result.content && result.content.trim()) {
-        review = result.content;
-        usedModel = tagged.id;
-        core.info(`Done with ${tagged.id} (${tagged.provider})`);
-        break;
+      if (result.finishReason === 'length') {
+        core.info(`${tagged.id} response truncated, trying next...`);
+        continue;
       }
-      core.info(`${tagged.id} returned empty, trying next...`);
+
+      if (!result.content || !result.content.trim()) {
+        core.info(`${tagged.id} returned empty, trying next...`);
+        continue;
+      }
+
+      // Try parsing as structured JSON
+      let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
+
+      if (!parsed.success) {
+        // Retry once with validation error appended
+        core.info(`${tagged.id} schema validation failed, retrying...`);
+        const retryResult = await client.chat(tagged.id, [
+          { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+          { role: 'user', content: userMsg },
+          { role: 'assistant', content: result.content },
+          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. Errors: ${parsed.error.message}\nPlease respond with valid JSON matching the schema.` },
+        ], {
+          temperature: 0.2,
+          maxTokens: 4096,
+          schema: ReviewJsonSchema,
+          format: providerToFormat(tagged.provider),
+        });
+
+        if (retryResult.finishReason === 'length') {
+          core.info(`${tagged.id} retry truncated, trying next...`);
+          continue;
+        }
+
+        parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
+        if (!parsed.success) {
+          lastRawContent = result.content;
+          core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+          continue;
+        }
+      }
+
+      review = parsed.data;
+      usedModel = tagged.id;
+      core.info(`Done with ${tagged.id} (${tagged.provider})`);
+      break;
     } catch (err) {
       core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
     }
   }
 
-  if (!review) {
-    review = 'No review content returned from any model.';
-  }
-
   const modelShort = usedModel.split('/').pop() || usedModel;
   const sections: string[] = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
-  sections.push(`\n${review}`);
+
+  if (review) {
+    sections.push(`\n${renderReview(review)}`);
+  } else if (!usedModel) {
+    sections.push(`\nNo review content returned from any model.`);
+  } else if (config.promptMode === 'replace' && lastRawContent) {
+    sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n${lastRawContent}`);
+  } else {
+    sections.push(`\nNo issues found.`);
+  }
 
   if (truncated) {
     sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);

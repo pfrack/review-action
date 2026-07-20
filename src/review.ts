@@ -2,17 +2,12 @@ import * as core from '@actions/core';
 import { NimClient, type ChatMessage } from './nim-client.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { languageForTemplate } from './prompts.js';
+import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-Respond in concise markdown with findings for each file. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
 
-If the code looks fine, say "No issues found."`;
+${JSON_SCHEMA_DEFINITION}`;
 
 export interface Config {
   baseURL: string;

@@ -73,7 +73,7 @@ describe('resolveSystemPrompt', () => {
   it('returns base prompt when no env and no lang match', () => {
     const prompt = resolveSystemPrompt('config.yaml', baseConfig);
     assert.ok(prompt.includes('code review'));
-    assert.ok(prompt.includes('Severity'));
+    assert.ok(prompt.includes('findings'));
   });
 
   it('returns lang prompt when no env and lang matches', () => {

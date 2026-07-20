@@ -7,7 +7,11 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   stream?: boolean;
+  schema?: object;
+  format?: ResponseFormat;
 }
+
+export type ResponseFormat = 'json_schema' | 'tools' | 'text';
 
 export interface Usage {
   prompt_tokens: number;
@@ -19,6 +23,7 @@ export interface ChatResult {
   content: string;
   usage: Usage;
   latency: number;
+  finishReason?: string;
 }
 
 export interface StreamChunk {
@@ -33,10 +38,20 @@ interface ChatRequest {
   temperature: number;
   max_tokens: number;
   stream: boolean;
+  response_format?: {
+    type: 'json_schema';
+    strict: true;
+    json_schema: { name: string; schema: object };
+  };
+  tools?: Array<{
+    type: 'function';
+    function: { name: string; description: string; parameters: object };
+  }>;
+  tool_choice?: { type: 'function'; function: { name: string } };
 }
 
 interface ChatResponseChoice {
-  message?: { content: string };
+  message?: { content: string | null; tool_calls?: Array<{ function: { arguments: string } }> };
   delta?: { content: string };
   finish_reason?: string;
 }
@@ -64,6 +79,26 @@ export class NimClient {
       stream: false,
     };
 
+    if (opts.schema && opts.format && opts.format !== 'text') {
+      if (opts.format === 'json_schema') {
+        payload.response_format = {
+          type: 'json_schema',
+          strict: true,
+          json_schema: { name: 'review', schema: opts.schema },
+        };
+      } else if (opts.format === 'tools') {
+        payload.tools = [{
+          type: 'function',
+          function: {
+            name: 'review_for_code_diff',
+            description: 'Record the structured code review findings for the given diff.',
+            parameters: opts.schema,
+          },
+        }];
+        payload.tool_choice = { type: 'function', function: { name: 'review_for_code_diff' } };
+      }
+    }
+
     const start = Date.now();
     const resp = await fetch(`${this.baseURL}/chat/completions`, {
       method: 'POST',
@@ -88,10 +123,24 @@ export class NimClient {
       throw new Error('NIM returned no choices');
     }
 
+    const choice = data.choices[0];
+    let content: string;
+    if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
+      const args = choice.message.tool_calls[0].function.arguments;
+      try {
+        content = JSON.stringify(JSON.parse(args));
+      } catch {
+        content = args;
+      }
+    } else {
+      content = (choice.message?.content ?? '').trim();
+    }
+
     return {
-      content: (data.choices[0].message?.content ?? '').trim(),
+      content,
       usage: data.usage,
       latency: Date.now() - start,
+      finishReason: choice.finish_reason,
     };
   }
 
