@@ -12,8 +12,9 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: pfrack/review-action@v1
+      - uses: ./
         with:
           nim_api_key: ${{ secrets.NIM_API_KEY }}
+          mistral_api_key: ${{ secrets.MISTRAL_API_KEY }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
