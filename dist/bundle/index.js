@@ -27445,9 +27445,10 @@ async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
         catch (error) {
             lastError = error;
             const status = error instanceof RetryableError ? error.status : 0;
-            const isNetworkError = error instanceof TypeError;
-            if (i < maxRetries && (status >= 500 || status === 429 || isNetworkError)) {
-                await new Promise((resolve) => setTimeout(resolve, delayMs * Math.pow(2, i)));
+            const isFetchNetworkError = error instanceof TypeError && /fetch|network|ECONNREFUSED|ETIMEDOUT/i.test(error.message);
+            if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
+                const delay = Math.min(delayMs * Math.pow(2, i), 30_000);
+                await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
             throw error;
@@ -35492,12 +35493,7 @@ function validateFindings(review, filesDiff, changedFiles) {
         validFindings.push(f);
     }
     if (validFindings.length === 0 && !review.summary) {
-        validFindings.push({
-            file: '<global>',
-            severity: 'Suggestion',
-            issue: 'All findings were invalid — see model output for context',
-            suggestion: null,
-        });
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
     }
     return { valid: { findings: validFindings, summary: review.summary }, warnings };
 }
@@ -35557,14 +35553,9 @@ async function fetchDiff(repo, prNumber, token) {
         }
         return response;
     });
-    const contentLength = resp.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
-        lib_core.warning(`Diff too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
-        return {};
-    }
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        lib_core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB after download). Skipping review.`);
+        lib_core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
         return {};
     }
     return parseDiff(raw);

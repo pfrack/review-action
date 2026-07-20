@@ -83,12 +83,7 @@ export function validateFindings(review, filesDiff, changedFiles) {
         validFindings.push(f);
     }
     if (validFindings.length === 0 && !review.summary) {
-        validFindings.push({
-            file: '<global>',
-            severity: 'Suggestion',
-            issue: 'All findings were invalid — see model output for context',
-            suggestion: null,
-        });
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
     }
     return { valid: { findings: validFindings, summary: review.summary }, warnings };
 }
@@ -148,14 +143,9 @@ export async function fetchDiff(repo, prNumber, token) {
         }
         return response;
     });
-    const contentLength = resp.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
-        core.warning(`Diff too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
-        return {};
-    }
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB after download). Skipping review.`);
+        core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
         return {};
     }
     return parseDiff(raw);

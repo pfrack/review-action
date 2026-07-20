@@ -220,14 +220,16 @@ describe('validateFindings', () => {
   it('drops finding for file not in changed set', () => {
     const review = { findings: [{ file: 'unknown.ts', severity: 'Warning' as const, issue: 'bad', line_start: 11, line_end: 12 }] };
     const result = validateFindings(review, filesDiff, changedFiles);
-    assert.strictEqual(result.valid.findings.length, 1); // warning finding inserted
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
     assert.ok(result.warnings.some(w => w.includes('unknown.ts')));
   });
 
   it('drops finding with line outside all hunks', () => {
     const review = { findings: [{ file: 'src/main.ts', severity: 'Critical' as const, issue: 'bad', line_start: 100, line_end: 105 }] };
     const result = validateFindings(review, filesDiff, changedFiles);
-    assert.strictEqual(result.valid.findings.length, 1); // warning finding
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
     assert.ok(result.warnings.some(w => w.includes('100')));
   });
 
@@ -246,11 +248,11 @@ describe('validateFindings', () => {
     assert.strictEqual(result.warnings.length, 0);
   });
 
-  it('inserts warning finding when all findings dropped', () => {
+  it('returns summary when all findings dropped', () => {
     const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x' }] };
     const result = validateFindings(review, filesDiff, changedFiles);
-    assert.strictEqual(result.valid.findings.length, 1);
-    assert.strictEqual(result.valid.findings[0].file, '<global>');
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.ok(result.valid.summary);
     assert.ok(result.warnings.length > 0);
   });
 
