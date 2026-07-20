@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { NimClient, type ChatMessage } from './nim-client.js';
+import { OpenAIClient, type ChatMessage } from './openai-client.js';
 
 function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -14,7 +14,7 @@ function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) =>
   });
 }
 
-describe('NimClient', () => {
+describe('OpenAIClient', () => {
   it('Chat sends correct request and returns response', async () => {
     const mock = await startMockServer((req, res) => {
       assert.strictEqual(req.url, '/chat/completions');
@@ -38,7 +38,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       const result = await client.chat('test-model', [{ role: 'user', content: 'hello' }]);
       assert.strictEqual(result.content, 'test response');
       assert.strictEqual(result.usage.total_tokens, 15);
@@ -55,7 +55,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       await assert.rejects(
         () => client.chat('model', [{ role: 'user', content: 'hi' }]),
         (err: Error) => {
@@ -83,7 +83,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       const chunks: string[] = [];
       let firstTokenAtSet = false;
 
@@ -109,7 +109,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'test-key');
+      const client = new OpenAIClient(mock.url, 'test-key');
       await assert.rejects(
         () => (async () => {
           for await (const _chunk of client.chatStream('model', [{ role: 'user', content: 'hi' }])) {}
@@ -125,7 +125,7 @@ describe('NimClient', () => {
   });
 
   it('Constructor trims trailing slash from baseURL', () => {
-    const client = new NimClient('https://example.com/v1/', 'key');
+    const client = new OpenAIClient('https://example.com/v1/', 'key');
     assert.strictEqual((client as any).baseURL, 'https://example.com/v1');
   });
 
@@ -139,7 +139,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'key');
+      const client = new OpenAIClient(mock.url, 'key');
       assert.strictEqual(await client.probeModel('model'), true);
     } finally {
       mock.close();
@@ -153,7 +153,7 @@ describe('NimClient', () => {
     });
 
     try {
-      const client = new NimClient(mock.url, 'key');
+      const client = new OpenAIClient(mock.url, 'key');
       assert.strictEqual(await client.probeModel('model'), false);
     } finally {
       mock.close();

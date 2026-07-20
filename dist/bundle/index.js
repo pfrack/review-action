@@ -1141,7 +1141,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getExecOutput = exports.exec = void 0;
-const string_decoder_1 = __nccwpck_require__(3193);
+const string_decoder_1 = __nccwpck_require__(5574);
 const tr = __importStar(__nccwpck_require__(6665));
 /**
  * Exec a command.
@@ -20402,7 +20402,7 @@ const { getEncoding } = __nccwpck_require__(396)
 const { DOMException } = __nccwpck_require__(7326)
 const { serializeAMimeType, parseMIMEType } = __nccwpck_require__(4322)
 const { types } = __nccwpck_require__(9023)
-const { StringDecoder } = __nccwpck_require__(3193)
+const { StringDecoder } = __nccwpck_require__(5574)
 const { btoa } = __nccwpck_require__(181)
 
 /** @type {PropertyDescriptor} */
@@ -25716,7 +25716,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream/web")
 
 /***/ }),
 
-/***/ 3193:
+/***/ 5574:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("string_decoder");
@@ -27457,9 +27457,9 @@ async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
     throw lastError;
 }
 
-;// CONCATENATED MODULE: ./src/nim-client.ts
+;// CONCATENATED MODULE: ./src/openai-client.ts
 
-class NimClient {
+class OpenAIClient {
     baseURL;
     apiKey;
     constructor(baseURL, apiKey) {
@@ -35963,10 +35963,10 @@ async function run() {
     if (hasCustom && !config.apiKey && !config.mistralApiKey) {
         lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
-    const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
+    const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
     const customClient = hasCustom
-        ? new NimClient(config.customApiUrl, config.customApiKey)
+        ? new OpenAIClient(config.customApiUrl, config.customApiKey)
         : null;
     const clients = {
         nim: nimClient,

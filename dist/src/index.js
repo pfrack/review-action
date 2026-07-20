@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { NimClient } from './nim-client.js';
+import { OpenAIClient } from './openai-client.js';
 import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
@@ -26,10 +26,10 @@ async function run() {
     if (hasCustom && !config.apiKey && !config.mistralApiKey) {
         core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
-    const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
+    const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
     const customClient = hasCustom
-        ? new NimClient(config.customApiUrl, config.customApiKey)
+        ? new OpenAIClient(config.customApiUrl, config.customApiKey)
         : null;
     const clients = {
         nim: nimClient,

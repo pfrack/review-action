@@ -1,5 +1,5 @@
 import { withRetry, RetryableError } from './retry.js';
-export class NimClient {
+export class OpenAIClient {
     baseURL;
     apiKey;
     constructor(baseURL, apiKey) {

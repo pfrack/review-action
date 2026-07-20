@@ -1,5 +1,5 @@
 import { appendFileSync, readFileSync } from 'node:fs';
-import { NimClient } from './nim-client.js';
+import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable } from './bench.js';
 import { SWE_BENCH_SCORES } from './bench-reorder.js';
 function envOrDefault(key, def) {
@@ -48,7 +48,7 @@ function getReplacements(activeModels) {
         .map(([model]) => model);
 }
 async function probe(baseURL, apiKey, models) {
-    const client = new NimClient(baseURL, apiKey);
+    const client = new OpenAIClient(baseURL, apiKey);
     for (const model of models) {
         process.stderr.write(`  ${model} ...`);
         const ok = await client.probeModel(model);
@@ -69,7 +69,7 @@ async function main() {
     }
     const baseURL = envOrDefault('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1');
     const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
-    const client = new NimClient(baseURL, apiKey);
+    const client = new OpenAIClient(baseURL, apiKey);
     // Determine models to benchmark
     let models;
     const modelsEnv = process.env.NIM_MODELS;

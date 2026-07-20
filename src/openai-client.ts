@@ -64,7 +64,7 @@ interface ChatResponse {
   usage: Usage;
 }
 
-export class NimClient {
+export class OpenAIClient {
   private baseURL: string;
   private apiKey: string;
 

@@ -1,4 +1,4 @@
-import { NimClient, type ChatMessage } from './nim-client.js';
+import { OpenAIClient, type ChatMessage } from './openai-client.js';
 
 export interface IterationResult {
   ttft: number;
@@ -21,7 +21,7 @@ export interface BenchmarkConfig {
 }
 
 export async function runBenchmark(
-  client: NimClient,
+  client: OpenAIClient,
   model: string,
   cfg: BenchmarkConfig,
 ): Promise<BenchmarkResult> {
