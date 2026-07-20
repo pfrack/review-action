@@ -128,7 +128,7 @@ export function validateFindings(
 
 export function renderReview(review: ReviewType): string {
   if (review.findings.length === 0) {
-    return 'No issues found.';
+    return review.summary || 'No issues found.';
   }
 
   const byFile = new Map<string, typeof review.findings>();
@@ -193,8 +193,7 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
 
   const raw = await resp.text();
   if (raw.length > 5 * 1024 * 1024) {
-    core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
-    return {};
+    throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
   }
   return parseDiff(raw);
 }
@@ -269,11 +268,6 @@ async function updateComment(repo: string, commentId: number, token: string, bod
     }
     return response;
   });
-
-  if (!resp.ok) {
-    const respBody = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-  }
 }
 
 async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
@@ -296,9 +290,4 @@ async function createComment(repo: string, prNumber: number, token: string, body
     }
     return response;
   });
-
-  if (!resp.ok) {
-    const respBody = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-  }
 }
