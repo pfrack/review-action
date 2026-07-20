@@ -93,7 +93,7 @@ export function validateFindings(review, filesDiff, changedFiles) {
 }
 export function renderReview(review) {
     if (review.findings.length === 0) {
-        return 'No issues found.';
+        return review.summary || 'No issues found.';
     }
     const byFile = new Map();
     for (const f of review.findings) {
@@ -149,8 +149,7 @@ export async function fetchDiff(repo, prNumber, token) {
     });
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
-        return {};
+        throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
     }
     return parseDiff(raw);
 }
@@ -216,10 +215,6 @@ async function updateComment(repo, commentId, token, body) {
         }
         return response;
     });
-    if (!resp.ok) {
-        const respBody = await resp.text();
-        throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-    }
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
@@ -240,8 +235,4 @@ async function createComment(repo, prNumber, token, body) {
         }
         return response;
     });
-    if (!resp.ok) {
-        const respBody = await resp.text();
-        throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-    }
 }

@@ -66,7 +66,18 @@ async function run() {
     }
     core.info(`Reviewing PR #${prNumber} in ${repo}`);
     core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
-    const filesDiff = await fetchDiff(repo, prNumber, token);
+    let filesDiff;
+    try {
+        filesDiff = await fetchDiff(repo, prNumber, token);
+    }
+    catch (err) {
+        if (err instanceof Error && err.message.startsWith('Diff too large')) {
+            const msg = `### AI Code Review\n\n${err.message}`;
+            await postComment(repo, prNumber, token, msg);
+            return;
+        }
+        throw err;
+    }
     if (Object.keys(filesDiff).length === 0) {
         const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
         await postComment(repo, prNumber, token, msg);

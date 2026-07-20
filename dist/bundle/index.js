@@ -35503,7 +35503,7 @@ function validateFindings(review, filesDiff, changedFiles) {
 }
 function renderReview(review) {
     if (review.findings.length === 0) {
-        return 'No issues found.';
+        return review.summary || 'No issues found.';
     }
     const byFile = new Map();
     for (const f of review.findings) {
@@ -35559,8 +35559,7 @@ async function fetchDiff(repo, prNumber, token) {
     });
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        lib_core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
-        return {};
+        throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
     }
     return parseDiff(raw);
 }
@@ -35626,10 +35625,6 @@ async function updateComment(repo, commentId, token, body) {
         }
         return response;
     });
-    if (!resp.ok) {
-        const respBody = await resp.text();
-        throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-    }
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
@@ -35650,10 +35645,6 @@ async function createComment(repo, prNumber, token, body) {
         }
         return response;
     });
-    if (!resp.ok) {
-        const respBody = await resp.text();
-        throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
-    }
 }
 
 ;// CONCATENATED MODULE: external "node:fs"
@@ -36008,7 +35999,18 @@ async function run() {
     }
     lib_core.info(`Reviewing PR #${prNumber} in ${repo}`);
     lib_core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
-    const filesDiff = await fetchDiff(repo, prNumber, token);
+    let filesDiff;
+    try {
+        filesDiff = await fetchDiff(repo, prNumber, token);
+    }
+    catch (err) {
+        if (err instanceof Error && err.message.startsWith('Diff too large')) {
+            const msg = `### AI Code Review\n\n${err.message}`;
+            await postComment(repo, prNumber, token, msg);
+            return;
+        }
+        throw err;
+    }
     if (Object.keys(filesDiff).length === 0) {
         const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
         await postComment(repo, prNumber, token, msg);
