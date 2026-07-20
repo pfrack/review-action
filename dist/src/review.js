@@ -72,6 +72,10 @@ export function validateFindings(review, filesDiff, changedFiles) {
             warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
             continue;
         }
+        if (f.line_end != null && f.line_start == null) {
+            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
+            continue;
+        }
         if (f.line_start != null) {
             const fileHunks = hunks.get(f.file) || [];
             const overlaps = fileHunks.some(h => f.line_start <= h.end && (f.line_end ?? f.line_start) >= h.start);

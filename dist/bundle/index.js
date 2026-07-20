@@ -35482,6 +35482,10 @@ function validateFindings(review, filesDiff, changedFiles) {
             warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
             continue;
         }
+        if (f.line_end != null && f.line_start == null) {
+            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
+            continue;
+        }
         if (f.line_start != null) {
             const fileHunks = hunks.get(f.file) || [];
             const overlaps = fileHunks.some(h => f.line_start <= h.end && (f.line_end ?? f.line_start) >= h.start);
@@ -36068,12 +36072,16 @@ async function run() {
             // Try parsing as structured JSON
             let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
             if (!parsed.success) {
-                // Retry once with validation error appended
+                // Retry once with validation error appended, truncating the previous
+                // response to avoid exceeding token limits on large outputs.
                 lib_core.info(`${tagged.id} schema validation failed, retrying...`);
+                const truncated = result.content.length > 500
+                    ? '...' + result.content.slice(-500)
+                    : result.content;
                 const retryResult = await client.chat(tagged.id, [
                     { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
                     { role: 'user', content: userMsg },
-                    { role: 'assistant', content: result.content },
+                    { role: 'assistant', content: truncated },
                     { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred.\nPlease respond with valid JSON matching the schema.` },
                 ], {
                     temperature: 0.2,
@@ -36087,7 +36095,7 @@ async function run() {
                 }
                 parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
                 if (!parsed.success) {
-                    lastRawContent = result.content;
+                    lastRawContent = retryResult.content;
                     lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
                     continue;
                 }

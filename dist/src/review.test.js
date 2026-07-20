@@ -225,6 +225,12 @@ describe('validateFindings', () => {
         assert.strictEqual(result.valid.findings.length, 1);
         assert.strictEqual(result.warnings.length, 0);
     });
+    it('drops finding with line_end but no line_start', () => {
+        const review = { findings: [{ file: 'src/main.ts', severity: 'Warning', issue: 'bad', line_end: 12 }] };
+        const result = validateFindings(review, filesDiff, changedFiles);
+        assert.strictEqual(result.valid.findings.length, 0);
+        assert.ok(result.warnings.some(w => w.includes('line_end but no line_start')));
+    });
     it('returns summary when all findings dropped', () => {
         const review = { findings: [{ file: 'nope.ts', severity: 'Warning', issue: 'x' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
