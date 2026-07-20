@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { NimClient, type ResponseFormat } from './nim-client.js';
-import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
@@ -13,38 +13,6 @@ function safeParseJson(content: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-function renderReview(review: ReviewType): string {
-  if (review.findings.length === 0) {
-    return 'No issues found.';
-  }
-
-  const byFile = new Map<string, typeof review.findings>();
-  for (const f of review.findings) {
-    const list = byFile.get(f.file) || [];
-    list.push(f);
-    byFile.set(f.file, list);
-  }
-
-  const lines: string[] = [];
-  for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push(`**File:** \`${file}\``);
-    for (const f of findings) {
-      const lineInfo = f.line_start != null
-        ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-        : '';
-      const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
-      lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
-    }
-    lines.push('');
-  }
-
-  if (review.summary) {
-    lines.push(`**Summary:** ${review.summary}`);
-  }
-
-  return lines.join('\n');
 }
 
 async function run(): Promise<void> {

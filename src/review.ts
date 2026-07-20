@@ -1,6 +1,4 @@
 import * as core from '@actions/core';
-import { NimClient, type ChatMessage } from './nim-client.js';
-import { type TaggedModel, type Provider } from './model-chain.js';
 import { languageForTemplate } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION, type ReviewType } from './review-schema.js';
 
@@ -127,6 +125,38 @@ export function validateFindings(
   }
 
   return { valid: { findings: validFindings, summary: review.summary }, warnings };
+}
+
+export function renderReview(review: ReviewType): string {
+  if (review.findings.length === 0) {
+    return 'No issues found.';
+  }
+
+  const byFile = new Map<string, typeof review.findings>();
+  for (const f of review.findings) {
+    const list = byFile.get(f.file) || [];
+    list.push(f);
+    byFile.set(f.file, list);
+  }
+
+  const lines: string[] = [];
+  for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`**File:** \`${file}\``);
+    for (const f of findings) {
+      const lineInfo = f.line_start != null
+        ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+        : '';
+      const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
+      lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    }
+    lines.push('');
+  }
+
+  if (review.summary) {
+    lines.push(`**Summary:** ${review.summary}`);
+  }
+
+  return lines.join('\n');
 }
 
 function globMatch(str: string, pattern: string): boolean {
@@ -261,46 +291,4 @@ export function resolveSystemPrompt(filePath: string, config: Config): string {
     return config.systemPrompt + '\n\n' + langTemplate;
   }
   return config.systemPrompt + '\n\n' + BASE_SYSTEM_PROMPT;
-}
-
-export async function reviewFile(
-  client: NimClient,
-  filePath: string,
-  diff: string,
-  model: string,
-  config: Config,
-): Promise<string> {
-  const userMsg = `Review the following changes to \`${filePath}\`:\n\n\`\`\`diff\n${diff}\n\`\`\``;
-  const sysPrompt = resolveSystemPrompt(filePath, config);
-
-  const result = await client.chat(model, [
-    { role: 'system', content: sysPrompt },
-    { role: 'user', content: userMsg },
-  ], { temperature: 0.2, maxTokens: 1024 });
-
-  return result.content;
-}
-
-export async function reviewFileWithFallback(
-  clients: Record<Provider, NimClient | null>,
-  filePath: string,
-  diff: string,
-  chain: TaggedModel[],
-  config: Config,
-): Promise<string> {
-  let lastErr: Error | null = null;
-
-  for (const tagged of chain) {
-    const client = clients[tagged.provider];
-    if (!client) continue;
-
-    try {
-      return await reviewFile(client, filePath, diff, tagged.id, config);
-    } catch (err) {
-      lastErr = err as Error;
-      console.error(`Model ${tagged.id} (${tagged.provider}) failed for ${filePath}: ${err}, trying next...`);
-    }
-  }
-
-  throw new Error(`All models failed for ${filePath}: ${lastErr?.message}`);
 }
