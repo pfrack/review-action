@@ -191,6 +191,7 @@ async function run(): Promise<void> {
         }
       }
 
+      // Both first-attempt and retry success paths converge here
       review = parsed.data;
       const changedFiles = new Set(reviewableFiles);
       const validated = validateFindings(review, filesDiff, changedFiles);

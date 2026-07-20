@@ -222,21 +222,28 @@ async function findExistingComment(repo: string, prNumber: number, token: string
 
   while (page <= maxPages) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-    const resp = await withRetry(async () => {
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github+json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      });
+    let resp: Response;
+    try {
+      resp = await withRetry(async () => {
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+          },
+          signal: AbortSignal.timeout(30_000),
+        });
 
-      if (!response.ok) {
-        const body = await response.text();
-        throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-      }
-      return response;
-    });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+        return response;
+      });
+    } catch (err) {
+      // 404 means PR doesn't exist or token lacks access — skip comment update
+      if (err instanceof RetryableError && err.status === 404) return null;
+      throw err;
+    }
 
     const comments = await resp.json() as { id: number; body: string }[];
     for (const comment of comments) {
