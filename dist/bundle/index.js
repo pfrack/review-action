@@ -27737,17 +27737,16 @@ function prompts_languageForTemplate(filePath) {
 ;// CONCATENATED MODULE: ./src/review.ts
 
 
-const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (`You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns.
-Respond in concise markdown. For each finding use:
+const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+Respond in concise markdown with findings for each file. For each finding use:
 - **File:** path
 - **Severity:** Critical | Warning | Suggestion
 - **Line (approx):** number or range
 - **Issue:** short description
 - **Suggestion:** how to fix
 
-If the code looks fine, say "No issues found."`));
+If the code looks fine, say "No issues found."`;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -27760,6 +27759,9 @@ function loadConfig() {
         mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        customApiUrl: core.getInput('custom_api_url') || '',
+        customModel: core.getInput('custom_model') || '',
+        customApiKey: core.getInput('custom_api_key') || '',
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
@@ -28096,9 +28098,24 @@ function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
     const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
     const modelString = orderedModels.join(',');
     const config = TARGET_CONFIG[target];
+    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
+    if (!config.pattern.test(content)) {
+        // Show context around the target key for debugging
+        const key = config.label + ':';
+        const idx = content.indexOf(key);
+        if (idx === -1) {
+            console.warn(`Warning: '${key}' not found in ${actionPath}`);
+        }
+        else {
+            const snippet = content.substring(idx, idx + 200);
+            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
+            console.warn(`Content around '${key}':\n${snippet}`);
+        }
+        return;
+    }
     const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
     if (updated === content) {
-        console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
+        console.log(`${config.label} models already in desired order, no changes needed`);
         return;
     }
     (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
@@ -28167,15 +28184,15 @@ if (isMainModule) {
  *
  * Stable sort — preserves original order within same score.
  */
-function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) {
+function buildCombinedChain(opts) {
     const chain = [];
-    if (hasNimKey) {
-        for (const id of nimModels) {
+    if (opts.hasNimKey) {
+        for (const id of opts.nimModels) {
             chain.push({ id, provider: 'nim' });
         }
     }
-    if (hasMistralKey) {
-        for (const id of mistralModels) {
+    if (opts.hasMistralKey) {
+        for (const id of opts.mistralModels) {
             chain.push({ id, provider: 'mistral' });
         }
     }
@@ -28185,6 +28202,10 @@ function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) 
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
+    // Prepend custom model — always tried first regardless of score
+    if (opts.customModel && opts.hasCustomConfig) {
+        chain.unshift({ id: opts.customModel, provider: 'custom' });
+    }
     return chain;
 }
 
@@ -28194,41 +28215,45 @@ function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) 
 
 
 
-function src_globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-    return regex.test(str);
-}
-function src_shouldExclude(filePath, patterns) {
-    for (const pat of patterns) {
-        if (src_globMatch(filePath, pat))
-            return true;
-        if (src_globMatch(filePath.split('/').pop() || '', pat))
-            return true;
-    }
-    return false;
-}
-const src_BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-Respond in concise markdown with findings for each file. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey && !config.mistralApiKey) {
-        throw new Error('At least one of nim_api_key or mistral_api_key is required');
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    // Validate custom URL protocol first (more specific error)
+    if (config.customApiUrl) {
+        const url = new URL(config.customApiUrl);
+        const isLoopback = url.hostname === 'localhost'
+            || url.hostname === '127.0.0.1'
+            || url.hostname === '::1'
+            || url.hostname === '0.0.0.0';
+        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
+        }
+    }
+    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    }
+    // Informational: custom-only means no fallback if custom model fails
+    if (hasCustom && !config.apiKey && !config.mistralApiKey) {
+        core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const customClient = hasCustom
+        ? new NimClient(config.customApiUrl, config.customApiKey)
+        : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: customClient,
     };
-    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey);
+    const chain = buildCombinedChain({
+        nimModels: config.models,
+        mistralModels: config.mistralModels,
+        hasNimKey: !!config.apiKey,
+        hasMistralKey: !!config.mistralApiKey,
+        customModel: config.customModel,
+        hasCustomConfig: hasCustom,
+    });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -28251,7 +28276,7 @@ async function run() {
     const filenames = Object.keys(filesDiff).sort();
     const reviewableFiles = [];
     for (const filePath of filenames) {
-        if (!src_shouldExclude(filePath, config.excludePatterns)) {
+        if (!shouldExclude(filePath, config.excludePatterns)) {
             reviewableFiles.push(filePath);
         }
     }
@@ -28280,7 +28305,7 @@ async function run() {
         try {
             core.info(`Trying ${tagged.id} (${tagged.provider})...`);
             const result = await client.chat(tagged.id, [
-                { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
+                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
                 { role: 'user', content: userMsg },
             ], { temperature: 0.2, maxTokens: 4096 });
             if (result.content && result.content.trim()) {

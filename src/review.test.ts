@@ -61,6 +61,9 @@ describe('resolveSystemPrompt', () => {
     mistralApiKey: '',
     mistralBaseUrl: '',
     mistralModels: [],
+    customApiUrl: '',
+    customModel: '',
+    customApiKey: '',
     maxFiles: 15,
     excludePatterns: [],
     systemPrompt: '',
@@ -172,6 +175,68 @@ describe('loadConfig — mistral fields', () => {
   });
 });
 
+describe('loadConfig — custom fields', () => {
+  const ENV_KEYS = [
+    'INPUT_CUSTOM_API_URL', 'INPUT_CUSTOM_MODEL', 'INPUT_CUSTOM_API_KEY',
+    'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
+    'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
+    'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
+  ];
+  const saved: Record<string, string | undefined> = {};
+
+  it('reads customApiUrl, customModel, customApiKey from inputs', () => {
+    for (const key of ENV_KEYS) saved[key] = process.env[key];
+
+    process.env['INPUT_CUSTOM_API_URL'] = 'https://openrouter.ai/api/v1';
+    process.env['INPUT_CUSTOM_MODEL'] = 'openai/gpt-4o';
+    process.env['INPUT_CUSTOM_API_KEY'] = 'sk-or-v1-abc';
+    process.env['INPUT_NIM_API_KEY'] = '';
+    process.env['INPUT_NIM_BASE_URL'] = '';
+    process.env['INPUT_NIM_MODELS'] = '';
+    process.env['INPUT_MAX_FILES'] = '';
+    process.env['INPUT_EXCLUDE_PATTERNS'] = '';
+    process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+    process.env['INPUT_NIM_PROMPT_MODE'] = '';
+
+    const config = loadConfig();
+
+    assert.strictEqual(config.customApiUrl, 'https://openrouter.ai/api/v1');
+    assert.strictEqual(config.customModel, 'openai/gpt-4o');
+    assert.strictEqual(config.customApiKey, 'sk-or-v1-abc');
+
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+
+  it('defaults custom fields to empty when not provided', () => {
+    for (const key of ENV_KEYS) saved[key] = process.env[key];
+
+    process.env['INPUT_CUSTOM_API_URL'] = '';
+    process.env['INPUT_CUSTOM_MODEL'] = '';
+    process.env['INPUT_CUSTOM_API_KEY'] = '';
+    process.env['INPUT_NIM_API_KEY'] = 'nim-key';
+    process.env['INPUT_NIM_BASE_URL'] = '';
+    process.env['INPUT_NIM_MODELS'] = '';
+    process.env['INPUT_MAX_FILES'] = '';
+    process.env['INPUT_EXCLUDE_PATTERNS'] = '';
+    process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+    process.env['INPUT_NIM_PROMPT_MODE'] = '';
+
+    const config = loadConfig();
+
+    assert.strictEqual(config.customApiUrl, '');
+    assert.strictEqual(config.customModel, '');
+    assert.strictEqual(config.customApiKey, '');
+
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+});
+
 describe('reviewFileWithFallback — routing', () => {
   const testConfig: Config = {
     baseURL: 'http://nim.test',
@@ -180,6 +245,9 @@ describe('reviewFileWithFallback — routing', () => {
     mistralApiKey: 'mistral-key',
     mistralBaseUrl: 'https://api.mistral.ai/v1',
     mistralModels: ['mistral-model'],
+    customApiUrl: '',
+    customModel: '',
+    customApiKey: '',
     maxFiles: 10,
     excludePatterns: [],
     systemPrompt: '',
@@ -218,6 +286,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: null,
       };
 
       // Mistral first in chain
@@ -271,6 +340,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: null,
       };
 
       const chain: TaggedModel[] = [
@@ -311,6 +381,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: null, // No Mistral client
+        custom: null,
       };
 
       const chain: TaggedModel[] = [
@@ -346,6 +417,7 @@ describe('reviewFileWithFallback — routing', () => {
       const clients: Record<Provider, NimClient | null> = {
         nim: nimClient,
         mistral: null,
+        custom: null,
       };
 
       const chain: TaggedModel[] = [

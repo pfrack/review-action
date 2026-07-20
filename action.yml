@@ -22,7 +22,19 @@ inputs:
     default: 'https://api.mistral.ai/v1'
   mistral_models:
     description: 'Comma-separated Mistral model fallback chain'
-    default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+    default: 'mistral-medium-3.5,codestral-2508'
+  custom_api_url:
+    description: 'Custom OpenAI-compatible API base URL (tried before NIM models)'
+    required: false
+    default: ''
+  custom_model:
+    description: 'Model name for the custom API endpoint'
+    required: false
+    default: ''
+  custom_api_key:
+    description: 'API key for the custom endpoint (can be empty for local/keyless endpoints)'
+    required: false
+    default: ''
   max_files:
     description: 'Max files to review per PR'
     default: '100'

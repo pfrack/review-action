@@ -1,9 +1,8 @@
 import * as core from '@actions/core';
 import { languageForTemplate } from './prompts.js';
-const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns.
-Respond in concise markdown. For each finding use:
+export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+Respond in concise markdown with findings for each file. For each finding use:
 - **File:** path
 - **Severity:** Critical | Warning | Suggestion
 - **Line (approx):** number or range
@@ -23,6 +22,9 @@ export function loadConfig() {
         mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        customApiUrl: core.getInput('custom_api_url') || '',
+        customModel: core.getInput('custom_model') || '',
+        customApiKey: core.getInput('custom_api_key') || '',
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),

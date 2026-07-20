@@ -1,10 +1,19 @@
 import { getSweBenchScore } from './bench-reorder.js';
 
-export type Provider = 'nim' | 'mistral';
+export type Provider = 'nim' | 'mistral' | 'custom';
 
 export interface TaggedModel {
   id: string;
   provider: Provider;
+}
+
+export interface ChainOptions {
+  nimModels: string[];
+  mistralModels: string[];
+  hasNimKey: boolean;
+  hasMistralKey: boolean;
+  customModel?: string;
+  hasCustomConfig?: boolean;
 }
 
 /**
@@ -14,22 +23,17 @@ export interface TaggedModel {
  *
  * Stable sort — preserves original order within same score.
  */
-export function buildCombinedChain(
-  nimModels: string[],
-  mistralModels: string[],
-  hasNimKey: boolean,
-  hasMistralKey: boolean,
-): TaggedModel[] {
+export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   const chain: TaggedModel[] = [];
 
-  if (hasNimKey) {
-    for (const id of nimModels) {
+  if (opts.hasNimKey) {
+    for (const id of opts.nimModels) {
       chain.push({ id, provider: 'nim' });
     }
   }
 
-  if (hasMistralKey) {
-    for (const id of mistralModels) {
+  if (opts.hasMistralKey) {
+    for (const id of opts.mistralModels) {
       chain.push({ id, provider: 'mistral' });
     }
   }
@@ -40,6 +44,11 @@ export function buildCombinedChain(
     const scoreB = getSweBenchScore(b.id);
     return scoreB - scoreA;
   });
+
+  // Prepend custom model — always tried first regardless of score
+  if (opts.customModel && opts.hasCustomConfig) {
+    chain.unshift({ id: opts.customModel, provider: 'custom' });
+  }
 
   return chain;
 }
