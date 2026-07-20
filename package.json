@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && ncc build src/index.ts -o dist/bundle",
+    "build": "tsc && cp -r src/__fixtures__ dist/__fixtures__ && ncc build src/index.ts -o dist/bundle",
     "test": "node --test dist/*.test.js",
     "package": "ncc build src/index.ts -o dist"
   },

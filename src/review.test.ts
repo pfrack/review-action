@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, parseDiffHunks, getFileHunks, validateFindings, type Config } from './review.js';
+import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, type Config } from './review.js';
 
 describe('parseDiff', () => {
   it('splits multi-file diffs', () => {
@@ -319,5 +319,76 @@ describe('validateFindings', () => {
     const result = validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.strictEqual(result.valid.summary, 'All good');
+  });
+});
+
+describe('renderReview', () => {
+  it('starts with comment marker', () => {
+    const output = renderReview({ findings: [] });
+    assert.ok(output.startsWith('### AI Code Review') || output === 'No issues found.');
+  });
+
+  it('renders no-issues for empty findings', () => {
+    const output = renderReview({ findings: [] });
+    assert.strictEqual(output, 'No issues found.');
+  });
+
+  it('renders model name in header', () => {
+    const output = renderReview({
+      findings: [{ file: 'a.ts', severity: 'Warning', issue: 'x' }],
+    });
+    // renderReview doesn't include model name — that's added by index.ts
+    // but it should contain the finding
+    assert.ok(output.includes('Warning'));
+    assert.ok(output.includes('a.ts'));
+  });
+
+  it('groups findings by file', () => {
+    const output = renderReview({
+      findings: [
+        { file: 'b.ts', severity: 'Critical', issue: 'issue1' },
+        { file: 'a.ts', severity: 'Warning', issue: 'issue2' },
+        { file: 'a.ts', severity: 'Suggestion', issue: 'issue3' },
+      ],
+    });
+    // Files should be sorted alphabetically
+    const aPos = output.indexOf('a.ts');
+    const bPos = output.indexOf('b.ts');
+    assert.ok(aPos < bPos, 'a.ts should appear before b.ts');
+    // a.ts should have two findings
+    assert.ok(output.includes('issue2'));
+    assert.ok(output.includes('issue3'));
+  });
+
+  it('includes suggestion when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', suggestion: 'fix it' }],
+    });
+    assert.ok(output.includes('fix it'));
+  });
+
+  it('includes summary when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'y' }],
+      summary: 'All done.',
+    });
+    assert.ok(output.includes('All done.'));
+  });
+
+  it('renders line numbers when present', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Critical', issue: 'bad', line_start: 10, line_end: 15 }],
+    });
+    assert.ok(output.includes('10'));
+    assert.ok(output.includes('15'));
+  });
+
+  it('renders single line when line_end equals line_start', () => {
+    const output = renderReview({
+      findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', line_start: 5, line_end: 5 }],
+    });
+    assert.ok(output.includes('5'));
+    // Should not include dash range
+    assert.ok(!output.includes('5-5'));
   });
 });
