@@ -27436,7 +27436,7 @@ class RetryableError extends Error {
         this.status = status;
     }
 }
-async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
+async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
     let lastError;
     for (let i = 0; i < maxRetries + 1; i++) {
         try {
@@ -27475,6 +27475,11 @@ class OpenAIClient {
             max_tokens: opts.maxTokens ?? 1024,
             stream: false,
         };
+        if (opts.format === 'json_schema' || opts.format === 'tools') {
+            if (!opts.schema) {
+                throw new Error(`format "${opts.format}" requires a schema to be provided`);
+            }
+        }
         if (opts.schema && opts.format && opts.format !== 'text') {
             if (opts.format === 'json_schema') {
                 payload.response_format = {
@@ -27496,7 +27501,7 @@ class OpenAIClient {
             }
         }
         const start = Date.now();
-        const resp = await withRetry(async () => {
+        const resp = await retry_withRetry(async () => {
             const response = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27517,7 +27522,7 @@ class OpenAIClient {
         });
         const data = await resp.json();
         if (!data.choices || data.choices.length === 0) {
-            throw new Error('NIM returned no choices');
+            throw new Error('API returned no choices');
         }
         const choice = data.choices[0];
         let content;
@@ -27547,7 +27552,7 @@ class OpenAIClient {
             max_tokens: opts.maxTokens ?? 1024,
             stream: true,
         };
-        const resp = await withRetry(async () => {
+        const resp = await retry_withRetry(async () => {
             const r = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27623,7 +27628,7 @@ class OpenAIClient {
             signal: AbortSignal.timeout(30_000),
         });
         if (!resp.ok) {
-            throw new Error(`NIM /models returned ${resp.status}`);
+            throw new Error(`/models returned ${resp.status}`);
         }
         const data = await resp.json();
         return data.data.map(m => m.id);
@@ -35375,6 +35380,7 @@ const ReviewSchema = object({
 // Hand-written JSON Schema for maximum provider compatibility.
 // z.toJSONSchema() adds "$schema" draft metadata and uses "anyOf" for
 // nullable fields — both of which some LLM providers reject.
+// IMPORTANT: Keep in sync with ReviewFindingSchema and ReviewSchema above.
 const ReviewJsonSchema = {
     type: 'object',
     properties: {
@@ -35542,9 +35548,17 @@ function shouldExclude(filePath, patterns) {
     }
     return false;
 }
+class DiffTooLargeError extends Error {
+    sizeMB;
+    constructor(sizeMB) {
+        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+        this.name = 'DiffTooLargeError';
+        this.sizeMB = sizeMB;
+    }
+}
 async function fetchDiff(repo, prNumber, token) {
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
-    const resp = await withRetry(async () => {
+    const resp = await retry_withRetry(async () => {
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -35560,7 +35574,7 @@ async function fetchDiff(repo, prNumber, token) {
     });
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
+        throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
     }
     return parseDiff(raw);
 }
@@ -35581,20 +35595,29 @@ async function findExistingComment(repo, prNumber, token) {
     const maxPages = 50;
     while (page <= maxPages) {
         const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-        const resp = await withRetry(async () => {
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github+json',
-                },
-                signal: AbortSignal.timeout(30_000),
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(30_000),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-            }
-            return response;
-        });
+        }
+        catch (err) {
+            // 404 means PR doesn't exist or token lacks access — skip comment update
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
         const comments = await resp.json();
         for (const comment of comments) {
             if (comment.body.startsWith(COMMENT_MARKER)) {
@@ -35609,7 +35632,7 @@ async function findExistingComment(repo, prNumber, token) {
 }
 async function updateComment(repo, commentId, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    const resp = await withRetry(async () => {
+    const resp = await retry_withRetry(async () => {
         const response = await fetch(url, {
             method: 'PATCH',
             headers: {
@@ -35629,7 +35652,7 @@ async function updateComment(repo, commentId, token, body) {
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    const resp = await withRetry(async () => {
+    const resp = await retry_withRetry(async () => {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -35675,6 +35698,44 @@ function loadEvent() {
  * 3. Updates nim_models in action.yml
  */
 
+
+/**
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
+ */
+function parseSweBenchResponse(data) {
+    return (data.results || [])
+        .filter(m => m.score > 0.5)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30)
+        .map(m => ({
+        modelId: m.model_id,
+        score: m.score,
+        org: m.organization_id || '',
+    }));
+}
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+async function fetchSweBenchScores() {
+    try {
+        const resp = await withRetry(async () => {
+            const r = await fetch('https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details', {
+                signal: AbortSignal.timeout(30_000),
+            });
+            if (!r.ok)
+                throw new Error(`SWE-bench API returned ${r.status}`);
+            return r;
+        });
+        const data = await resp.json();
+        return parseSweBenchResponse(data);
+    }
+    catch (err) {
+        process.stderr.write(`Warning: could not fetch SWE-bench scores: ${err}\n`);
+        return [];
+    }
+}
 /**
  * Parse the markdown table output from bench-entry.ts
  */
@@ -35761,9 +35822,10 @@ const SWE_BENCH_SCORES = {
 };
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
  */
-function getSweBenchScore(model) {
-    return SWE_BENCH_SCORES[model] ?? 0.5;
+function getSweBenchScore(model, fetchedScores) {
+    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
 }
 /**
  * Effective score = SWE-bench score × latency multiplier.
@@ -35771,8 +35833,9 @@ function getSweBenchScore(model) {
  * - 60-120s: linear penalty (1.0 → 0.7)
  * - Over 120s: heavy penalty (0.5)
  */
-function getEffectiveScore(model, latencies, maxLatencyMs = 60_000) {
-    const swe = getSweBenchScore(model);
+const DEFAULT_MAX_LATENCY_MS = 60_000;
+function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
+    const swe = getSweBenchScore(model, fetchedScores);
     if (!latencies || !(model in latencies))
         return swe;
     const lat = latencies[model];
@@ -35788,13 +35851,13 @@ function getEffectiveScore(model, latencies, maxLatencyMs = 60_000) {
  * Rank models by effective score (SWE-bench + latency penalty).
  * Only includes models that worked today (tokensPerSec > 0).
  */
-function rankModels(rows, latencies) {
+function rankModels(rows, latencies, fetchedScores) {
     const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
     return alive
         .map(r => r.model)
         .sort((a, b) => {
-        const effA = getEffectiveScore(a, latencies);
-        const effB = getEffectiveScore(b, latencies);
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
         if (effB !== effA)
             return effB - effA;
         // Tiebreaker: faster today wins
@@ -35860,7 +35923,23 @@ async function main() {
     for await (const chunk of process.stdin) {
         chunks.push(chunk);
     }
-    const table = Buffer.concat(chunks).toString('utf-8');
+    const rawInput = Buffer.concat(chunks).toString('utf-8');
+    // Extract fetched scores from HTML comment if present
+    const fetchedScores = new Map();
+    const scoresMatch = rawInput.match(/<!-- FETCHED_SCORES: ({.*?}) -->/);
+    if (scoresMatch) {
+        try {
+            const scoresObj = JSON.parse(scoresMatch[1]);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+            console.log(`Parsed ${fetchedScores.size} fetched score(s) from benchmark output`);
+        }
+        catch {
+            console.warn('Warning: could not parse FETCHED_SCORES comment');
+        }
+    }
+    const table = rawInput.replace(/<!-- FETCHED_SCORES: .*? -->\n?/g, '');
     if (!table.trim()) {
         console.error('No benchmark output received on stdin');
         process.exit(1);
@@ -35877,12 +35956,13 @@ async function main() {
             latencies[row.model] = row.latencyMs;
         }
     }
-    const ranked = rankModels(rows, latencies);
+    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+    const ranked = rankModels(rows, latencies, fetchedScoresMap);
     console.log(`Model ranking for ${target} (SWE-bench × latency):`);
     for (const model of ranked) {
         const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-        const swe = getSweBenchScore(model).toFixed(3);
-        const eff = getEffectiveScore(model, latencies).toFixed(3);
+        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
         console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
     }
     updateActionYml(actionPath, ranked, target);
@@ -36008,7 +36088,7 @@ async function run() {
         filesDiff = await fetchDiff(repo, prNumber, token);
     }
     catch (err) {
-        if (err instanceof Error && err.message.startsWith('Diff too large')) {
+        if (err instanceof DiffTooLargeError) {
             const msg = `### AI Code Review\n\n${err.message}`;
             try {
                 await postComment(repo, prNumber, token, msg);
@@ -36112,6 +36192,7 @@ async function run() {
                     continue;
                 }
             }
+            // Both first-attempt and retry success paths converge here
             review = parsed.data;
             const changedFiles = new Set(reviewableFiles);
             const validated = validateFindings(review, filesDiff, changedFiles);

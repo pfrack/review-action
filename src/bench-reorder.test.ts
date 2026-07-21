@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, updateActionYmlMistral, type ParsedRow } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYmlMistral, type ParsedRow } from './bench-reorder.js';
 
 describe('parseMarkdownTable', () => {
   it('parses a well-formed benchmark table', () => {
@@ -250,46 +250,63 @@ describe('rankModels with fetched scores', () => {
   });
 });
 
-describe('fetchSweBenchScores', () => {
-  it('returns parsed scores from mock API', async () => {
-    const { createServer } = await import('node:http');
-    const server = createServer((_req, res) => {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        results: [
-          { model_id: 'model-a', score: 0.85, organization_id: 'org-a' },
-          { model_id: 'model-b', score: 0.72, organization_id: 'org-b' },
-          { model_id: 'model-c', score: 0.4, organization_id: 'org-c' }, // below 0.5 threshold
-        ],
-      }));
-    });
-
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    const addr = server.address()!;
-    const port = typeof addr === 'string' ? 0 : addr.port;
-
-    // Monkey-patch fetch for this test
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async (url: string | URL | Request) => {
-      const u = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
-      if (u.includes(`${port}`) || u.includes('localhost')) {
-        return origFetch(`http://localhost:${port}`);
-      }
-      return origFetch(url);
+describe('parseSweBenchResponse', () => {
+  it('parses and filters API response correctly', () => {
+    const data = {
+      results: [
+        { model_id: 'model-a', score: 0.85, organization_id: 'org-a' },
+        { model_id: 'model-b', score: 0.72, organization_id: 'org-b' },
+        { model_id: 'model-c', score: 0.4, organization_id: 'org-c' }, // below 0.5
+      ],
     };
 
-    try {
-      // We can't easily override the URL in fetchSweBenchScores, so we test the parsing logic directly
-      // by verifying the function returns empty on connection error (graceful degradation)
-      const result = await fetchSweBenchScores();
-      // The real API might not be reachable, so we just verify it returns an array
-      assert.ok(Array.isArray(result));
-    } finally {
-      globalThis.fetch = origFetch;
-      server.close();
-    }
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].modelId, 'model-a');
+    assert.strictEqual(result[0].score, 0.85);
+    assert.strictEqual(result[0].org, 'org-a');
+    assert.strictEqual(result[1].modelId, 'model-b');
+    assert.ok(!result.some(e => e.modelId === 'model-c'));
   });
 
+  it('sorts by score descending', () => {
+    const data = {
+      results: [
+        { model_id: 'low', score: 0.55 },
+        { model_id: 'high', score: 0.9 },
+        { model_id: 'mid', score: 0.7 },
+      ],
+    };
+
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result[0].modelId, 'high');
+    assert.strictEqual(result[1].modelId, 'mid');
+    assert.strictEqual(result[2].modelId, 'low');
+  });
+
+  it('limits to top 30', () => {
+    const results = Array.from({ length: 50 }, (_, i) => ({
+      model_id: `model-${i}`,
+      score: 0.6 + i * 0.005,
+    }));
+
+    const result = parseSweBenchResponse({ results });
+    assert.strictEqual(result.length, 30);
+  });
+
+  it('handles empty results', () => {
+    const result = parseSweBenchResponse({ results: [] });
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('handles missing organization_id', () => {
+    const data = { results: [{ model_id: 'model-a', score: 0.8 }] };
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result[0].org, '');
+  });
+});
+
+describe('fetchSweBenchScores', () => {
   it('returns empty array on network failure (graceful degradation)', async () => {
     const result = await fetchSweBenchScores();
     assert.ok(Array.isArray(result));

@@ -142,6 +142,7 @@ async function main(): Promise<void> {
 
   // Discover new models and fetch SWE-bench scores
   const fetchedScores = new Map<string, number>();
+  const discoveredModels: string[] = [];
   if (availableModels) {
     const knownModels = new Set([...Object.keys(SWE_BENCH_SCORES), ...models]);
     const newModels = [...availableModels].filter(m => !knownModels.has(m));
@@ -160,7 +161,7 @@ async function main(): Promise<void> {
             if (score !== null) {
               process.stderr.write(` score=${score}\n`);
               fetchedScores.set(nimModel, score);
-              models.push(nimModel);
+              discoveredModels.push(nimModel);
             } else {
               process.stderr.write(' no match\n');
             }
@@ -168,6 +169,11 @@ async function main(): Promise<void> {
         }
       }
     }
+  }
+
+  // Add discovered models to the benchmark list
+  if (discoveredModels.length > 0) {
+    models = [...models, ...discoveredModels];
   }
 
   // --probe mode
@@ -264,8 +270,8 @@ async function main(): Promise<void> {
   }
 
   // Classify failures and persist transient ones for retry
+  const transientFailed: string[] = [];
   if (failed.length > 0) {
-    const transientFailed: string[] = [];
     for (const model of failed) {
       if (availableModels && !availableModels.has(model)) {
         process.stderr.write(`  ${model}: permanently removed from provider (not retried)\n`);
@@ -315,7 +321,9 @@ async function main(): Promise<void> {
       results.push(result);
     }
 
-    // Update removed-models.txt: keep only models that still failed
+    // Update removed-models.txt: keep only models that still failed,
+    // plus any new transient failures from this run
+    stillFailed.push(...transientFailed);
     writeRemovedModels(stillFailed);
     if (recovered.length > 0) {
       process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);

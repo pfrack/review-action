@@ -135,6 +135,14 @@ export function shouldExclude(filePath, patterns) {
     }
     return false;
 }
+export class DiffTooLargeError extends Error {
+    sizeMB;
+    constructor(sizeMB) {
+        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+        this.name = 'DiffTooLargeError';
+        this.sizeMB = sizeMB;
+    }
+}
 export async function fetchDiff(repo, prNumber, token) {
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
     const resp = await withRetry(async () => {
@@ -153,7 +161,7 @@ export async function fetchDiff(repo, prNumber, token) {
     });
     const raw = await resp.text();
     if (raw.length > 5 * 1024 * 1024) {
-        throw new Error(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
+        throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
     }
     return parseDiff(raw);
 }
@@ -174,20 +182,29 @@ async function findExistingComment(repo, prNumber, token) {
     const maxPages = 50;
     while (page <= maxPages) {
         const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-        const resp = await withRetry(async () => {
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github+json',
-                },
-                signal: AbortSignal.timeout(30_000),
+        let resp;
+        try {
+            resp = await withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(30_000),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-            }
-            return response;
-        });
+        }
+        catch (err) {
+            // 404 means PR doesn't exist or token lacks access — skip comment update
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
         const comments = await resp.json();
         for (const comment of comments) {
             if (comment.body.startsWith(COMMENT_MARKER)) {

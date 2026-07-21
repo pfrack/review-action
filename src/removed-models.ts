@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 export function getRemovedModelsPath(): string {
   return process.env.REMOVED_MODELS_PATH || 'removed-models.txt';
@@ -19,10 +19,12 @@ export function writeRemovedModels(models: string[], path?: string): void {
 }
 
 export function appendRemovedModels(newModels: string[], path?: string): void {
-  const existing = new Set(readRemovedModels(path));
+  const p = path || getRemovedModelsPath();
+  const existing = new Set(readRemovedModels(p));
   const toAdd = newModels.filter(m => !existing.has(m));
   if (toAdd.length > 0) {
-    appendFileSync(path || getRemovedModelsPath(), toAdd.join('\n') + '\n', 'utf-8');
+    const merged = [...existing, ...toAdd];
+    writeRemovedModels(merged, p);
   }
 }
 

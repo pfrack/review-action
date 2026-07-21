@@ -16,6 +16,30 @@ export interface SweBenchEntry {
   org: string;
 }
 
+interface SweBenchApiResponse {
+  results: Array<{
+    model_id: string;
+    score: number;
+    organization_id?: string;
+  }>;
+}
+
+/**
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
+ */
+export function parseSweBenchResponse(data: SweBenchApiResponse): SweBenchEntry[] {
+  return (data.results || [])
+    .filter(m => m.score > 0.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30)
+    .map(m => ({
+      modelId: m.model_id,
+      score: m.score,
+      org: m.organization_id || '',
+    }));
+}
+
 /**
  * Fetch SWE-bench Verified scores from the leaderboard API.
  * Returns top ~30 models by score, filtered to score > 0.5.
@@ -30,23 +54,8 @@ export async function fetchSweBenchScores(): Promise<SweBenchEntry[]> {
       return r;
     });
 
-    const data = await resp.json() as {
-      results: Array<{
-        model_id: string;
-        score: number;
-        organization_id?: string;
-      }>;
-    };
-
-    return (data.results || [])
-      .filter(m => m.score > 0.5)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 30)
-      .map(m => ({
-        modelId: m.model_id,
-        score: m.score,
-        org: m.organization_id || '',
-      }));
+    const data = await resp.json() as SweBenchApiResponse;
+    return parseSweBenchResponse(data);
   } catch (err) {
     process.stderr.write(`Warning: could not fetch SWE-bench scores: ${err}\n`);
     return [];
@@ -161,7 +170,9 @@ export function getSweBenchScore(model: string, fetchedScores?: Map<string, numb
  * - 60-120s: linear penalty (1.0 → 0.7)
  * - Over 120s: heavy penalty (0.5)
  */
-export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = 60_000, fetchedScores?: Map<string, number>): number {
+export const DEFAULT_MAX_LATENCY_MS = 60_000;
+
+export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores?: Map<string, number>): number {
   const swe = getSweBenchScore(model, fetchedScores);
   if (!latencies || !(model in latencies)) return swe;
 
@@ -188,8 +199,8 @@ export function rankModels(
   return alive
     .map(r => r.model)
     .sort((a, b) => {
-      const effA = getEffectiveScore(a, latencies, 60_000, fetchedScores);
-      const effB = getEffectiveScore(b, latencies, 60_000, fetchedScores);
+      const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+      const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
       if (effB !== effA) return effB - effA;
       // Tiebreaker: faster today wins
       const latA = latencies?.[a] ?? Infinity;
@@ -311,7 +322,7 @@ async function main(): Promise<void> {
   for (const model of ranked) {
     const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
     const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
-    const eff = getEffectiveScore(model, latencies, 60_000, fetchedScoresMap).toFixed(3);
+    const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
     console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
   }
 
