@@ -1141,7 +1141,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getExecOutput = exports.exec = void 0;
-const string_decoder_1 = __nccwpck_require__(5574);
+const string_decoder_1 = __nccwpck_require__(3193);
 const tr = __importStar(__nccwpck_require__(6665));
 /**
  * Exec a command.
@@ -20402,7 +20402,7 @@ const { getEncoding } = __nccwpck_require__(396)
 const { DOMException } = __nccwpck_require__(7326)
 const { serializeAMimeType, parseMIMEType } = __nccwpck_require__(4322)
 const { types } = __nccwpck_require__(9023)
-const { StringDecoder } = __nccwpck_require__(5574)
+const { StringDecoder } = __nccwpck_require__(3193)
 const { btoa } = __nccwpck_require__(181)
 
 /** @type {PropertyDescriptor} */
@@ -25716,7 +25716,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream/web")
 
 /***/ }),
 
-/***/ 5574:
+/***/ 3193:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("string_decoder");
@@ -35372,6 +35372,9 @@ const ReviewFindingSchema = object({
     line_end: schemas_number().nullable().optional(),
     issue: schemas_string(),
     suggestion: schemas_string().nullable().optional(),
+    critical_action: schemas_string(),
+    warning_action: schemas_string(),
+    suggestion_action: schemas_string(),
 });
 const ReviewSchema = object({
     findings: array(ReviewFindingSchema),
@@ -35395,8 +35398,11 @@ const ReviewJsonSchema = {
                     line_end: { type: ['number', 'null'] },
                     issue: { type: 'string' },
                     suggestion: { type: ['string', 'null'] },
+                    critical_action: { type: 'string' },
+                    warning_action: { type: 'string' },
+                    suggestion_action: { type: 'string' },
                 },
-                required: ['file', 'severity', 'issue'],
+                required: ['file', 'severity', 'issue', 'critical_action', 'warning_action', 'suggestion_action'],
                 additionalProperties: false,
             },
         },
@@ -35410,18 +35416,184 @@ const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```json\n'
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
 
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+;// CONCATENATED MODULE: ./src/prompts.ts
+
+
+const SEVERITY_GUIDANCE = `Severity guidance — match the issue text and the *_action field to each severity:
+- Critical findings: a bug, security hole, data-loss risk, or correctness failure
+  that BLOCKS release. Use direct action verbs in the issue text. Populate
+  critical_action with the concrete next step required to unblock release.
+- Warning findings: an investigative concern, likely bug, or maintainability or
+  performance issue that warrants attention but is not blocking. Populate
+  warning_action with the next step to investigate.
+- Suggestion findings: stylistic, readability, or nit-level improvement. Populate
+  suggestion_action with a short optional improvement.
+
+For the two action fields that do not match the severity, write a short placeholder
+string such as "not applicable" rather than omitting it — the schema requires all
+three on every finding.`;
+const languagePrompts = {
+    go: `You are an expert senior software engineer performing a code review of Go code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to Go.
+
+Go-specific focus areas:
+- Goroutine leaks and improper synchronization
+- Race conditions and missing mutex usage
+- Improper error handling (swallowed errors, bare returns)
+- Resource leaks (unclosed files, HTTP bodies, database connections)
+- Nil pointer dereferences and missing nil checks
+- Incorrect use of defer (especially in loops)
+- Concurrency patterns (channel misuse, deadlock potential)
+- Interface satisfaction and type assertions
+- Performance: unnecessary allocations, string concatenation in loops
+- Effective use of context for cancellation and timeouts
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+    python: `You are an expert senior software engineer performing a code review of Python code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to Python.
+
+Python-specific focus areas:
+- Mutable default arguments in function signatures
+- Bare except clauses and overly broad exception handling
+- Global state and module-level side effects
+- Resource management (context managers vs manual close)
+- Security: injection vulnerabilities, unsafe eval/exec
+- Performance: unnecessary list comprehensions, string concatenation
+- Type hints and mypy compatibility issues
+- Proper use of __eq__ and __hash__
+- Import cycles and circular dependencies
+- Pythonic idioms vs anti-patterns
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+    typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to TypeScript/JavaScript.
+
+TypeScript/JavaScript-specific focus areas:
+- Async/await misuse and unhandled promise rejections
+- Type safety: any usage, unsafe type assertions
+- Null/undefined handling and optional chaining
+- Memory leaks (event listener cleanup, timer management)
+- Security: XSS, prototype pollution, unsafe deserialization
+- Closures capturing stale references
+- Incorrect this binding in callbacks
+- Promise.all for parallel operations vs sequential loops
+- Module import/export patterns
+- React-specific: useEffect cleanup, memo usage, key props
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+    java: `You are an expert senior software engineer performing a code review of Java code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to Java.
+
+Java-specific focus areas:
+- Resource management (try-with-resources, AutoCloseable)
+- Thread safety (volatile, synchronized, concurrent collections)
+- Null pointer risks and Optional usage
+- Exception handling (catching too broadly, swallowed exceptions)
+- Security: SQL injection, XSS, unsafe deserialization
+- Memory: object retention, String interning, collection sizing
+- Proper equals/hashCode/toString implementations
+- Generics usage and type erasure pitfalls
+- Stream API vs traditional loops performance
+- Dependency injection and lifecycle management
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+    rust: `You are an expert senior software engineer performing a code review of Rust code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to Rust.
+
+Rust-specific focus areas:
+- Unsafe code blocks and their invariants
+- Lifetime issues and borrow checker violations
+- Unwrap/expect calls that could panic in production
+- Error handling (Result vs panic, thiserror vs anyhow)
+- Performance: unnecessary clones, allocations, bounds checks
+- Iterator vs loop efficiency
+- Send/Sync trait implications for concurrency
+- Deadlock potential in Mutex/RwLock usage
+- FFI safety and memory management
+- Clippy warnings and idiomatic Rust patterns
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+    cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
+
+Analyse the diff provided for bugs, security issues, performance
+problems, and style/readability concerns specific to C/C++.
+
+C/C++-specific focus areas:
+- Memory safety: buffer overflows, use-after-free, double-free
+- Null pointer dereferences and missing null checks
+- Resource leaks (memory, file handles, sockets)
+- Undefined behavior (signed overflow, strict aliasing)
+- Smart pointer usage (unique_ptr vs shared_ptr vs raw)
+- Thread safety and data races
+- Security: format string vulnerabilities, integer overflows
+- RAII patterns and exception safety
+- Template metaprogramming pitfalls
+- C-style casts vs C++ casts, const correctness
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`,
+};
+function languageForFile(filePath) {
+    const ext = extname(filePath).toLowerCase();
+    switch (ext) {
+        case '.go': return 'go';
+        case '.py': return 'python';
+        case '.ts':
+        case '.tsx':
+        case '.js':
+        case '.jsx': return 'typescript';
+        case '.java': return 'java';
+        case '.rs': return 'rust';
+        case '.cpp':
+        case '.c':
+        case '.h':
+        case '.hpp': return 'cpp';
+        default: return 'generic';
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/review.ts
+
 
 
 
 const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
 
+${SEVERITY_GUIDANCE}
+
 ${JSON_SCHEMA_DEFINITION}`;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 function loadConfig() {
+    const promptMode = lib_core.getInput('nim_prompt_mode') || 'append';
+    if (promptMode !== 'append' && promptMode !== 'replace') {
+        lib_core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+    }
     return {
         baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
         apiKey: lib_core.getInput('nim_api_key'),
@@ -35436,7 +35608,7 @@ function loadConfig() {
         maxFiles: parseInt(lib_core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: lib_core.getInput('nim_system_prompt'),
-        promptMode: lib_core.getInput('nim_prompt_mode') || 'append',
+        promptMode,
     };
 }
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
@@ -35455,6 +35627,27 @@ function parseDiff(raw) {
         }
     }
     return files;
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+}
+const SEVERITY_META = {
+    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
+    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
+    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
+};
+const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
+function severityTally(review) {
+    const counts = { critical: 0, warning: 0, suggestion: 0 };
+    for (const f of review.findings) {
+        if (f.severity === 'Critical')
+            counts.critical++;
+        else if (f.severity === 'Warning')
+            counts.warning++;
+        else if (f.severity === 'Suggestion')
+            counts.suggestion++;
+    }
+    return counts;
 }
 const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 function parseDiffHunks(diffText) {
@@ -35512,31 +35705,42 @@ function renderReview(review) {
     if (review.findings.length === 0) {
         return review.summary || 'No issues found.';
     }
-    const byFile = new Map();
-    for (const f of review.findings) {
-        const list = byFile.get(f.file) || [];
-        list.push(f);
-        byFile.set(f.file, list);
-    }
     const lines = [];
-    for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-        lines.push(`**File:** \`${file}\``);
-        for (const f of findings) {
-            const lineInfo = f.line_start != null
-                ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                : '';
-            const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
-            lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    for (const severity of SEVERITY_ORDER) {
+        const meta = SEVERITY_META[severity];
+        const bucket = review.findings.filter(f => f.severity === severity);
+        if (bucket.length === 0)
+            continue;
+        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
+        const byFile = new Map();
+        for (const f of bucket) {
+            const list = byFile.get(f.file) || [];
+            list.push(f);
+            byFile.set(f.file, list);
         }
-        lines.push('');
+        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            lines.push(`**File:** \`${file}\``);
+            for (const f of findings) {
+                const lineInfo = f.line_start != null
+                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+                    : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
+                const matchAction = f[meta.actionKey];
+                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
+                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
+                    : '';
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+            }
+            lines.push('');
+        }
     }
     if (review.summary) {
-        lines.push(`**Summary:** ${review.summary}`);
+        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
     }
     return lines.join('\n');
 }
 function globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
 }
 function shouldExclude(filePath, patterns) {
@@ -35573,8 +35777,9 @@ async function fetchDiff(repo, prNumber, token) {
         return response;
     });
     const raw = await resp.text();
-    if (raw.length > 5 * 1024 * 1024) {
-        throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
+    const byteLength = new TextEncoder().encode(raw).byteLength;
+    if (byteLength > 5 * 1024 * 1024) {
+        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
     }
     return parseDiff(raw);
 }
@@ -36196,7 +36401,14 @@ async function run() {
         try {
             lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
             const result = await client.chat(tagged.id, [
-                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                {
+                    role: 'system',
+                    content: config.promptMode === 'replace'
+                        ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
+                        : (config.systemPrompt
+                            ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
+                            : BASE_SYSTEM_PROMPT),
+                },
                 { role: 'user', content: userMsg },
             ], {
                 temperature: 0.2,
@@ -36223,7 +36435,14 @@ async function run() {
                     : result.content;
                 const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
                 const retryResult = await client.chat(tagged.id, [
-                    { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                    {
+                        role: 'system',
+                        content: config.promptMode === 'replace'
+                            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
+                            : (config.systemPrompt
+                                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
+                                : BASE_SYSTEM_PROMPT),
+                    },
                     { role: 'user', content: userMsg },
                     { role: 'assistant', content: truncated },
                     { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
@@ -36261,6 +36480,15 @@ async function run() {
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
     const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
+    if (review && review.findings.length > 0) {
+        const { critical, warning, suggestion } = severityTally(review);
+        const tally = [
+            critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
+            warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
+            suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
+        ].filter(Boolean).join(' · ');
+        sections.push(`\n${tally}\n`);
+    }
     if (review) {
         sections.push(`\n${renderReview(review)}`);
     }

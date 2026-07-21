@@ -52,10 +52,20 @@ At least one of `nim_api_key`, `mistral_api_key`, or `custom_api_url` is require
 
 1. **Diff fetch** — Downloads the PR diff from GitHub. Skips reviews for diffs >5 MB.
 2. **Model chain** — Tries each model in the fallback chain (custom → NIM → Mistral, sorted by SWE-bench score).
-3. **Structured output** — Each model is prompted to respond in JSON matching a Zod-validated `Review` schema with typed `Finding` objects (file, severity, line range, issue, suggestion).
+3. **Structured output** — Each model is prompted to respond in JSON matching a Zod-validated `Review` schema with typed `Finding` objects (file, severity, line range, issue, suggestion, plus per-severity action fields: `critical_action`, `warning_action`, `suggestion_action`).
 4. **Parse + retry** — Responses are validated via `safeParse()`. On failure, the action retries once with the validation error appended. Parse failures cause a model skip (next model in chain).
 5. **Diff validation** — Each finding is checked: `file` must exist in the PR's changed files, `line_start..line_end` must overlap a changed hunk. Hallucinated findings are dropped with a warning.
-6. **Render** — The validated `Review` object is rendered into a deterministic markdown PR comment.
+6. **Render** — The validated `Review` object is rendered into a deterministic markdown PR comment with severity-bucketed sections.
+
+### Severity Rendering
+
+Findings are grouped into priority-ordered severity sections:
+
+- **Critical** (🚨) — bugs, security holes, data-loss risks, correctness failures that block release
+- **Warning** (⚠️) — investigative concerns, likely bugs, maintainability issues
+- **Suggestion** (💡) — stylistic, readability, or nit-level improvements
+
+The comment header includes a severity tally (e.g. `🚨 1 critical · ⚠️ 2 warnings · 💡 3 suggestions`). Each finding renders with an emoji-prefixed severity badge, and a concrete next-step action line for the matching severity tier.
 
 ## Mistral Support
 
@@ -173,7 +183,7 @@ Override the default system prompt via environment variables:
     nim_prompt_mode: append  # or replace
 ```
 
-- **`append`** (default): Your prompt is prepended to the language-specific template
+- **`append`** (default): The default system prompt (including severity guidance) is sent first, followed by your custom prompt appended after it.
 - **`replace`**: Your prompt completely replaces the default. Note: the action will still attempt to parse the response as JSON; if parsing fails, raw output is shown with a warning.
 
 ## Benchmarking

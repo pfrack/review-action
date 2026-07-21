@@ -69,6 +69,40 @@ describe('ReviewSchema', () => {
     assert.strictEqual(result.success, false);
   });
 
+  it('rejects finding missing critical_action', () => {
+    const result = ReviewSchema.safeParse({
+      findings: [{
+        file: 'x.ts',
+        severity: 'Warning',
+        issue: 'test',
+        warning_action: 'investigate',
+        suggestion_action: 'no',
+      }],
+    });
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      const paths = result.error.issues.map(i => i.path.join('.'));
+      assert.ok(paths.some(p => p.includes('critical_action')), `expected path to include critical_action, got: ${paths.join(',')}`);
+    }
+  });
+
+  it('accepts finding with all three action fields populated', () => {
+    const result = ReviewSchema.safeParse({
+      findings: [{
+        file: 'x.ts',
+        severity: 'Warning',
+        issue: 'test',
+        line_start: null,
+        line_end: null,
+        suggestion: null,
+        critical_action: 'not applicable',
+        warning_action: 'investigate this',
+        suggestion_action: 'no',
+      }],
+    });
+    assert.strictEqual(result.success, true);
+  });
+
   it('accepts null optional fields', () => {
     const result = ReviewSchema.safeParse({
       findings: [{
@@ -78,6 +112,9 @@ describe('ReviewSchema', () => {
         line_start: null,
         line_end: null,
         suggestion: null,
+        critical_action: 'not applicable',
+        warning_action: 'investigate',
+        suggestion_action: 'not applicable',
       }],
     });
     assert.strictEqual(result.success, true);

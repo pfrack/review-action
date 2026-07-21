@@ -1,14 +1,21 @@
 import * as core from '@actions/core';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
+import { SEVERITY_GUIDANCE } from './prompts.js';
 import { withRetry, RetryableError } from './retry.js';
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+
+${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 export function loadConfig() {
+    const promptMode = core.getInput('nim_prompt_mode') || 'append';
+    if (promptMode !== 'append' && promptMode !== 'replace') {
+        core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+    }
     return {
         baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
         apiKey: core.getInput('nim_api_key'),
@@ -23,7 +30,7 @@ export function loadConfig() {
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
-        promptMode: core.getInput('nim_prompt_mode') || 'append',
+        promptMode,
     };
 }
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
@@ -42,6 +49,27 @@ export function parseDiff(raw) {
         }
     }
     return files;
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+}
+const SEVERITY_META = {
+    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
+    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
+    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
+};
+const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
+export function severityTally(review) {
+    const counts = { critical: 0, warning: 0, suggestion: 0 };
+    for (const f of review.findings) {
+        if (f.severity === 'Critical')
+            counts.critical++;
+        else if (f.severity === 'Warning')
+            counts.warning++;
+        else if (f.severity === 'Suggestion')
+            counts.suggestion++;
+    }
+    return counts;
 }
 const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 export function parseDiffHunks(diffText) {
@@ -99,31 +127,42 @@ export function renderReview(review) {
     if (review.findings.length === 0) {
         return review.summary || 'No issues found.';
     }
-    const byFile = new Map();
-    for (const f of review.findings) {
-        const list = byFile.get(f.file) || [];
-        list.push(f);
-        byFile.set(f.file, list);
-    }
     const lines = [];
-    for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-        lines.push(`**File:** \`${file}\``);
-        for (const f of findings) {
-            const lineInfo = f.line_start != null
-                ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                : '';
-            const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
-            lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    for (const severity of SEVERITY_ORDER) {
+        const meta = SEVERITY_META[severity];
+        const bucket = review.findings.filter(f => f.severity === severity);
+        if (bucket.length === 0)
+            continue;
+        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
+        const byFile = new Map();
+        for (const f of bucket) {
+            const list = byFile.get(f.file) || [];
+            list.push(f);
+            byFile.set(f.file, list);
         }
-        lines.push('');
+        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            lines.push(`**File:** \`${file}\``);
+            for (const f of findings) {
+                const lineInfo = f.line_start != null
+                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+                    : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
+                const matchAction = f[meta.actionKey];
+                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
+                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
+                    : '';
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+            }
+            lines.push('');
+        }
     }
     if (review.summary) {
-        lines.push(`**Summary:** ${review.summary}`);
+        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
     }
     return lines.join('\n');
 }
 function globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
 }
 export function shouldExclude(filePath, patterns) {
@@ -160,8 +199,9 @@ export async function fetchDiff(repo, prNumber, token) {
         return response;
     });
     const raw = await resp.text();
-    if (raw.length > 5 * 1024 * 1024) {
-        throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
+    const byteLength = new TextEncoder().encode(raw).byteLength;
+    if (byteLength > 5 * 1024 * 1024) {
+        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
     }
     return parseDiff(raw);
 }

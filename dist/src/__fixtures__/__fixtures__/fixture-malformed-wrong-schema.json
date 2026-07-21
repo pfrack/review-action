@@ -1,5 +1,0 @@
-{
-  "rawResponse": "{\"file\":\"src/main.ts\",\"comment\":\"looks good\",\"rating\":5}",
-  "shouldParse": false,
-  "notes": "Valid JSON but wrong structure — missing findings array"
-}

@@ -7,6 +7,9 @@ export const ReviewFindingSchema = z.object({
   line_end: z.number().nullable().optional(),
   issue: z.string(),
   suggestion: z.string().nullable().optional(),
+  critical_action: z.string(),
+  warning_action: z.string(),
+  suggestion_action: z.string(),
 });
 
 export const ReviewSchema = z.object({
@@ -35,8 +38,11 @@ export const ReviewJsonSchema = {
           line_end: { type: ['number', 'null'] },
           issue: { type: 'string' },
           suggestion: { type: ['string', 'null'] },
+          critical_action: { type: 'string' },
+          warning_action: { type: 'string' },
+          suggestion_action: { type: 'string' },
         },
-        required: ['file', 'severity', 'issue'],
+        required: ['file', 'severity', 'issue', 'critical_action', 'warning_action', 'suggestion_action'],
         additionalProperties: false,
       },
     },

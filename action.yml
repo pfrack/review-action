@@ -42,10 +42,10 @@ inputs:
     description: 'Comma-separated glob patterns to skip'
     default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod,dist/*'
   nim_system_prompt:
-    description: 'Custom system prompt (overrides or appends to default)'
+    description: 'Custom system prompt (appended to default or replaces it)'
     default: ''
   nim_prompt_mode:
-    description: 'How to use custom prompt: append (default) or replace'
+    description: 'How to use custom prompt: append (default, appends after default) or replace (replaces default entirely)'
     default: 'append'
 runs:
   using: 'node24'
