@@ -8,6 +8,50 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { withRetry } from './retry.js';
+
+export interface SweBenchEntry {
+  modelId: string;
+  score: number;
+  org: string;
+}
+
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+export async function fetchSweBenchScores(): Promise<SweBenchEntry[]> {
+  try {
+    const resp = await withRetry(async () => {
+      const r = await fetch('https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details', {
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!r.ok) throw new Error(`SWE-bench API returned ${r.status}`);
+      return r;
+    });
+
+    const data = await resp.json() as {
+      results: Array<{
+        model_id: string;
+        score: number;
+        organization_id?: string;
+      }>;
+    };
+
+    return (data.results || [])
+      .filter(m => m.score > 0.5)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 30)
+      .map(m => ({
+        modelId: m.model_id,
+        score: m.score,
+        org: m.organization_id || '',
+      }));
+  } catch (err) {
+    process.stderr.write(`Warning: could not fetch SWE-bench scores: ${err}\n`);
+    return [];
+  }
+}
 
 export interface ParsedRow {
   model: string;
@@ -105,9 +149,10 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
 
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
  */
-export function getSweBenchScore(model: string): number {
-  return SWE_BENCH_SCORES[model] ?? 0.5;
+export function getSweBenchScore(model: string, fetchedScores?: Map<string, number>): number {
+  return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
 }
 
 /**
@@ -116,8 +161,8 @@ export function getSweBenchScore(model: string): number {
  * - 60-120s: linear penalty (1.0 → 0.7)
  * - Over 120s: heavy penalty (0.5)
  */
-export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = 60_000): number {
-  const swe = getSweBenchScore(model);
+export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = 60_000, fetchedScores?: Map<string, number>): number {
+  const swe = getSweBenchScore(model, fetchedScores);
   if (!latencies || !(model in latencies)) return swe;
 
   const lat = latencies[model];
@@ -136,14 +181,15 @@ export function getEffectiveScore(model: string, latencies?: Record<string, numb
 export function rankModels(
   rows: ParsedRow[],
   latencies?: Record<string, number>,
+  fetchedScores?: Map<string, number>,
 ): string[] {
   const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
 
   return alive
     .map(r => r.model)
     .sort((a, b) => {
-      const effA = getEffectiveScore(a, latencies);
-      const effB = getEffectiveScore(b, latencies);
+      const effA = getEffectiveScore(a, latencies, 60_000, fetchedScores);
+      const effB = getEffectiveScore(b, latencies, 60_000, fetchedScores);
       if (effB !== effA) return effB - effA;
       // Tiebreaker: faster today wins
       const latA = latencies?.[a] ?? Infinity;
@@ -220,7 +266,24 @@ async function main(): Promise<void> {
   for await (const chunk of process.stdin) {
     chunks.push(chunk);
   }
-  const table = Buffer.concat(chunks).toString('utf-8');
+  const rawInput = Buffer.concat(chunks).toString('utf-8');
+
+  // Extract fetched scores from HTML comment if present
+  const fetchedScores = new Map<string, number>();
+  const scoresMatch = rawInput.match(/<!-- FETCHED_SCORES: ({.*?}) -->/);
+  if (scoresMatch) {
+    try {
+      const scoresObj = JSON.parse(scoresMatch[1]) as Record<string, number>;
+      for (const [k, v] of Object.entries(scoresObj)) {
+        fetchedScores.set(k, v);
+      }
+      console.log(`Parsed ${fetchedScores.size} fetched score(s) from benchmark output`);
+    } catch {
+      console.warn('Warning: could not parse FETCHED_SCORES comment');
+    }
+  }
+
+  const table = rawInput.replace(/<!-- FETCHED_SCORES: .*? -->\n?/g, '');
 
   if (!table.trim()) {
     console.error('No benchmark output received on stdin');
@@ -241,13 +304,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const ranked = rankModels(rows, latencies);
+  const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+  const ranked = rankModels(rows, latencies, fetchedScoresMap);
 
   console.log(`Model ranking for ${target} (SWE-bench × latency):`);
   for (const model of ranked) {
     const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-    const swe = getSweBenchScore(model).toFixed(3);
-    const eff = getEffectiveScore(model, latencies).toFixed(3);
+    const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+    const eff = getEffectiveScore(model, latencies, 60_000, fetchedScoresMap).toFixed(3);
     console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
   }
 

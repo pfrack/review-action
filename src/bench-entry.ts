@@ -1,7 +1,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench.js';
-import { SWE_BENCH_SCORES } from './bench-reorder.js';
+import { SWE_BENCH_SCORES, fetchSweBenchScores, getSweBenchScore, type SweBenchEntry } from './bench-reorder.js';
 import { readRemovedModels, writeRemovedModels, appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
 
 function envOrDefault(key: string, def: string): string {
@@ -52,6 +52,34 @@ function getReplacements(activeModels: string[]): string[] {
     .filter(([model]) => !activeSet.has(model))
     .sort((a, b) => b[1] - a[1])
     .map(([model]) => model);
+}
+
+/**
+ * Use an LLM to match a NIM model ID to a SWE-bench score.
+ * Returns the matched score or null if no match found.
+ */
+export async function matchModelScore(
+  client: OpenAIClient,
+  nimModelId: string,
+  leaderboard: SweBenchEntry[],
+  matcherModel: string,
+): Promise<number | null> {
+  const topModels = leaderboard.slice(0, 30).map(e => `"${e.modelId}": ${e.score}`);
+  const prompt = `Given these SWE-bench Verified scores:\n${topModels.join('\n')}\n\nWhat is the score for NIM model '${nimModelId}'? Return just the numeric score (e.g. 0.75) or "none" if no match.`;
+
+  try {
+    const result = await client.chat(matcherModel, [
+      { role: 'user', content: prompt },
+    ], { temperature: 0, maxTokens: 16 });
+
+    const text = result.content.trim().toLowerCase();
+    if (text === 'none' || text === 'n/a') return null;
+    const score = parseFloat(text);
+    if (isNaN(score) || score < 0 || score > 1) return null;
+    return score;
+  } catch {
+    return null;
+  }
 }
 
 async function probe(baseURL: string, apiKey: string, models: string[]): Promise<void> {
@@ -109,6 +137,36 @@ async function main(): Promise<void> {
       process.stderr.write(`First run — seeding with top ${TARGET_COUNT} SWE-bench models\n`);
     } else {
       process.stderr.write(`Benchmarking current ${models.length} models from action.yml\n`);
+    }
+  }
+
+  // Discover new models and fetch SWE-bench scores
+  const fetchedScores = new Map<string, number>();
+  if (availableModels) {
+    const knownModels = new Set([...Object.keys(SWE_BENCH_SCORES), ...models]);
+    const newModels = [...availableModels].filter(m => !knownModels.has(m));
+
+    if (newModels.length > 0) {
+      process.stderr.write(`\nDiscovered ${newModels.length} new model(s) not in SWE-bench table\n`);
+      const leaderboard = await fetchSweBenchScores();
+
+      if (leaderboard.length > 0) {
+        // Use the first model from the active list as the matcher
+        const matcherModel = models[0];
+        if (matcherModel) {
+          for (const nimModel of newModels.slice(0, 5)) {
+            process.stderr.write(`  Matching ${nimModel} ...`);
+            const score = await matchModelScore(client, nimModel, leaderboard, matcherModel);
+            if (score !== null) {
+              process.stderr.write(` score=${score}\n`);
+              fetchedScores.set(nimModel, score);
+              models.push(nimModel);
+            } else {
+              process.stderr.write(' no match\n');
+            }
+          }
+        }
+      }
     }
   }
 
@@ -271,6 +329,12 @@ async function main(): Promise<void> {
   });
 
   const table = formatMarkdownTable(successResults);
+  // Output fetched scores as a JSON comment for bench-reorder.ts to consume
+  if (fetchedScores.size > 0) {
+    const scoresObj: Record<string, number> = {};
+    fetchedScores.forEach((v, k) => { scoresObj[k] = v; });
+    console.log(`<!-- FETCHED_SCORES: ${JSON.stringify(scoresObj)} -->`);
+  }
   console.log(table);
 
   // Write to GITHUB_STEP_SUMMARY if set
