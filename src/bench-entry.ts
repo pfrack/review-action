@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench.js';
 import { SWE_BENCH_SCORES } from './bench-reorder.js';
-import { appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
+import { readRemovedModels, writeRemovedModels, appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
 
 function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
@@ -218,6 +218,49 @@ async function main(): Promise<void> {
     }
     if (transientFailed.length > 0) {
       appendRemovedModels(transientFailed);
+    }
+  }
+
+  // Recheck previously removed models
+  const removedModels = readRemovedModels();
+  if (removedModels.length > 0) {
+    process.stderr.write(`\nRechecking ${removedModels.length} previously removed model(s)...\n`);
+    const recovered: string[] = [];
+    const stillFailed: string[] = [];
+
+    for (const model of removedModels) {
+      process.stderr.write(`  Probing ${model} ...`);
+      const ok = await client.probeModel(model);
+      if (!ok) {
+        process.stderr.write(' still down\n');
+        stillFailed.push(model);
+        continue;
+      }
+      process.stderr.write(' back! benchmarking...');
+
+      const result = await runBenchmark(client, model, {
+        prompt: benchPrompt,
+        iterations,
+        temperature: 0.2,
+        maxTokens: 1024,
+      });
+
+      const errCount = result.iterations.filter(it => it.error !== null).length;
+      if (errCount === iterations) {
+        process.stderr.write(' FAILED\n');
+        stillFailed.push(model);
+        continue;
+      }
+
+      process.stderr.write(' ok\n');
+      recovered.push(model);
+      results.push(result);
+    }
+
+    // Update removed-models.txt: keep only models that still failed
+    writeRemovedModels(stillFailed);
+    if (recovered.length > 0) {
+      process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
     }
   }
 

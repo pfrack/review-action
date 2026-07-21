@@ -114,3 +114,72 @@ describe('removed-models helpers', () => {
     assert.deepStrictEqual(result, ['new-model']);
   });
 });
+
+describe('recheck flow simulation', () => {
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'recheck-test-'));
+    testPath = join(testDir, 'removed-models.txt');
+  });
+
+  afterEach(() => {
+    try { unlinkSync(testPath); } catch {}
+    try { unlinkSync(testDir); } catch {}
+  });
+
+  it('recovered models are removed from removed-models.txt', () => {
+    // Simulate: file has model-a and model-b, model-a recovers
+    writeFileSync(testPath, 'model-a\nmodel-b\n', 'utf-8');
+    const removedModels = readRemovedModels(testPath);
+    assert.deepStrictEqual(removedModels, ['model-a', 'model-b']);
+
+    // Simulate recheck: model-a probe passes, model-b probe fails
+    const recovered = ['model-a'];
+    const stillFailed = removedModels.filter(m => !recovered.includes(m));
+
+    writeRemovedModels(stillFailed, testPath);
+    const result = readRemovedModels(testPath);
+    assert.deepStrictEqual(result, ['model-b']);
+  });
+
+  it('all models recovered empties the file', () => {
+    writeFileSync(testPath, 'model-a\nmodel-b\nmodel-c\n', 'utf-8');
+    const removedModels = readRemovedModels(testPath);
+
+    // All three recover
+    const recovered = ['model-a', 'model-b', 'model-c'];
+    const stillFailed = removedModels.filter(m => !recovered.includes(m));
+
+    writeRemovedModels(stillFailed, testPath);
+    const result = readRemovedModels(testPath);
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('no models recovered keeps file unchanged', () => {
+    writeFileSync(testPath, 'model-a\nmodel-b\n', 'utf-8');
+    const removedModels = readRemovedModels(testPath);
+
+    // None recover
+    const recovered: string[] = [];
+    const stillFailed = removedModels.filter(m => !recovered.includes(m));
+
+    writeRemovedModels(stillFailed, testPath);
+    const result = readRemovedModels(testPath);
+    assert.deepStrictEqual(result, ['model-a', 'model-b']);
+  });
+
+  it('new failures can be added while recheck runs', () => {
+    writeFileSync(testPath, 'model-a\n', 'utf-8');
+
+    // During recheck, a new model fails
+    appendRemovedModels(['model-b'], testPath);
+
+    // Recheck recovers model-a
+    const removedModels = readRemovedModels(testPath);
+    const recovered = ['model-a'];
+    const stillFailed = removedModels.filter(m => !recovered.includes(m));
+
+    writeRemovedModels(stillFailed, testPath);
+    const result = readRemovedModels(testPath);
+    assert.deepStrictEqual(result, ['model-b']);
+  });
+});
