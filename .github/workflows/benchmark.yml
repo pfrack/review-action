@@ -33,6 +33,7 @@ jobs:
         env:
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
           NIM_BENCH_ITERATIONS: '1'
+          REMOVED_MODELS_PATH: 'removed-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
@@ -55,7 +56,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add action.yml
+          git add action.yml removed-models.txt
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
@@ -103,6 +104,7 @@ jobs:
           NIM_BASE_URL: 'https://api.mistral.ai/v1'
           NIM_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
           NIM_BENCH_ITERATIONS: '1'
+          REMOVED_MODELS_PATH: 'removed-mistral-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
@@ -125,7 +127,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add action.yml
+          git add action.yml removed-mistral-models.txt
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

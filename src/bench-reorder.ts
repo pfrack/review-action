@@ -7,7 +7,75 @@
  * 3. Updates nim_models in action.yml
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { withRetry } from './retry.js';
+
+export interface SweBenchEntry {
+  modelId: string;
+  score: number;
+  org: string;
+}
+
+interface SweBenchApiResponse {
+  results: Array<{
+    model_id: string;
+    score: number;
+    organization_id?: string;
+  }>;
+}
+
+/**
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
+ */
+export function parseSweBenchResponse(data: SweBenchApiResponse): SweBenchEntry[] {
+  return (data.results || [])
+    .filter(m => m.score > 0.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30)
+    .map(m => ({
+      modelId: m.model_id,
+      score: m.score,
+      org: m.organization_id || '',
+    }));
+}
+
+// Module-level counter used to escalate the warning once consecutive
+// fetch failures pile up. This is intentionally process-local: bench-reorder
+// is invoked as a single CLI per workflow run, so there is no concurrency
+// to worry about. If this module is ever reused in a server context,
+// replace this with a per-request counter passed through fetchSweBenchScores.
+let sweBenchFetchFailures = 0;
+const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
+
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+export async function fetchSweBenchScores(): Promise<SweBenchEntry[]> {
+  const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
+  try {
+    const resp = await withRetry(async () => {
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!r.ok) throw new Error(`SWE-bench API returned ${r.status}`);
+      return r;
+    });
+
+    const data = await resp.json() as SweBenchApiResponse;
+    sweBenchFetchFailures = 0;
+    return parseSweBenchResponse(data);
+  } catch (err) {
+    sweBenchFetchFailures++;
+    if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
+      process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
+    } else {
+      process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
+    }
+    return [];
+  }
+}
 
 export interface ParsedRow {
   model: string;
@@ -105,9 +173,10 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
 
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
  */
-export function getSweBenchScore(model: string): number {
-  return SWE_BENCH_SCORES[model] ?? 0.5;
+export function getSweBenchScore(model: string, fetchedScores?: Map<string, number>): number {
+  return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
 }
 
 /**
@@ -116,8 +185,10 @@ export function getSweBenchScore(model: string): number {
  * - 60-120s: linear penalty (1.0 → 0.7)
  * - Over 120s: heavy penalty (0.5)
  */
-export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = 60_000): number {
-  const swe = getSweBenchScore(model);
+export const DEFAULT_MAX_LATENCY_MS = 60_000;
+
+export function getEffectiveScore(model: string, latencies?: Record<string, number>, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores?: Map<string, number>): number {
+  const swe = getSweBenchScore(model, fetchedScores);
   if (!latencies || !(model in latencies)) return swe;
 
   const lat = latencies[model];
@@ -136,14 +207,15 @@ export function getEffectiveScore(model: string, latencies?: Record<string, numb
 export function rankModels(
   rows: ParsedRow[],
   latencies?: Record<string, number>,
+  fetchedScores?: Map<string, number>,
 ): string[] {
   const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
 
   return alive
     .map(r => r.model)
     .sort((a, b) => {
-      const effA = getEffectiveScore(a, latencies);
-      const effB = getEffectiveScore(b, latencies);
+      const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+      const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
       if (effB !== effA) return effB - effA;
       // Tiebreaker: faster today wins
       const latA = latencies?.[a] ?? Infinity;
@@ -204,6 +276,54 @@ export function updateActionYmlMistral(actionPath: string, orderedModels: string
 }
 
 /**
+ * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
+ * Returns the parsed scores map (empty if neither source yields a value).
+ * Exported for testability.
+ */
+export function readFetchedScores(
+  rawInput: string,
+  scoresFile: string | undefined,
+): Map<string, number> {
+  const fetchedScores = new Map<string, number>();
+  if (scoresFile && existsSync(scoresFile)) {
+    try {
+      const fileContent = readFileSync(scoresFile, 'utf-8').trim();
+      const scoresObj = JSON.parse(fileContent) as Record<string, number>;
+      for (const [k, v] of Object.entries(scoresObj)) {
+        fetchedScores.set(k, v);
+      }
+    } catch (err) {
+      console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
+    }
+    return fetchedScores;
+  }
+
+  // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
+  // so we never accidentally match a fragment in the markdown table body.
+  const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
+  if (scoresMatch) {
+    try {
+      const scoresObj = JSON.parse(scoresMatch[1]) as Record<string, number>;
+      for (const [k, v] of Object.entries(scoresObj)) {
+        fetchedScores.set(k, v);
+      }
+    } catch {
+      console.warn('Warning: could not parse FETCHED_SCORES comment');
+    }
+  }
+  return fetchedScores;
+}
+
+/**
+ * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
+ * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
+ */
+export function stripFetchedScoresComment(rawInput: string, scoresFile: string | undefined): string {
+  if (scoresFile) return rawInput;
+  return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
+}
+
+/**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
  */
 async function main(): Promise<void> {
@@ -220,7 +340,17 @@ async function main(): Promise<void> {
   for await (const chunk of process.stdin) {
     chunks.push(chunk);
   }
-  const table = Buffer.concat(chunks).toString('utf-8');
+  const rawInput = Buffer.concat(chunks).toString('utf-8');
+
+  // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
+  const scoresFile = process.env.BENCH_SCORES_FILE;
+  const fetchedScores = readFetchedScores(rawInput, scoresFile);
+  if (fetchedScores.size > 0) {
+    const source = scoresFile && existsSync(scoresFile) ? scoresFile : 'stdin comment';
+    console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
+  }
+
+  const table = stripFetchedScoresComment(rawInput, scoresFile);
 
   if (!table.trim()) {
     console.error('No benchmark output received on stdin');
@@ -241,13 +371,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const ranked = rankModels(rows, latencies);
+  const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+  const ranked = rankModels(rows, latencies, fetchedScoresMap);
 
   console.log(`Model ranking for ${target} (SWE-bench × latency):`);
   for (const model of ranked) {
     const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-    const swe = getSweBenchScore(model).toFixed(3);
-    const eff = getEffectiveScore(model, latencies).toFixed(3);
+    const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+    const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
     console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
   }
 

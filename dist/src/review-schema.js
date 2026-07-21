@@ -14,6 +14,7 @@ export const ReviewSchema = z.object({
 // Hand-written JSON Schema for maximum provider compatibility.
 // z.toJSONSchema() adds "$schema" draft metadata and uses "anyOf" for
 // nullable fields — both of which some LLM providers reject.
+// IMPORTANT: Keep in sync with ReviewFindingSchema and ReviewSchema above.
 export const ReviewJsonSchema = {
     type: 'object',
     properties: {
