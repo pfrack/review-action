@@ -2,6 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench.js';
 import { SWE_BENCH_SCORES } from './bench-reorder.js';
+import { appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
 
 function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
@@ -78,6 +79,18 @@ async function main(): Promise<void> {
   const baseURL = envOrDefault('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1');
   const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
   const client = new OpenAIClient(baseURL, apiKey);
+
+  // Fetch provider catalog to distinguish transient vs permanent failures
+  let availableModels: Set<string> | null = null;
+  try {
+    const models = await client.listModels();
+    availableModels = new Set(models);
+    process.stderr.write(`Provider has ${models.length} models available\n`);
+    // Clean up permanently removed models from removed-models.txt
+    cleanupRemovedModels(availableModels);
+  } catch (err) {
+    process.stderr.write(`Warning: could not fetch model list: ${err}\n`);
+  }
 
   // Determine models to benchmark
   let models: string[];
@@ -189,6 +202,22 @@ async function main(): Promise<void> {
       if (!replaced) {
         process.stderr.write(`  No replacement found for ${deadModel}\n`);
       }
+    }
+  }
+
+  // Classify failures and persist transient ones for retry
+  if (failed.length > 0) {
+    const transientFailed: string[] = [];
+    for (const model of failed) {
+      if (availableModels && !availableModels.has(model)) {
+        process.stderr.write(`  ${model}: permanently removed from provider (not retried)\n`);
+      } else {
+        process.stderr.write(`  ${model}: transient failure (will retry next run)\n`);
+        transientFailed.push(model);
+      }
+    }
+    if (transientFailed.length > 0) {
+      appendRemovedModels(transientFailed);
     }
   }
 
