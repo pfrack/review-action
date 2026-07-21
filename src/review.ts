@@ -1,23 +1,12 @@
 import * as core from '@actions/core';
 import { JSON_SCHEMA_DEFINITION, type ReviewType, type ReviewFinding } from './review-schema.js';
+import { SEVERITY_GUIDANCE } from './prompts.js';
 import { withRetry, RetryableError } from './retry.js';
 
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
 
-Severity guidance — match the issue text and the *_action field to each severity:
-- Critical findings: a bug, security hole, data-loss risk, or correctness failure
-  that BLOCKS release. Use direct action verbs in the issue text. Populate
-  critical_action with the concrete next step required to unblock release.
-- Warning findings: an investigative concern, likely bug, or maintainability or
-  performance issue that warrants attention but is not blocking. Populate
-  warning_action with the next step to investigate.
-- Suggestion findings: stylistic, readability, or nit-level improvement. Populate
-  suggestion_action with a short optional improvement.
-
-For the two action fields that do not match the severity, write a short placeholder
-string such as "not applicable" rather than omitting it — the schema requires all
-three on every finding.
+${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`;
 
@@ -42,6 +31,10 @@ function splitCSV(s: string): string[] {
 }
 
 export function loadConfig(): Config {
+  const promptMode = core.getInput('nim_prompt_mode') || 'append';
+  if (promptMode !== 'append' && promptMode !== 'replace') {
+    core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+  }
   return {
     baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
     apiKey: core.getInput('nim_api_key'),
@@ -56,7 +49,7 @@ export function loadConfig(): Config {
     maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
     systemPrompt: core.getInput('nim_system_prompt'),
-    promptMode: core.getInput('nim_prompt_mode') || 'append',
+    promptMode,
   };
 }
 
@@ -79,6 +72,10 @@ export function parseDiff(raw: string): Record<string, string> {
   }
 
   return files;
+}
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
 }
 
 const SEVERITY_META: Record<ReviewFinding['severity'], { emoji: string; label: string; actionKey: keyof ReviewFinding; tag: string }> = {
@@ -188,19 +185,19 @@ export function renderReview(review: ReviewType): string {
         const lineInfo = f.line_start != null
           ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
           : '';
-        const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${f.suggestion}` : '';
+        const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
         const matchAction = f[meta.actionKey as keyof typeof f];
         const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-          ? `\n  - **${meta.tag}:** ${matchAction}`
+          ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
           : '';
-        lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${f.issue}${actionLine}${suggestionInfo}`);
+        lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
       }
       lines.push('');
     }
   }
 
   if (review.summary) {
-    lines.push(`**Summary:** ${review.summary}`);
+    lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
   }
 
   return lines.join('\n');
@@ -208,7 +205,7 @@ export function renderReview(review: ReviewType): string {
 
 function globMatch(str: string, pattern: string): boolean {
   const regex = new RegExp(
-    '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+    '^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
   );
   return regex.test(str);
 }
@@ -249,8 +246,9 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
   });
 
   const raw = await resp.text();
-  if (raw.length > 5 * 1024 * 1024) {
-    throw new DiffTooLargeError((raw.length / 1024 / 1024).toFixed(1));
+  const byteLength = new TextEncoder().encode(raw).byteLength;
+  if (byteLength > 5 * 1024 * 1024) {
+    throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
   }
   return parseDiff(raw);
 }

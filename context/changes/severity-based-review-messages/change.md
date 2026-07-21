@@ -1,7 +1,7 @@
 ---
 id: severity-based-review-messages
 title: Differentiate review messages by finding severity
-status: implementing
+status: impl_reviewed
 created: 2026-07-21
 updated: 2026-07-21
 ---
