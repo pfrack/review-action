@@ -497,8 +497,8 @@ No caching layer, no async fan-out, no streaming — performance profile is unch
 
 #### Automated
 
-- [x] 2.1 `npm run build` and `npm test` pass
-- [x] 2.2 New prompt-content test in `src/prompts.test.ts` passes (asserts `critical_action`, `warning_action`, `suggestion_action`, `"not applicable"` substrings on `BASE_SYSTEM_PROMPT` and each language prompt)
+- [x] 2.1 `npm run build` and `npm test` pass — b04a573
+- [x] 2.2 New prompt-content test in `src/prompts.test.ts` passes (asserts `critical_action`, `warning_action`, `suggestion_action`, `"not applicable"` substrings on `BASE_SYSTEM_PROMPT` and each language prompt) — b04a573
 
 #### Manual
 

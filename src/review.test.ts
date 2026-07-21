@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, type Config } from './review.js';
+import { parseDiff, shouldExclude, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, severityTally, type Config } from './review.js';
 
 describe('parseDiff', () => {
   it('splits multi-file diffs', () => {
@@ -300,13 +300,75 @@ describe('renderReview', () => {
         { file: 'a.ts', severity: 'Suggestion', issue: 'issue3', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'maybe' },
       ],
     });
-    // Files should be sorted alphabetically
-    const aPos = output.indexOf('a.ts');
-    const bPos = output.indexOf('b.ts');
-    assert.ok(aPos < bPos, 'a.ts should appear before b.ts');
-    // a.ts should have two findings
+    // Severity-priority ordering: Critical bucket's file (b.ts) appears before
+    // Warning bucket's file (a.ts). Within each bucket files are alphabetical.
+    const criticalHeaderPos = output.indexOf('Critical');
+    const warningHeaderPos = output.indexOf('Warning');
+    const suggestionHeaderPos = output.indexOf('Suggestion');
+    assert.ok(criticalHeaderPos < warningHeaderPos, 'Critical bucket before Warning bucket');
+    assert.ok(warningHeaderPos < suggestionHeaderPos, 'Warning bucket before Suggestion bucket');
+    assert.ok(output.includes('b.ts'), 'b.ts appears in Critical bucket');
+    assert.ok(output.includes('a.ts'), 'a.ts appears in Warning and Suggestion buckets');
+    assert.ok(output.includes('issue1'));
     assert.ok(output.includes('issue2'));
     assert.ok(output.includes('issue3'));
+  });
+
+  // STRUCTURAL SNAPSHOT — locks the new severity-bucketed rendering.
+  // If you intentionally rename, refactor, or restructure the renderer, update
+  // both the input findings AND the frozen expected string in this test.
+  it('renders multi-severity review with severity buckets and action sub-lines', () => {
+    const output = renderReview({
+      findings: [
+        { file: 'b.ts', severity: 'Critical', line_start: 10, line_end: 15, issue: 'critical issue', critical_action: 'Fix the bug', warning_action: 'not applicable', suggestion_action: 'not applicable' },
+        { file: 'a.ts', severity: 'Warning', line_start: 5, line_end: 5, issue: 'warning issue', critical_action: 'not applicable', warning_action: 'Investigate', suggestion_action: 'not applicable' },
+        { file: 'a.ts', severity: 'Suggestion', issue: 'suggestion issue', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'Optional refactor' },
+      ],
+      summary: 'Multi-severity snapshot.',
+    });
+    const expected = `### 🚨 Critical (1)
+**File:** \`b.ts\`
+- 🚨 **Critical**
+  **Line:** 10-15
+  **Issue:** critical issue
+  - **Must-fix:** Fix the bug
+
+### ⚠️ Warning (1)
+**File:** \`a.ts\`
+- ⚠️ **Warning**
+  **Line:** 5
+  **Issue:** warning issue
+  - **Investigate:** Investigate
+
+### 💡 Suggestion (1)
+**File:** \`a.ts\`
+- 💡 **Suggestion**
+  **Issue:** suggestion issue
+  - **Nit:** Optional refactor
+
+**Summary:** Multi-severity snapshot.`;
+    assert.strictEqual(output, expected);
+  });
+
+  it('gracefully skips "not applicable" placeholders on action sub-lines', () => {
+    const output = renderReview({
+      findings: [
+        { file: 'x.ts', severity: 'Critical', issue: 'bad', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'not applicable' },
+      ],
+    });
+    assert.ok(!output.includes('not applicable'), '"not applicable" must not render as a sub-line');
+    assert.ok(output.includes('🚨 **Critical**'));
+    assert.ok(!output.includes('**Must-fix:**'));
+  });
+
+  it('gracefully skips empty action strings on sub-lines', () => {
+    const output = renderReview({
+      findings: [
+        { file: 'x.ts', severity: 'Warning', issue: 'bad', critical_action: '', warning_action: '', suggestion_action: '' },
+      ],
+    });
+    assert.ok(!output.includes('**Investigate:**'));
+    assert.ok(output.includes('⚠️ **Warning**'));
   });
 
   it('includes suggestion when present', () => {
@@ -339,5 +401,32 @@ describe('renderReview', () => {
     assert.ok(output.includes('5'));
     // Should not include dash range
     assert.ok(!output.includes('5-5'));
+  });
+});
+
+describe('severityTally', () => {
+  it('returns zeros for empty findings', () => {
+    assert.deepStrictEqual(severityTally({ findings: [] }), { critical: 0, warning: 0, suggestion: 0 });
+  });
+
+  it('counts a single severity', () => {
+    assert.deepStrictEqual(
+      severityTally({ findings: [
+        { file: 'a.ts', severity: 'Critical', issue: 'x', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
+      ] }),
+      { critical: 1, warning: 0, suggestion: 0 },
+    );
+  });
+
+  it('counts mixed severities', () => {
+    assert.deepStrictEqual(
+      severityTally({ findings: [
+        { file: 'a.ts', severity: 'Critical', issue: 'x', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
+        { file: 'b.ts', severity: 'Warning', issue: 'y', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
+        { file: 'c.ts', severity: 'Warning', issue: 'z', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
+        { file: 'd.ts', severity: 'Suggestion', issue: 'w', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
+      ] }),
+      { critical: 1, warning: 2, suggestion: 1 },
+    );
   });
 });

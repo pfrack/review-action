@@ -57,6 +57,24 @@ export function parseDiff(raw) {
     }
     return files;
 }
+const SEVERITY_META = {
+    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
+    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
+    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
+};
+const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
+export function severityTally(review) {
+    const counts = { critical: 0, warning: 0, suggestion: 0 };
+    for (const f of review.findings) {
+        if (f.severity === 'Critical')
+            counts.critical++;
+        else if (f.severity === 'Warning')
+            counts.warning++;
+        else if (f.severity === 'Suggestion')
+            counts.suggestion++;
+    }
+    return counts;
+}
 const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 export function parseDiffHunks(diffText) {
     const ranges = [];
@@ -113,23 +131,34 @@ export function renderReview(review) {
     if (review.findings.length === 0) {
         return review.summary || 'No issues found.';
     }
-    const byFile = new Map();
-    for (const f of review.findings) {
-        const list = byFile.get(f.file) || [];
-        list.push(f);
-        byFile.set(f.file, list);
-    }
     const lines = [];
-    for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-        lines.push(`**File:** \`${file}\``);
-        for (const f of findings) {
-            const lineInfo = f.line_start != null
-                ? `**Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                : '';
-            const suggestionInfo = f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '';
-            lines.push(`- **Severity:** ${f.severity}\n${lineInfo}**Issue:** ${f.issue}${suggestionInfo}`);
+    for (const severity of SEVERITY_ORDER) {
+        const meta = SEVERITY_META[severity];
+        const bucket = review.findings.filter(f => f.severity === severity);
+        if (bucket.length === 0)
+            continue;
+        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
+        const byFile = new Map();
+        for (const f of bucket) {
+            const list = byFile.get(f.file) || [];
+            list.push(f);
+            byFile.set(f.file, list);
         }
-        lines.push('');
+        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            lines.push(`**File:** \`${file}\``);
+            for (const f of findings) {
+                const lineInfo = f.line_start != null
+                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+                    : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${f.suggestion}` : '';
+                const matchAction = f[meta.actionKey];
+                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
+                    ? `\n  - **${meta.tag}:** ${matchAction}`
+                    : '';
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${f.issue}${actionLine}${suggestionInfo}`);
+            }
+            lines.push('');
+        }
     }
     if (review.summary) {
         lines.push(`**Summary:** ${review.summary}`);
