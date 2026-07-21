@@ -33,7 +33,7 @@ jobs:
         env:
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
           NIM_BENCH_ITERATIONS: '1'
-        run: node dist/bench-entry.js > benchmark-output.txt
+        run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
         if: always()
@@ -46,7 +46,7 @@ jobs:
         run: |
           grep '^|' benchmark-output.txt > table.txt || true
           if [ -s table.txt ]; then
-            node dist/bench-reorder.js < table.txt
+            node dist/src/bench-reorder.js < table.txt
           else
             echo "No benchmark table found, skipping reorder"
           fi
@@ -101,7 +101,7 @@ jobs:
           NIM_BASE_URL: 'https://api.mistral.ai/v1'
           NIM_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
           NIM_BENCH_ITERATIONS: '1'
-        run: node dist/bench-entry.js > benchmark-output.txt
+        run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
         if: always()
@@ -114,7 +114,7 @@ jobs:
         run: |
           grep '^|' benchmark-output.txt > table.txt || true
           if [ -s table.txt ]; then
-            node dist/bench-reorder.js < table.txt
+            node dist/src/bench-reorder.js < table.txt
           else
             echo "No benchmark table found, skipping reorder"
           fi
