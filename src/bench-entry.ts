@@ -1,8 +1,8 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench.js';
-import { SWE_BENCH_SCORES, fetchSweBenchScores, getSweBenchScore, type SweBenchEntry } from './bench-reorder.js';
-import { readRemovedModels, writeRemovedModels, appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
+import { SWE_BENCH_SCORES, fetchSweBenchScores, type SweBenchEntry } from './bench-reorder.js';
+import { readRemovedModels, writeRemovedModels } from './removed-models.js';
 
 function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
@@ -55,7 +55,70 @@ function getReplacements(activeModels: string[]): string[] {
 }
 
 /**
+ * Normalize a model id for comparison: lowercase, strip org prefix, strip
+ * common suffixes (instruct, chat, base, etc.) and non-alphanumerics.
+ */
+function normalizeModelId(id: string): string {
+  return id
+    .toLowerCase()
+    .replace(/^[^/]+\//, '')
+    .replace(/-(instruct|chat|base|it|bf16|fp8|fp16|preview)$/i, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Deterministic match between a NIM model id and a leaderboard entry.
+ * Returns the matched score and strategy, or null if no plausible match.
+ *
+ * Strategies tried in order:
+ *   1. exact id match
+ *   2. case-insensitive id match
+ *   3. normalized id match (strip org + common suffixes)
+ *   4. unique substring match in either direction on the normalized form
+ */
+export function deterministicMatch(
+  nimModelId: string,
+  leaderboard: SweBenchEntry[],
+): { score: number; strategy: string; matchedId: string } | null {
+  const lc = nimModelId.toLowerCase();
+
+  // 1. exact match
+  const exact = leaderboard.find(e => e.modelId === nimModelId);
+  if (exact) return { score: exact.score, strategy: 'exact', matchedId: exact.modelId };
+
+  // 2. case-insensitive match
+  const ci = leaderboard.find(e => e.modelId.toLowerCase() === lc);
+  if (ci) return { score: ci.score, strategy: 'case-insensitive', matchedId: ci.modelId };
+
+  // 3. normalized match (strip org + suffix)
+  const norm = normalizeModelId(nimModelId);
+  const normMatches = leaderboard.filter(e => normalizeModelId(e.modelId) === norm);
+  if (normMatches.length === 1) {
+    const m = normMatches[0];
+    return { score: m.score, strategy: 'normalized', matchedId: m.modelId };
+  }
+
+  // 4. unique substring match on normalized forms
+  const substrMatches = leaderboard.filter(e => {
+    const a = normalizeModelId(e.modelId);
+    return a.includes(norm) || norm.includes(a);
+  });
+  if (substrMatches.length === 1) {
+    const m = substrMatches[0];
+    return { score: m.score, strategy: 'substring', matchedId: m.modelId };
+  }
+  if (substrMatches.length > 1) {
+    process.stderr.write(`    ambiguous substring matches for ${nimModelId}: ${substrMatches.map(m => m.modelId).join(', ')}\n`);
+  }
+
+  return null;
+}
+
+/**
  * Use an LLM to match a NIM model ID to a SWE-bench score.
+ *
+ * Tries deterministic matching first (exact, case-insensitive, normalized,
+ * substring). Falls back to an LLM only when no deterministic match is found.
  * Returns the matched score or null if no match found.
  */
 export async function matchModelScore(
@@ -64,6 +127,13 @@ export async function matchModelScore(
   leaderboard: SweBenchEntry[],
   matcherModel: string,
 ): Promise<number | null> {
+  const det = deterministicMatch(nimModelId, leaderboard);
+  if (det) {
+    process.stderr.write(`    ${nimModelId} → ${det.matchedId} (${det.strategy}) score=${det.score}\n`);
+    return det.score;
+  }
+  process.stderr.write(`    ${nimModelId}: no deterministic match, falling back to LLM\n`);
+
   const topModels = leaderboard.slice(0, 30).map(e => `"${e.modelId}": ${e.score}`);
   const prompt = `Given these SWE-bench Verified scores:\n${topModels.join('\n')}\n\nWhat is the score for NIM model '${nimModelId}'? Return just the numeric score (e.g. 0.75) or "none" if no match.`;
 
@@ -73,11 +143,19 @@ export async function matchModelScore(
     ], { temperature: 0, maxTokens: 16 });
 
     const text = result.content.trim().toLowerCase();
-    if (text === 'none' || text === 'n/a') return null;
+    if (text === 'none' || text === 'n/a') {
+      process.stderr.write(`    LLM: no match for ${nimModelId}\n`);
+      return null;
+    }
     const score = parseFloat(text);
-    if (isNaN(score) || score < 0 || score > 1) return null;
+    if (isNaN(score) || score < 0 || score > 1) {
+      process.stderr.write(`    LLM: invalid score "${text}" for ${nimModelId} (rejected, plausible range is 0-1)\n`);
+      return null;
+    }
+    process.stderr.write(`    LLM: matched ${nimModelId} → score ${score}\n`);
     return score;
-  } catch {
+  } catch (err) {
+    process.stderr.write(`    LLM match failed for ${nimModelId}: ${err}\n`);
     return null;
   }
 }
@@ -114,10 +192,21 @@ async function main(): Promise<void> {
     const models = await client.listModels();
     availableModels = new Set(models);
     process.stderr.write(`Provider has ${models.length} models available\n`);
-    // Clean up permanently removed models from removed-models.txt
-    cleanupRemovedModels(availableModels);
   } catch (err) {
     process.stderr.write(`Warning: could not fetch model list: ${err}\n`);
+  }
+
+  // Track removed-models in memory for this run. Read once at startup,
+  // drop permanently-gone models, and persist the final set at the end.
+  // This avoids races between multiple read/write pairs during a single run
+  // and is safe because bench-entry is a single-process script.
+  let removedModels = readRemovedModels();
+  if (availableModels) {
+    const before = removedModels.length;
+    removedModels = removedModels.filter(m => availableModels.has(m));
+    if (removedModels.length !== before) {
+      process.stderr.write(`Cleaned ${before - removedModels.length} permanently removed model(s) from removed-models.txt\n`);
+    }
   }
 
   // Determine models to benchmark
@@ -155,7 +244,8 @@ async function main(): Promise<void> {
         // Use the first model from the active list as the matcher
         const matcherModel = models[0];
         if (matcherModel) {
-          for (const nimModel of newModels.slice(0, 5)) {
+          const maxDiscover = parseInt(envOrDefault('NIM_MAX_DISCOVER', '5'), 10);
+          for (const nimModel of newModels.slice(0, maxDiscover)) {
             process.stderr.write(`  Matching ${nimModel} ...`);
             const score = await matchModelScore(client, nimModel, leaderboard, matcherModel);
             if (score !== null) {
@@ -269,7 +359,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // Classify failures and persist transient ones for retry
+  // Classify failures. Transient ones are tracked in-memory and persisted
+  // together with recheck results at the end of the run.
   const transientFailed: string[] = [];
   if (failed.length > 0) {
     for (const model of failed) {
@@ -280,54 +371,68 @@ async function main(): Promise<void> {
         transientFailed.push(model);
       }
     }
-    if (transientFailed.length > 0) {
-      appendRemovedModels(transientFailed);
-    }
   }
 
-  // Recheck previously removed models
-  const removedModels = readRemovedModels();
+  // Recheck previously removed models (concurrent with limit)
   if (removedModels.length > 0) {
     process.stderr.write(`\nRechecking ${removedModels.length} previously removed model(s)...\n`);
     const recovered: string[] = [];
     const stillFailed: string[] = [];
+    const concurrency = parseInt(envOrDefault('NIM_RECHECK_CONCURRENCY', '3'), 10);
 
-    for (const model of removedModels) {
-      process.stderr.write(`  Probing ${model} ...`);
-      const ok = await client.probeModel(model);
-      if (!ok) {
-        process.stderr.write(' still down\n');
-        stillFailed.push(model);
-        continue;
+    // Process models in batches of `concurrency`
+    for (let i = 0; i < removedModels.length; i += concurrency) {
+      const batch = removedModels.slice(i, i + concurrency);
+      const outcomes = await Promise.all(batch.map(async (model) => {
+        process.stderr.write(`  Probing ${model} ...`);
+        const ok = await client.probeModel(model);
+        if (!ok) {
+          process.stderr.write(' still down\n');
+          return { model, status: 'down' as const };
+        }
+        process.stderr.write(' back! benchmarking...');
+
+        const result = await runBenchmark(client, model, {
+          prompt: benchPrompt,
+          iterations,
+          temperature: 0.2,
+          maxTokens: 1024,
+        });
+
+        const errCount = result.iterations.filter(it => it.error !== null).length;
+        if (errCount === iterations) {
+          process.stderr.write(' FAILED\n');
+          return { model, status: 'failed' as const };
+        }
+
+        process.stderr.write(' ok\n');
+        return { model, status: 'recovered' as const, result };
+      }));
+
+      for (const outcome of outcomes) {
+        if (outcome.status === 'recovered') {
+          recovered.push(outcome.model);
+          results.push(outcome.result!);
+        } else {
+          stillFailed.push(outcome.model);
+        }
       }
-      process.stderr.write(' back! benchmarking...');
-
-      const result = await runBenchmark(client, model, {
-        prompt: benchPrompt,
-        iterations,
-        temperature: 0.2,
-        maxTokens: 1024,
-      });
-
-      const errCount = result.iterations.filter(it => it.error !== null).length;
-      if (errCount === iterations) {
-        process.stderr.write(' FAILED\n');
-        stillFailed.push(model);
-        continue;
-      }
-
-      process.stderr.write(' ok\n');
-      recovered.push(model);
-      results.push(result);
     }
 
-    // Update removed-models.txt: keep only models that still failed,
-    // plus any new transient failures from this run
-    stillFailed.push(...transientFailed);
-    writeRemovedModels(stillFailed);
+    // Persist the final removed-models state once. recovered models are
+    // dropped, recheck-still-failed models are kept, and any new transient
+    // failures from this run are merged in (deduplicated).
+    const finalRemoved = new Set(stillFailed);
+    for (const m of transientFailed) finalRemoved.add(m);
+    writeRemovedModels([...finalRemoved]);
+    removedModels = [...finalRemoved];
     if (recovered.length > 0) {
       process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
     }
+  } else if (transientFailed.length > 0) {
+    // No recheck needed, but still persist the new transient failures.
+    const finalRemoved = new Set([...removedModels, ...transientFailed]);
+    writeRemovedModels([...finalRemoved]);
   }
 
   // Output results table
@@ -337,11 +442,24 @@ async function main(): Promise<void> {
   });
 
   const table = formatMarkdownTable(successResults);
-  // Output fetched scores as a JSON comment for bench-reorder.ts to consume
+  // Pass fetched scores to bench-reorder via a dedicated file (preferred) or
+  // an HTML comment fallback for backward compatibility.
   if (fetchedScores.size > 0) {
     const scoresObj: Record<string, number> = {};
     fetchedScores.forEach((v, k) => { scoresObj[k] = v; });
-    console.log(`<!-- FETCHED_SCORES: ${JSON.stringify(scoresObj)} -->`);
+    const json = JSON.stringify(scoresObj);
+    const scoresFile = process.env.BENCH_SCORES_FILE;
+    if (scoresFile) {
+      try {
+        writeFileSync(scoresFile, json + '\n', 'utf-8');
+        process.stderr.write(`Wrote ${fetchedScores.size} fetched score(s) to ${scoresFile}\n`);
+      } catch (err) {
+        process.stderr.write(`Warning: could not write ${scoresFile}: ${err}; falling back to HTML comment\n`);
+        console.log(`<!-- FETCHED_SCORES: ${json} -->`);
+      }
+    } else {
+      console.log(`<!-- FETCHED_SCORES: ${json} -->`);
+    }
   }
   console.log(table);
 
@@ -356,7 +474,11 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(err => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
-});
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-entry.js');
+if (isMainModule) {
+  main().catch(err => {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  });
+}

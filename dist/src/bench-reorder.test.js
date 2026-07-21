@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYmlMistral } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYmlMistral, readFetchedScores, stripFetchedScoresComment } from './bench-reorder.js';
 describe('parseMarkdownTable', () => {
     it('parses a well-formed benchmark table', () => {
         const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
@@ -257,5 +257,74 @@ describe('fetchSweBenchScores', () => {
         const result = await fetchSweBenchScores();
         assert.ok(Array.isArray(result));
         // Should not throw
+    });
+});
+describe('readFetchedScores', () => {
+    it('reads scores from a file when path is provided', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'fetched-scores-'));
+        try {
+            const scoresFile = join(tmpDir, 'scores.json');
+            writeFileSync(scoresFile, JSON.stringify({ 'new-vendor/new-model': 0.75, 'foo/bar': 0.8 }), 'utf-8');
+            const result = readFetchedScores('irrelevant stdin content', scoresFile);
+            assert.strictEqual(result.size, 2);
+            assert.strictEqual(result.get('new-vendor/new-model'), 0.75);
+            assert.strictEqual(result.get('foo/bar'), 0.8);
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+    it('falls back to HTML comment in stdin when no file path is provided', () => {
+        const input = `<!-- FETCHED_SCORES: {"new-vendor/new-model": 0.91} -->
+| Model | Latency |
+|-------|---------|
+| \`x/y\` | 100ms |`;
+        const result = readFetchedScores(input, undefined);
+        assert.strictEqual(result.size, 1);
+        assert.strictEqual(result.get('new-vendor/new-model'), 0.91);
+    });
+    it('returns empty map when no scores source is available', () => {
+        const result = readFetchedScores('plain table, no scores', undefined);
+        assert.strictEqual(result.size, 0);
+    });
+    it('returns empty map when scores file is missing', () => {
+        const result = readFetchedScores('any', '/nonexistent/path/should-not-exist.json');
+        assert.strictEqual(result.size, 0);
+    });
+    it('returns empty map when JSON in stdin comment is malformed', () => {
+        const input = `<!-- FETCHED_SCORES: {not valid json} -->`;
+        const result = readFetchedScores(input, undefined);
+        assert.strictEqual(result.size, 0);
+    });
+    it('does not match FETCHED_SCORES when embedded mid-line in the table', () => {
+        // The regex is anchored to ^…$ with the `m` flag, so an HTML-comment-shaped
+        // fragment inside a table cell must not be treated as a scores envelope.
+        const input = `| Model | Latency |
+|-------|---------|
+| \`<!-- FETCHED_SCORES: {"x/y": 0.99} -->\` | 100ms |`;
+        const result = readFetchedScores(input, undefined);
+        assert.strictEqual(result.size, 0);
+    });
+});
+describe('stripFetchedScoresComment', () => {
+    it('is a no-op when scores file is set', () => {
+        const input = '<!-- FETCHED_SCORES: {"x/y": 0.5} -->\ntable here';
+        const result = stripFetchedScoresComment(input, '/some/file.json');
+        assert.strictEqual(result, input);
+    });
+    it('removes the FETCHED_SCORES comment line when scores file is not set', () => {
+        const input = `<!-- FETCHED_SCORES: {"x/y": 0.5} -->
+| Model | Latency |
+|-------|---------|
+| \`a/b\` | 100ms |`;
+        const result = stripFetchedScoresComment(input, undefined);
+        assert.ok(!result.includes('FETCHED_SCORES'));
+        assert.ok(result.includes('| Model |'));
+        assert.ok(result.includes('`a/b`'));
+    });
+    it('leaves the input untouched when no comment is present', () => {
+        const input = '| Model |\n|-------|\n| `x` |';
+        const result = stripFetchedScoresComment(input, undefined);
+        assert.strictEqual(result, input);
     });
 });

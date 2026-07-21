@@ -6,7 +6,7 @@
  * 2. Ranks models by SWE-bench score with latency penalty
  * 3. Updates nim_models in action.yml
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { withRetry } from './retry.js';
 /**
  * Parse SWE-bench API response into sorted entries.
@@ -23,14 +23,17 @@ export function parseSweBenchResponse(data) {
         org: m.organization_id || '',
     }));
 }
+let sweBenchFetchFailures = 0;
+const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
 /**
  * Fetch SWE-bench Verified scores from the leaderboard API.
  * Returns top ~30 models by score, filtered to score > 0.5.
  */
 export async function fetchSweBenchScores() {
+    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
     try {
         const resp = await withRetry(async () => {
-            const r = await fetch('https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details', {
+            const r = await fetch(url, {
                 signal: AbortSignal.timeout(30_000),
             });
             if (!r.ok)
@@ -38,10 +41,17 @@ export async function fetchSweBenchScores() {
             return r;
         });
         const data = await resp.json();
+        sweBenchFetchFailures = 0;
         return parseSweBenchResponse(data);
     }
     catch (err) {
-        process.stderr.write(`Warning: could not fetch SWE-bench scores: ${err}\n`);
+        sweBenchFetchFailures++;
+        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
+            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
+        }
+        else {
+            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
+        }
         return [];
     }
 }
@@ -218,6 +228,51 @@ export function updateActionYmlMistral(actionPath, orderedModels) {
     updateActionYml(actionPath, orderedModels, 'mistral_models');
 }
 /**
+ * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
+ * Returns the parsed scores map (empty if neither source yields a value).
+ * Exported for testability.
+ */
+export function readFetchedScores(rawInput, scoresFile) {
+    const fetchedScores = new Map();
+    if (scoresFile && existsSync(scoresFile)) {
+        try {
+            const fileContent = readFileSync(scoresFile, 'utf-8').trim();
+            const scoresObj = JSON.parse(fileContent);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch (err) {
+            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
+        }
+        return fetchedScores;
+    }
+    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
+    // so we never accidentally match a fragment in the markdown table body.
+    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
+    if (scoresMatch) {
+        try {
+            const scoresObj = JSON.parse(scoresMatch[1]);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch {
+            console.warn('Warning: could not parse FETCHED_SCORES comment');
+        }
+    }
+    return fetchedScores;
+}
+/**
+ * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
+ * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
+ */
+export function stripFetchedScoresComment(rawInput, scoresFile) {
+    if (scoresFile)
+        return rawInput;
+    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
+}
+/**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
  */
 async function main() {
@@ -233,22 +288,14 @@ async function main() {
         chunks.push(chunk);
     }
     const rawInput = Buffer.concat(chunks).toString('utf-8');
-    // Extract fetched scores from HTML comment if present
-    const fetchedScores = new Map();
-    const scoresMatch = rawInput.match(/<!-- FETCHED_SCORES: ({.*?}) -->/);
-    if (scoresMatch) {
-        try {
-            const scoresObj = JSON.parse(scoresMatch[1]);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-            console.log(`Parsed ${fetchedScores.size} fetched score(s) from benchmark output`);
-        }
-        catch {
-            console.warn('Warning: could not parse FETCHED_SCORES comment');
-        }
+    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
+    const scoresFile = process.env.BENCH_SCORES_FILE;
+    const fetchedScores = readFetchedScores(rawInput, scoresFile);
+    if (fetchedScores.size > 0) {
+        const source = scoresFile && existsSync(scoresFile) ? scoresFile : 'stdin comment';
+        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
     }
-    const table = rawInput.replace(/<!-- FETCHED_SCORES: .*? -->\n?/g, '');
+    const table = stripFetchedScoresComment(rawInput, scoresFile);
     if (!table.trim()) {
         console.error('No benchmark output received on stdin');
         process.exit(1);

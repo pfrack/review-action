@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readRemovedModels, writeRemovedModels, appendRemovedModels, cleanupRemovedModels } from './removed-models.js';
@@ -13,13 +13,12 @@ describe('removed-models helpers', () => {
     });
     afterEach(() => {
         try {
-            unlinkSync(testPath);
+            rmSync(testDir, { recursive: true, force: true });
         }
-        catch { }
-        try {
-            unlinkSync(testDir);
+        catch (err) {
+            // Best-effort cleanup; do not fail the suite if the OS is slow.
+            process.stderr.write(`Warning: could not remove ${testDir}: ${err}\n`);
         }
-        catch { }
     });
     it('readRemovedModels returns empty array when file does not exist', () => {
         const result = readRemovedModels(testPath);
@@ -109,13 +108,11 @@ describe('recheck flow simulation', () => {
     });
     afterEach(() => {
         try {
-            unlinkSync(testPath);
+            rmSync(testDir, { recursive: true, force: true });
         }
-        catch { }
-        try {
-            unlinkSync(testDir);
+        catch (err) {
+            process.stderr.write(`Warning: could not remove ${testDir}: ${err}\n`);
         }
-        catch { }
     });
     it('recovered models are removed from removed-models.txt', () => {
         // Simulate: file has model-a and model-b, model-a recovers
