@@ -484,10 +484,10 @@ No caching layer, no async fan-out, no streaming — performance profile is unch
 
 #### Automated
 
-- [ ] 1.1 `npm run build` completes without TS or schema errors
-- [ ] 1.2 `npm test` passes including updated `src/review-schema.test.ts` and migrated fixtures
-- [ ] 1.3 `npx tsc --noEmit` exits cleanly
-- [ ] 1.4 `dist/bundle/index.js` contains the literal strings `critical_action` / `warning_action` / `suggestion_action` post-Phase-1 rebuild
+- [x] 1.1 `npm run build` completes without TS or schema errors — 79e5e78
+- [x] 1.2 `npm test` passes including updated `src/review-schema.test.ts` and migrated fixtures — 79e5e78
+- [x] 1.3 `npx tsc --noEmit` exits cleanly — 79e5e78
+- [x] 1.4 `dist/bundle/index.js` contains the literal strings `critical_action` / `warning_action` / `suggestion_action` post-Phase-1 rebuild — 79e5e78
 
 #### Manual
 
@@ -497,8 +497,8 @@ No caching layer, no async fan-out, no streaming — performance profile is unch
 
 #### Automated
 
-- [ ] 2.1 `npm run build` and `npm test` pass
-- [ ] 2.2 New prompt-content test in `src/prompts.test.ts` passes (asserts `critical_action`, `warning_action`, `suggestion_action`, `"not applicable"` substrings on `BASE_SYSTEM_PROMPT` and each language prompt)
+- [x] 2.1 `npm run build` and `npm test` pass
+- [x] 2.2 New prompt-content test in `src/prompts.test.ts` passes (asserts `critical_action`, `warning_action`, `suggestion_action`, `"not applicable"` substrings on `BASE_SYSTEM_PROMPT` and each language prompt)
 
 #### Manual
 

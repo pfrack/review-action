@@ -1,7 +1,21 @@
 import { extname } from 'node:path';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 
-const languagePrompts: Record<string, string> = {
+export const SEVERITY_GUIDANCE = `Severity guidance — match the issue text and the *_action field to each severity:
+- Critical findings: a bug, security hole, data-loss risk, or correctness failure
+  that BLOCKS release. Use direct action verbs in the issue text. Populate
+  critical_action with the concrete next step required to unblock release.
+- Warning findings: an investigative concern, likely bug, or maintainability or
+  performance issue that warrants attention but is not blocking. Populate
+  warning_action with the next step to investigate.
+- Suggestion findings: stylistic, readability, or nit-level improvement. Populate
+  suggestion_action with a short optional improvement.
+
+For the two action fields that do not match the severity, write a short placeholder
+string such as "not applicable" rather than omitting it — the schema requires all
+three on every finding.`;
+
+export const languagePrompts: Record<string, string> = {
   go: `You are an expert senior software engineer performing a code review of Go code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -18,6 +32,8 @@ Go-specific focus areas:
 - Interface satisfaction and type assertions
 - Performance: unnecessary allocations, string concatenation in loops
 - Effective use of context for cancellation and timeouts
+
+${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`,
 
@@ -38,6 +54,8 @@ Python-specific focus areas:
 - Import cycles and circular dependencies
 - Pythonic idioms vs anti-patterns
 
+${SEVERITY_GUIDANCE}
+
 ${JSON_SCHEMA_DEFINITION}`,
 
   typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
@@ -56,6 +74,8 @@ TypeScript/JavaScript-specific focus areas:
 - Promise.all for parallel operations vs sequential loops
 - Module import/export patterns
 - React-specific: useEffect cleanup, memo usage, key props
+
+${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`,
 
@@ -76,6 +96,8 @@ Java-specific focus areas:
 - Stream API vs traditional loops performance
 - Dependency injection and lifecycle management
 
+${SEVERITY_GUIDANCE}
+
 ${JSON_SCHEMA_DEFINITION}`,
 
   rust: `You are an expert senior software engineer performing a code review of Rust code.
@@ -95,6 +117,8 @@ Rust-specific focus areas:
 - FFI safety and memory management
 - Clippy warnings and idiomatic Rust patterns
 
+${SEVERITY_GUIDANCE}
+
 ${JSON_SCHEMA_DEFINITION}`,
 
   cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
@@ -113,6 +137,8 @@ C/C++-specific focus areas:
 - RAII patterns and exception safety
 - Template metaprogramming pitfalls
 - C-style casts vs C++ casts, const correctness
+
+${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`,
 };

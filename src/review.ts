@@ -5,6 +5,20 @@ import { withRetry, RetryableError } from './retry.js';
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
 
+Severity guidance — match the issue text and the *_action field to each severity:
+- Critical findings: a bug, security hole, data-loss risk, or correctness failure
+  that BLOCKS release. Use direct action verbs in the issue text. Populate
+  critical_action with the concrete next step required to unblock release.
+- Warning findings: an investigative concern, likely bug, or maintainability or
+  performance issue that warrants attention but is not blocking. Populate
+  warning_action with the next step to investigate.
+- Suggestion findings: stylistic, readability, or nit-level improvement. Populate
+  suggestion_action with a short optional improvement.
+
+For the two action fields that do not match the severity, write a short placeholder
+string such as "not applicable" rather than omitting it — the schema requires all
+three on every finding.
+
 ${JSON_SCHEMA_DEFINITION}`;
 
 export interface Config {
