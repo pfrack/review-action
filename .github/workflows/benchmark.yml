@@ -56,7 +56,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add action.yml removed-models.txt
+          git add action.yml
+          if [ -f removed-models.txt ]; then git add removed-models.txt; fi
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
@@ -127,7 +128,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add action.yml removed-mistral-models.txt
+          git add action.yml
+          if [ -f removed-mistral-models.txt ]; then git add removed-mistral-models.txt; fi
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
