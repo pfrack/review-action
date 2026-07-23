@@ -1,15 +1,8 @@
 import * as core from '@actions/core';
 import { JSON_SCHEMA_DEFINITION, type ReviewType, type ReviewFinding } from './review-schema.js';
-import { SEVERITY_GUIDANCE } from './prompts.js';
+import { SEVERITY_GUIDANCE, BASE_SYSTEM_PROMPT } from './prompts.js';
 import { withRetry, RetryableError } from './retry.js';
 import { validateCodeContext } from './validation.js';
-
-export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`;
 
 export interface Config {
   baseURL: string;
