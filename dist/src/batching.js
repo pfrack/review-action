@@ -20,7 +20,7 @@ export function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.severity}:${finding.issue}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);

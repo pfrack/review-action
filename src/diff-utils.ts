@@ -39,8 +39,8 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
       currentTokens += line.length;
       if (currentTokens > maxTokens * 4) {
         pushChunk();
-        currentChunk = [];
-        currentTokens = 0;
+        currentChunk = [line];
+        currentTokens = line.length;
       }
     }
   }

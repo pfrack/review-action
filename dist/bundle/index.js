@@ -27704,12 +27704,16 @@ class OpenAIClient {
 
 function validateCodeContext(finding, diff) {
     const issue = finding.issue;
+    function nameInDiff(name) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`).test(diff);
+    }
     // Check for backtick-wrapped identifiers (most reliable)
     const backtickRefs = issue.match(/`(\w+)`/g);
     if (backtickRefs) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
-            if (name.length > 2 && !diff.includes(name)) {
+            if (name.length > 2 && !nameInDiff(name)) {
                 return { valid: false, reason: `Referenced identifier \`${name}\` not found in diff` };
             }
         }
@@ -27718,7 +27722,7 @@ function validateCodeContext(finding, diff) {
     const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
     if (explicitRef) {
         const name = explicitRef[1];
-        if (name.length > 2 && !diff.includes(name)) {
+        if (name.length > 2 && !nameInDiff(name)) {
             return { valid: false, reason: `Referenced \`${name}\` not found in diff` };
         }
     }
@@ -36675,7 +36679,7 @@ async function findExistingReview(repo, prNumber, token) {
         }
         const reviews = await resp.json();
         for (const review of reviews) {
-            if (review.body?.startsWith('### AI Code Review')) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
                 return review.id;
             }
         }
@@ -36702,6 +36706,7 @@ async function deleteReview(repo, prNumber, reviewId, token) {
         }
     });
 }
+const AI_REVIEW_MARKER = '### AI Code Review';
 const INLINE_COMMENT_THRESHOLD = 50;
 function shouldUseInlineComments(findings) {
     return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
@@ -36767,7 +36772,7 @@ function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.severity}:${finding.issue}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);
@@ -37016,7 +37021,7 @@ async function run() {
                 // Both first-attempt and retry success paths converge here
                 batchReview = parsed.data;
                 const changedFiles = new Set(batchFileList);
-                const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, client, tagged.id);
+                const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
                 for (const w of validated.warnings)
                     lib_core.warning(w);
                 batchReview = validated.valid;
@@ -37050,8 +37055,8 @@ async function run() {
         }
         const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings, summary: r.summary })));
         review = { findings: merged.findings, summary: merged.summary };
-        usedModel = batchResults[0].usedModel;
-        lastRawContent = batchResults[0].lastRawContent;
+        usedModel = batchResults.find(r => r.usedModel)?.usedModel || '';
+        lastRawContent = batchResults.find(r => r.lastRawContent)?.lastRawContent || '';
         validationDropped = batchResults.reduce((sum, r) => sum + r.dropped, 0);
     }
     else {
@@ -37075,7 +37080,7 @@ async function run() {
         warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
         suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
-    const summaryBody = `### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+    const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
     if (review && review.findings.length > 0) {
         if (shouldUseInlineComments(review.findings)) {
             // Post findings as inline review comments

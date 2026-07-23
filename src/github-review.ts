@@ -120,7 +120,7 @@ export async function findExistingReview(
 
     const reviews = await resp.json() as { id: number; body?: string; user: { login: string } }[];
     for (const review of reviews) {
-      if (review.body?.startsWith('### AI Code Review')) {
+      if (review.body?.startsWith(AI_REVIEW_MARKER)) {
         return review.id;
       }
     }
@@ -155,6 +155,8 @@ export async function deleteReview(
     }
   });
 }
+
+export const AI_REVIEW_MARKER = '### AI Code Review';
 
 export const INLINE_COMMENT_THRESHOLD = 50;
 

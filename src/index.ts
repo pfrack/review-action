@@ -8,7 +8,7 @@ import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 import { parseRules, validateRules, type Rule } from './rules.js';
-import { createReview, shouldUseInlineComments, findExistingReview, deleteReview } from './github-review.js';
+import { createReview, shouldUseInlineComments, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
 
@@ -279,7 +279,11 @@ async function run(): Promise<void> {
         // Both first-attempt and retry success paths converge here
         batchReview = parsed.data;
         const changedFiles = new Set(batchFileList);
-        const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, client, tagged.id);
+        const validated = await validateFindings(
+          batchReview, batchDiffMap, changedFiles,
+          config.revalidateFindings ? client : undefined,
+          config.revalidateFindings ? tagged.id : undefined,
+        );
         for (const w of validated.warnings) core.warning(w);
         batchReview = validated.valid;
         batchDropped = validated.dropped;
@@ -315,8 +319,8 @@ async function run(): Promise<void> {
     }
     const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings, summary: r.summary })));
     review = { findings: merged.findings, summary: merged.summary };
-    usedModel = batchResults[0].usedModel;
-    lastRawContent = batchResults[0].lastRawContent;
+    usedModel = batchResults.find(r => r.usedModel)?.usedModel || '';
+    lastRawContent = batchResults.find(r => r.lastRawContent)?.lastRawContent || '';
     validationDropped = batchResults.reduce((sum, r) => sum + r.dropped, 0);
   } else {
     const singleResult = await runModelChainForBatch(filesToReview, filesDiffMap);
@@ -343,7 +347,7 @@ async function run(): Promise<void> {
     suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
   ].filter(Boolean).join(' · ');
 
-  const summaryBody = `### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+  const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
   if (review && review.findings.length > 0) {
     if (shouldUseInlineComments(review.findings)) {

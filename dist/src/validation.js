@@ -1,12 +1,16 @@
 import * as core from '@actions/core';
 export function validateCodeContext(finding, diff) {
     const issue = finding.issue;
+    function nameInDiff(name) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}\\b`).test(diff);
+    }
     // Check for backtick-wrapped identifiers (most reliable)
     const backtickRefs = issue.match(/`(\w+)`/g);
     if (backtickRefs) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
-            if (name.length > 2 && !diff.includes(name)) {
+            if (name.length > 2 && !nameInDiff(name)) {
                 return { valid: false, reason: `Referenced identifier \`${name}\` not found in diff` };
             }
         }
@@ -15,7 +19,7 @@ export function validateCodeContext(finding, diff) {
     const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
     if (explicitRef) {
         const name = explicitRef[1];
-        if (name.length > 2 && !diff.includes(name)) {
+        if (name.length > 2 && !nameInDiff(name)) {
             return { valid: false, reason: `Referenced \`${name}\` not found in diff` };
         }
     }
