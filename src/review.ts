@@ -143,9 +143,13 @@ export function validateFindings(
     }
     if (f.line_start != null) {
       const fileHunks = hunks.get(f.file) || [];
-      const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
+      // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+      // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+      const overlaps = fileHunks.some(h => {
+        const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+        return f.line_start! <= h.end + tolerance && (f.line_end ?? f.line_start!) >= h.start - tolerance;
+      });
       if (!overlaps) {
-        // Drop findings outside changed hunks — they reference unmodified code and are not actionable
         warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
         continue;
       }

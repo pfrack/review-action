@@ -35688,9 +35688,13 @@ function validateFindings(review, filesDiff, changedFiles) {
         }
         if (f.line_start != null) {
             const fileHunks = hunks.get(f.file) || [];
-            const overlaps = fileHunks.some(h => f.line_start <= h.end && (f.line_end ?? f.line_start) >= h.start);
+            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+            const overlaps = fileHunks.some(h => {
+                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
+            });
             if (!overlaps) {
-                // Drop findings outside changed hunks — they reference unmodified code and are not actionable
                 warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
                 continue;
             }
@@ -35769,7 +35773,7 @@ async function fetchDiff(repo, prNumber, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3.diff',
             },
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -35785,6 +35789,7 @@ async function fetchDiff(repo, prNumber, token) {
     return parseDiff(raw);
 }
 const COMMENT_MARKER = '### AI Code Review';
+const GITHUB_API_TIMEOUT_MS = 30_000;
 async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
@@ -35796,7 +35801,6 @@ async function postComment(repo, prNumber, token, body) {
 }
 async function deleteComment(repo, commentId, token) {
     const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    // AbortSignal.timeout requires Node >= 15.12; action runs on node24
     await retry_withRetry(async () => {
         const response = await fetch(url, {
             method: 'DELETE',
@@ -35804,7 +35808,7 @@ async function deleteComment(repo, commentId, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github+json',
             },
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -35826,7 +35830,7 @@ async function findExistingComment(repo, prNumber, token) {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/vnd.github+json',
                     },
-                    signal: AbortSignal.timeout(30_000),
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
                 });
                 if (!response.ok) {
                     const body = await response.text();
@@ -35864,7 +35868,7 @@ async function updateComment(repo, commentId, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -35884,7 +35888,7 @@ async function createComment(repo, prNumber, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
