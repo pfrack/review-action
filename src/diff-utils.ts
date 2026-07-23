@@ -50,6 +50,10 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
 
   pushChunk();
 
+  if (preamble.length > 0 && chunks.length === 0) {
+    chunks.push({ header: '', content: preamble.join('\n'), startLine: 1 });
+  }
+
   return chunks.length > 0 ? chunks : [{ header: '', content: diff, startLine: 1 }];
 }
 

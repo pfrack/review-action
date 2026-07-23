@@ -249,7 +249,7 @@ async function run(): Promise<void> {
         if (!parsed.success) {
           // Retry once with validation error appended
           core.info(`${tagged.id} schema validation failed, retrying...`);
-          const truncated = result.content.length > 500
+          const truncatedContent = result.content.length > 500
             ? '...' + result.content.slice(-500)
             : result.content;
           const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
@@ -259,7 +259,7 @@ async function run(): Promise<void> {
               content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
             },
             { role: 'user', content: userMsg },
-            { role: 'assistant', content: truncated },
+            { role: 'assistant', content: truncatedContent },
             { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
           ], {
             temperature: 0.2,

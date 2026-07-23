@@ -42,6 +42,9 @@ export function chunkDiff(diff, maxTokens = 12000) {
         }
     }
     pushChunk();
+    if (preamble.length > 0 && chunks.length === 0) {
+        chunks.push({ header: '', content: preamble.join('\n'), startLine: 1 });
+    }
     return chunks.length > 0 ? chunks : [{ header: '', content: diff, startLine: 1 }];
 }
 export function estimateTokens(text) {
