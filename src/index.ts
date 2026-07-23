@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
+import { buildSystemPrompt, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
@@ -112,6 +113,19 @@ async function run(): Promise<void> {
 
   core.info(`Reviewing ${filesToReview.length} files...`);
 
+  // Detect most common language for prompt selection
+  const langCounts: Record<string, number> = {};
+  for (const filePath of filesToReview) {
+    const lang = languageForFile(filePath);
+    langCounts[lang] = (langCounts[lang] || 0) + 1;
+  }
+  const detectedLanguage = Object.entries(langCounts)
+    .filter(([lang]) => lang !== 'generic')
+    .sort(([, a], [, b]) => b - a)[0]?.[0];
+  if (detectedLanguage) {
+    core.info(`Detected language: ${detectedLanguage}`);
+  }
+
   // Build combined diff
   let diffToSend = '';
   for (const filePath of filesToReview) {
@@ -138,11 +152,13 @@ async function run(): Promise<void> {
       const result = await client.chat(tagged.id, [
         {
           role: 'system',
-          content: config.promptMode === 'replace'
-            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-            : (config.systemPrompt
-                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                : BASE_SYSTEM_PROMPT),
+          content: (() => {
+            const base = buildSystemPrompt(detectedLanguage);
+            if (config.promptMode === 'replace') {
+              return config.systemPrompt || base;
+            }
+            return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
+          })(),
         },
         { role: 'user', content: userMsg },
       ], {
@@ -176,11 +192,13 @@ async function run(): Promise<void> {
         const retryResult = await client.chat(tagged.id, [
           {
             role: 'system',
-            content: config.promptMode === 'replace'
-              ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-              : (config.systemPrompt
-                  ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                  : BASE_SYSTEM_PROMPT),
+            content: (() => {
+              const base = buildSystemPrompt(detectedLanguage);
+              if (config.promptMode === 'replace') {
+                return config.systemPrompt || base;
+              }
+              return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
+            })(),
           },
           { role: 'user', content: userMsg },
           { role: 'assistant', content: truncated },
