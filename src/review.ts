@@ -25,6 +25,7 @@ export interface Config {
   excludePatterns: string[];
   systemPrompt: string;
   promptMode: string;
+  customRules: string;
 }
 
 function splitCSV(s: string): string[] {
@@ -51,6 +52,7 @@ export function loadConfig(): Config {
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
     systemPrompt: core.getInput('nim_system_prompt'),
     promptMode,
+    customRules: core.getInput('custom_rules') || '',
   };
 }
 

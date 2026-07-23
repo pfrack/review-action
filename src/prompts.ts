@@ -1,5 +1,6 @@
 import { extname } from 'node:path';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
+import { formatRulesForPrompt, type Rule } from './rules.js';
 
 export const SEVERITY_GUIDANCE = `## Severity Classification
 
@@ -216,9 +217,8 @@ const GENERIC_PROMPT = [
   JSON_SCHEMA_DEFINITION,
 ].join('\n');
 
-export function buildSystemPrompt(language?: string): string {
-  if (language && languagePrompts[language]) {
-    return languagePrompts[language];
-  }
-  return GENERIC_PROMPT;
+export function buildSystemPrompt(language?: string, rules?: Rule[]): string {
+  const base = (language && languagePrompts[language]) ? languagePrompts[language] : GENERIC_PROMPT;
+  const rulesSection = formatRulesForPrompt(rules || []);
+  return rulesSection ? `${base}\n\n${rulesSection}` : base;
 }
