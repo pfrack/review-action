@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
@@ -220,26 +220,33 @@ async function run(): Promise<void> {
   }
 
   const modelShort = usedModel.split('/').pop() || usedModel;
+  const hasIssues = review && review.findings.length > 0;
+
+  // No issues found — delete existing comment if present
+  if (review && !hasIssues) {
+    const existingId = await findExistingComment(repo, prNumber, token);
+    if (existingId) {
+      await deleteComment(repo, existingId, token);
+      core.info('Deleted previous review comment (no issues found)');
+    }
+    return;
+  }
+
   const sections: string[] = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
 
-  if (review && review.findings.length > 0) {
-    const { critical, warning, suggestion } = severityTally(review);
+  if (hasIssues) {
+    const { critical, warning, suggestion } = severityTally(review!);
     const tally = [
       critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
       warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
       suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
     sections.push(`\n${tally}\n`);
-  }
-
-  if (review) {
-    sections.push(`\n${renderReview(review)}`);
+    sections.push(`\n${renderReview(review!)}`);
   } else if (!usedModel) {
     sections.push(`\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
     sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
-  } else {
-    sections.push(`\nNo issues found.`);
   }
 
   if (truncated) {

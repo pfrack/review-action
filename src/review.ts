@@ -255,7 +255,6 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
 const COMMENT_MARKER = '### AI Code Review';
 
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
-  // Try to find and update an existing review comment
   const existingId = await findExistingComment(repo, prNumber, token);
 
   if (existingId) {
@@ -265,7 +264,26 @@ export async function postComment(repo: string, prNumber: number, token: string,
   }
 }
 
-async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
+export async function deleteComment(repo: string, commentId: number, token: string): Promise<void> {
+  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+  await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+  });
+}
+
+export async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
   let page = 1;
   const perPage = 100;
   const maxPages = 50;
