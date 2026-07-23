@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
+import { buildSystemMessage } from './prompts.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 
@@ -37,6 +38,10 @@ async function run(): Promise<void> {
     ? new OpenAIClient(config.customApiUrl, config.customApiKey)
     : null;
 
+  if (hasCustom && !config.customApiKey) {
+    core.warning('Running with empty custom_api_key — authentication may be required by your endpoint');
+  }
+
   const clients: Record<Provider, OpenAIClient | null> = {
     nim: nimClient,
     mistral: mistralClient,
@@ -65,8 +70,11 @@ async function run(): Promise<void> {
     throw new Error('GITHUB_TOKEN not set');
   }
 
+  const nimCount = config.models.length;
+  const mistralCount = config.mistralModels.length;
+  const customCount = hasCustom ? 1 : 0;
   core.info(`Reviewing PR #${prNumber} in ${repo}`);
-  core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
+  core.info(`Chain: NIM(${nimCount}) Mistral(${mistralCount}) Custom(${customCount})`);
 
   let filesDiff: Record<string, string>;
   try {
@@ -138,11 +146,7 @@ async function run(): Promise<void> {
       const result = await client.chat(tagged.id, [
         {
           role: 'system',
-          content: config.promptMode === 'replace'
-            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-            : (config.systemPrompt
-                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                : BASE_SYSTEM_PROMPT),
+          content: buildSystemMessage(config.promptMode, config.systemPrompt),
         },
         { role: 'user', content: userMsg },
       ], {
@@ -176,11 +180,7 @@ async function run(): Promise<void> {
         const retryResult = await client.chat(tagged.id, [
           {
             role: 'system',
-            content: config.promptMode === 'replace'
-              ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-              : (config.systemPrompt
-                  ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                  : BASE_SYSTEM_PROMPT),
+            content: buildSystemMessage(config.promptMode, config.systemPrompt),
           },
           { role: 'user', content: userMsg },
           { role: 'assistant', content: truncated },
@@ -246,6 +246,8 @@ async function run(): Promise<void> {
     sections.push(`\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
     sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+  } else {
+    sections.push(`\nNo review content returned from any model.`);
   }
 
   if (truncated) {
@@ -255,6 +257,9 @@ async function run(): Promise<void> {
   await postComment(repo, prNumber, token, sections.join('\n'));
 }
 
-run().catch(err => {
-  core.setFailed(err instanceof Error ? err.message : String(err));
-});
+const inTest = process.argv.includes('--test');
+if (!inTest) {
+  run().catch(err => {
+    core.setFailed(err instanceof Error ? err.message : String(err));
+  });
+}

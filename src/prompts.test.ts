@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { languageForFile, languagePrompts } from './prompts.js';
-import { BASE_SYSTEM_PROMPT } from './review.js';
+import { languageForFile, languagePrompts, BASE_SYSTEM_PROMPT } from './prompts.js';
 
 describe('languageForFile', () => {
   const tests: [string, string][] = [

@@ -1,1 +1,4 @@
+# Models that failed during daily benchmark and are temporarily excluded from fallback chains.
+# Managed by src/removed-models.ts. Recheck process restores models when they recover.
+
 deepseek-ai/deepseek-v4-pro

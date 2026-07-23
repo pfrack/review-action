@@ -15,6 +15,13 @@ For the two action fields that do not match the severity, write a short placehol
 string such as "not applicable" rather than omitting it — the schema requires all
 three on every finding.`;
 
+export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`;
+
 export const languagePrompts: Record<string, string> = {
   go: `You are an expert senior software engineer performing a code review of Go code.
 
@@ -142,6 +149,16 @@ ${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`,
 };
+
+export function buildSystemMessage(promptMode: string, systemPrompt: string): string {
+  if (promptMode === 'replace') {
+    return systemPrompt || BASE_SYSTEM_PROMPT;
+  }
+  if (systemPrompt) {
+    return `${BASE_SYSTEM_PROMPT}\n\n${systemPrompt}`;
+  }
+  return BASE_SYSTEM_PROMPT;
+}
 
 export function languageForFile(filePath: string): string {
   const ext = extname(filePath).toLowerCase();

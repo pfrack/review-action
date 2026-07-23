@@ -27635,6 +27635,693 @@ class OpenAIClient {
     }
 }
 
+;// CONCATENATED MODULE: ./src/review.ts
+
+
+function splitCSV(s) {
+    return s.split(',').map(item => item.trim()).filter(item => item !== '');
+}
+function loadConfig() {
+    const promptMode = lib_core.getInput('nim_prompt_mode') || 'append';
+    if (promptMode !== 'append' && promptMode !== 'replace') {
+        lib_core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+    }
+    return {
+        baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
+        apiKey: lib_core.getInput('nim_api_key'),
+        models: splitCSV(lib_core.getInput('nim_models')),
+        mistralApiKey: lib_core.getInput('mistral_api_key') || '',
+        mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
+        mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
+            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        customApiUrl: lib_core.getInput('custom_api_url') || '',
+        customModel: lib_core.getInput('custom_model') || '',
+        customApiKey: lib_core.getInput('custom_api_key') || '',
+        maxFiles: parseInt(lib_core.getInput('max_files') || '100', 10) || 100,
+        excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
+        systemPrompt: lib_core.getInput('nim_system_prompt'),
+        promptMode,
+    };
+}
+const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
+function parseDiff(raw) {
+    const files = {};
+    const chunks = raw.split('diff --git ');
+    for (const chunk of chunks) {
+        const trimmed = chunk.trim();
+        if (!trimmed)
+            continue;
+        const diffText = 'diff --git ' + trimmed;
+        const firstLine = diffText.split('\n')[0];
+        const m = firstLine.match(diffHeaderRe);
+        if (m) {
+            files[m[2]] = diffText;
+        }
+    }
+    return files;
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+}
+const SEVERITY_META = {
+    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
+    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
+    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
+};
+const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
+function severityTally(review) {
+    const counts = { critical: 0, warning: 0, suggestion: 0 };
+    for (const f of review.findings) {
+        if (f.severity === 'Critical')
+            counts.critical++;
+        else if (f.severity === 'Warning')
+            counts.warning++;
+        else if (f.severity === 'Suggestion')
+            counts.suggestion++;
+    }
+    return counts;
+}
+const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+function parseDiffHunks(diffText) {
+    const ranges = [];
+    for (const line of diffText.split('\n')) {
+        const m = line.match(hunkHeaderRe);
+        if (m) {
+            const start = parseInt(m[1], 10);
+            const count = m[2] ? parseInt(m[2], 10) : 1;
+            ranges.push({ start, end: start + count - 1 });
+        }
+    }
+    return ranges;
+}
+function getFileHunks(filesDiff) {
+    const map = new Map();
+    for (const [file, diffText] of Object.entries(filesDiff)) {
+        map.set(file, parseDiffHunks(diffText));
+    }
+    return map;
+}
+function validateFindings(review, filesDiff, changedFiles) {
+    const warnings = [];
+    const hunks = getFileHunks(filesDiff);
+    const validFindings = [];
+    for (const f of review.findings) {
+        if (!changedFiles.has(f.file)) {
+            warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_end != null && f.line_start == null) {
+            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
+            warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_start != null) {
+            const fileHunks = hunks.get(f.file) || [];
+            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+            const overlaps = fileHunks.some(h => {
+                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
+            });
+            if (!overlaps) {
+                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
+                continue;
+            }
+        }
+        validFindings.push(f);
+    }
+    if (validFindings.length === 0 && !review.summary) {
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
+    }
+    return { valid: { findings: validFindings, summary: review.summary }, warnings };
+}
+function renderReview(review) {
+    if (review.findings.length === 0) {
+        return review.summary || 'No issues found.';
+    }
+    const lines = [];
+    for (const severity of SEVERITY_ORDER) {
+        const meta = SEVERITY_META[severity];
+        const bucket = review.findings.filter(f => f.severity === severity);
+        if (bucket.length === 0)
+            continue;
+        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
+        const byFile = new Map();
+        for (const f of bucket) {
+            const list = byFile.get(f.file) || [];
+            list.push(f);
+            byFile.set(f.file, list);
+        }
+        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            lines.push(`**File:** \`${file}\``);
+            for (const f of findings) {
+                const lineInfo = f.line_start != null
+                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+                    : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
+                const matchAction = f[meta.actionKey];
+                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
+                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
+                    : '';
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+            }
+            lines.push('');
+        }
+    }
+    if (review.summary) {
+        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
+    }
+    return lines.join('\n');
+}
+function globMatch(str, pattern) {
+    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    return regex.test(str);
+}
+function shouldExclude(filePath, patterns) {
+    for (const pat of patterns) {
+        if (globMatch(filePath, pat))
+            return true;
+        if (globMatch(filePath.split('/').pop() || '', pat))
+            return true;
+    }
+    return false;
+}
+class DiffTooLargeError extends Error {
+    sizeMB;
+    constructor(sizeMB) {
+        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+        this.name = 'DiffTooLargeError';
+        this.sizeMB = sizeMB;
+    }
+}
+async function fetchDiff(repo, prNumber, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
+    const resp = await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3.diff',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+        return response;
+    });
+    const raw = await resp.text();
+    const byteLength = new TextEncoder().encode(raw).byteLength;
+    if (byteLength > 5 * 1024 * 1024) {
+        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
+    }
+    return parseDiff(raw);
+}
+const COMMENT_MARKER = '### AI Code Review';
+const GITHUB_API_TIMEOUT_MS = 30_000;
+async function postComment(repo, prNumber, token, body) {
+    const existingId = await findExistingComment(repo, prNumber, token);
+    if (existingId) {
+        await deleteComment(repo, existingId, token);
+    }
+    await createComment(repo, prNumber, token, body);
+}
+async function deleteComment(repo, commentId, token) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
+}
+async function findExistingComment(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            // 404 means PR doesn't exist or token lacks access — skip comment update
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const comments = await resp.json();
+        for (const comment of comments) {
+            if (comment.body.startsWith(COMMENT_MARKER)) {
+                return comment.id;
+            }
+        }
+        if (comments.length < perPage)
+            break;
+        page++;
+    }
+    return null;
+}
+async function createComment(repo, prNumber, token, body) {
+    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
+    const resp = await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+        return response;
+    });
+}
+
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+;// CONCATENATED MODULE: ./src/event.ts
+
+function loadEvent() {
+    const path = process.env.GITHUB_EVENT_PATH;
+    if (!path) {
+        throw new Error('GITHUB_EVENT_PATH not set');
+    }
+    const data = (0,external_node_fs_namespaceObject.readFileSync)(path, 'utf8');
+    const event = JSON.parse(data);
+    if (!event.pull_request?.number) {
+        throw new Error('No PR number in event payload');
+    }
+    return event;
+}
+
+;// CONCATENATED MODULE: ./src/bench-reorder.ts
+/**
+ * bench-reorder.ts
+ *
+ * After a benchmark run, this script:
+ * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
+ * 2. Ranks models by SWE-bench score with latency penalty
+ * 3. Updates nim_models in action.yml
+ */
+
+
+/**
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
+ */
+function parseSweBenchResponse(data) {
+    return (data.results || [])
+        .filter(m => m.score > 0.5)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30)
+        .map(m => ({
+        modelId: m.model_id,
+        score: m.score,
+        org: m.organization_id || '',
+    }));
+}
+// Module-level counter used to escalate the warning once consecutive
+// fetch failures pile up. This is intentionally process-local: bench-reorder
+// is invoked as a single CLI per workflow run, so there is no concurrency
+// to worry about. If this module is ever reused in a server context,
+// replace this with a per-request counter passed through fetchSweBenchScores.
+let sweBenchFetchFailures = 0;
+const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+async function fetchSweBenchScores() {
+    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
+    try {
+        const resp = await withRetry(async () => {
+            const r = await fetch(url, {
+                signal: AbortSignal.timeout(30_000),
+            });
+            if (!r.ok)
+                throw new Error(`SWE-bench API returned ${r.status}`);
+            return r;
+        });
+        const data = await resp.json();
+        sweBenchFetchFailures = 0;
+        return parseSweBenchResponse(data);
+    }
+    catch (err) {
+        sweBenchFetchFailures++;
+        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
+            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
+        }
+        else {
+            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
+        }
+        return [];
+    }
+}
+/**
+ * Parse the markdown table output from bench-entry.ts
+ */
+function parseMarkdownTable(table) {
+    const lines = table.trim().split('\n');
+    const rows = [];
+    for (const line of lines) {
+        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
+            continue;
+        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+        if (cells.length < 5)
+            continue;
+        const model = cells[0].replace(/`/g, '');
+        const ttftMs = parseDuration(cells[1]);
+        const latencyMs = parseDuration(cells[2]);
+        const tokensPerSec = parseFloat(cells[3]) || 0;
+        const errors = parseInt(cells[4], 10) || 0;
+        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
+    }
+    return rows;
+}
+function parseDuration(s) {
+    s = s.trim();
+    if (s === 'N/A')
+        return Infinity;
+    if (s.endsWith('μs'))
+        return parseFloat(s) / 1000;
+    if (s.endsWith('ms'))
+        return parseFloat(s);
+    if (s.endsWith('s'))
+        return parseFloat(s) * 1000;
+    return parseFloat(s) || Infinity;
+}
+/**
+ * Known SWE-bench Verified scores for models available on NIM.
+ * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ */
+const SWE_BENCH_SCORES = {
+    'deepseek-ai/deepseek-v4-pro': 0.806,
+    'deepseek-ai/deepseek-v4-flash': 0.790,
+    'minimaxai/minimax-m3': 0.805,
+    'minimaxai/minimax-m2.7': 0.802,
+    'moonshotai/kimi-k2.6': 0.802,
+    'z-ai/glm-5.2': 0.778,
+    'mistralai/mistral-medium-3.5-128b': 0.776,
+    'qwen/qwen3.5-397b-a17b': 0.764,
+    'stepfun-ai/step-3.7-flash': 0.744,
+    'qwen/qwen3.5-122b-a10b': 0.734,
+    'bytedance/seed-oss-36b-instruct': 0.735,
+    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
+    'mistralai/mistral-nemotron': 0.720,
+    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
+    'openai/gpt-oss-120b': 0.720,
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
+    'mistralai/mistral-large': 0.700,
+    'mistralai/mistral-large-2-instruct': 0.700,
+    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
+    'nvidia/nemotron-3-super-120b-a12b': 0.680,
+    'mistralai/mistral-small-4-119b-2603': 0.680,
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
+    'nvidia/nemotron-4-340b-instruct': 0.650,
+    'openai/gpt-oss-20b': 0.650,
+    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
+    'thinkingmachines/inkling': 0.650,
+    'meta/llama-3.3-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
+    'meta/llama-3.1-70b-instruct': 0.600,
+    'poolside/laguna-xs-2.1': 0.600,
+    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
+    'microsoft/phi-3.5-moe-instruct': 0.580,
+    'databricks/dbrx-instruct': 0.550,
+    'ai21labs/jamba-1.5-large-instruct': 0.550,
+    // Direct Mistral API model IDs
+    'mistral-medium-3.5': 0.776,
+    'mistral-medium-latest': 0.776,
+    'mistral-large-2512': 0.720,
+    'mistral-large-latest': 0.720,
+    'mistral-small-2603': 0.680,
+    'mistral-small-latest': 0.680,
+    'codestral-2508': 0.650,
+    'codestral-latest': 0.650,
+};
+/**
+ * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
+ */
+function getSweBenchScore(model, fetchedScores) {
+    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
+}
+/**
+ * Effective score = SWE-bench score × latency multiplier.
+ * - Under 60s: no penalty (1.0)
+ * - 60-120s: linear penalty (1.0 → 0.7)
+ * - Over 120s: heavy penalty (0.5)
+ */
+const DEFAULT_MAX_LATENCY_MS = 60_000;
+function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
+    const swe = getSweBenchScore(model, fetchedScores);
+    if (!latencies || !(model in latencies))
+        return swe;
+    const lat = latencies[model];
+    if (lat <= maxLatencyMs)
+        return swe;
+    if (lat <= maxLatencyMs * 2) {
+        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
+}
+/**
+ * Rank models by effective score (SWE-bench + latency penalty).
+ * Only includes models that worked today (tokensPerSec > 0).
+ */
+function rankModels(rows, latencies, fetchedScores) {
+    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    return alive
+        .map(r => r.model)
+        .sort((a, b) => {
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        if (effB !== effA)
+            return effB - effA;
+        // Tiebreaker: faster today wins
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+}
+const TARGET_CONFIG = {
+    nim_models: {
+        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'nim_models',
+    },
+    mistral_models: {
+        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'mistral_models',
+    },
+};
+/**
+ * Update action.yml with new model order for the given target.
+ */
+function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
+    const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
+    const modelString = orderedModels.join(',');
+    const config = TARGET_CONFIG[target];
+    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
+    if (!config.pattern.test(content)) {
+        // Show context around the target key for debugging
+        const key = config.label + ':';
+        const idx = content.indexOf(key);
+        if (idx === -1) {
+            console.warn(`Warning: '${key}' not found in ${actionPath}`);
+        }
+        else {
+            const snippet = content.substring(idx, idx + 200);
+            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
+            console.warn(`Content around '${key}':\n${snippet}`);
+        }
+        return;
+    }
+    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
+    if (updated === content) {
+        console.log(`${config.label} models already in desired order, no changes needed`);
+        return;
+    }
+    (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
+}
+function updateActionYmlMistral(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'mistral_models');
+}
+/**
+ * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
+ * Returns the parsed scores map (empty if neither source yields a value).
+ * Exported for testability.
+ */
+function readFetchedScores(rawInput, scoresFile) {
+    const fetchedScores = new Map();
+    if (scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile)) {
+        try {
+            const fileContent = (0,external_node_fs_namespaceObject.readFileSync)(scoresFile, 'utf-8').trim();
+            const scoresObj = JSON.parse(fileContent);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch (err) {
+            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
+        }
+        return fetchedScores;
+    }
+    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
+    // so we never accidentally match a fragment in the markdown table body.
+    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
+    if (scoresMatch) {
+        try {
+            const scoresObj = JSON.parse(scoresMatch[1]);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch {
+            console.warn('Warning: could not parse FETCHED_SCORES comment');
+        }
+    }
+    return fetchedScores;
+}
+/**
+ * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
+ * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
+ */
+function stripFetchedScoresComment(rawInput, scoresFile) {
+    if (scoresFile)
+        return rawInput;
+    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
+}
+/**
+ * Main entry point — reads table from stdin, ranks, updates action.yml.
+ */
+async function main() {
+    const actionPath = process.env.ACTION_PATH || 'action.yml';
+    const target = (process.env.ACTION_TARGET || 'nim_models');
+    if (!(target in TARGET_CONFIG)) {
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+        process.exit(1);
+    }
+    // Read benchmark table from stdin
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    const rawInput = Buffer.concat(chunks).toString('utf-8');
+    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
+    const scoresFile = process.env.BENCH_SCORES_FILE;
+    const fetchedScores = readFetchedScores(rawInput, scoresFile);
+    if (fetchedScores.size > 0) {
+        const source = scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
+        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
+    }
+    const table = stripFetchedScoresComment(rawInput, scoresFile);
+    if (!table.trim()) {
+        console.error('No benchmark output received on stdin');
+        process.exit(1);
+    }
+    const rows = parseMarkdownTable(table);
+    if (rows.length === 0) {
+        console.error('Could not parse any rows from benchmark output');
+        process.exit(1);
+    }
+    // Extract latencies
+    const latencies = {};
+    for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+            latencies[row.model] = row.latencyMs;
+        }
+    }
+    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+    const ranked = rankModels(rows, latencies, fetchedScoresMap);
+    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+    for (const model of ranked) {
+        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
+        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
+        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+    }
+    updateActionYml(actionPath, ranked, target);
+    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
+}
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
+if (isMainModule) {
+    main().catch(err => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+    });
+}
+
+;// CONCATENATED MODULE: ./src/model-chain.ts
+
+/**
+ * Build a combined fallback chain from NIM and Mistral model lists,
+ * sorted by SWE-bench score descending. Only includes models whose
+ * provider key is available.
+ *
+ * Stable sort — preserves original order within same score.
+ */
+function buildCombinedChain(opts) {
+    const chain = [];
+    if (opts.hasNimKey) {
+        for (const id of opts.nimModels) {
+            chain.push({ id, provider: 'nim' });
+        }
+    }
+    if (opts.hasMistralKey) {
+        for (const id of opts.mistralModels) {
+            chain.push({ id, provider: 'mistral' });
+        }
+    }
+    // Stable sort by SWE-bench score descending
+    chain.sort((a, b) => {
+        const scoreA = getSweBenchScore(a.id);
+        const scoreB = getSweBenchScore(b.id);
+        return scoreB - scoreA;
+    });
+    // Prepend custom model — always tried first regardless of score
+    if (opts.customModel && opts.hasCustomConfig) {
+        chain.unshift({ id: opts.customModel, provider: 'custom' });
+    }
+    return chain;
+}
+
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/core.js
 var _a;
 /** A special constant with type `never` */
@@ -35416,8 +36103,6 @@ const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```json\n'
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
 
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: ./src/prompts.ts
 
 
@@ -35434,6 +36119,12 @@ const SEVERITY_GUIDANCE = `Severity guidance — match the issue text and the *_
 For the two action fields that do not match the severity, write a short placeholder
 string such as "not applicable" rather than omitting it — the schema requires all
 three on every finding.`;
+const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+
+${SEVERITY_GUIDANCE}
+
+${JSON_SCHEMA_DEFINITION}`;
 const languagePrompts = {
     go: `You are an expert senior software engineer performing a code review of Go code.
 
@@ -35556,6 +36247,15 @@ ${SEVERITY_GUIDANCE}
 
 ${JSON_SCHEMA_DEFINITION}`,
 };
+function buildSystemMessage(promptMode, systemPrompt) {
+    if (promptMode === 'replace') {
+        return systemPrompt || BASE_SYSTEM_PROMPT;
+    }
+    if (systemPrompt) {
+        return `${BASE_SYSTEM_PROMPT}\n\n${systemPrompt}`;
+    }
+    return BASE_SYSTEM_PROMPT;
+}
 function languageForFile(filePath) {
     const ext = extname(filePath).toLowerCase();
     switch (ext) {
@@ -35575,699 +36275,6 @@ function languageForFile(filePath) {
     }
 }
 
-;// CONCATENATED MODULE: ./src/review.ts
-
-
-
-
-const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`;
-function splitCSV(s) {
-    return s.split(',').map(item => item.trim()).filter(item => item !== '');
-}
-function loadConfig() {
-    const promptMode = lib_core.getInput('nim_prompt_mode') || 'append';
-    if (promptMode !== 'append' && promptMode !== 'replace') {
-        lib_core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
-    }
-    return {
-        baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
-        apiKey: lib_core.getInput('nim_api_key'),
-        models: splitCSV(lib_core.getInput('nim_models')),
-        mistralApiKey: lib_core.getInput('mistral_api_key') || '',
-        mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-        mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
-            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
-        customApiUrl: lib_core.getInput('custom_api_url') || '',
-        customModel: lib_core.getInput('custom_model') || '',
-        customApiKey: lib_core.getInput('custom_api_key') || '',
-        maxFiles: parseInt(lib_core.getInput('max_files') || '100', 10) || 100,
-        excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
-        systemPrompt: lib_core.getInput('nim_system_prompt'),
-        promptMode,
-    };
-}
-const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
-function parseDiff(raw) {
-    const files = {};
-    const chunks = raw.split('diff --git ');
-    for (const chunk of chunks) {
-        const trimmed = chunk.trim();
-        if (!trimmed)
-            continue;
-        const diffText = 'diff --git ' + trimmed;
-        const firstLine = diffText.split('\n')[0];
-        const m = firstLine.match(diffHeaderRe);
-        if (m) {
-            files[m[2]] = diffText;
-        }
-    }
-    return files;
-}
-function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
-}
-const SEVERITY_META = {
-    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
-    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
-    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
-};
-const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
-function severityTally(review) {
-    const counts = { critical: 0, warning: 0, suggestion: 0 };
-    for (const f of review.findings) {
-        if (f.severity === 'Critical')
-            counts.critical++;
-        else if (f.severity === 'Warning')
-            counts.warning++;
-        else if (f.severity === 'Suggestion')
-            counts.suggestion++;
-    }
-    return counts;
-}
-const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-function parseDiffHunks(diffText) {
-    const ranges = [];
-    for (const line of diffText.split('\n')) {
-        const m = line.match(hunkHeaderRe);
-        if (m) {
-            const start = parseInt(m[1], 10);
-            const count = m[2] ? parseInt(m[2], 10) : 1;
-            ranges.push({ start, end: start + count - 1 });
-        }
-    }
-    return ranges;
-}
-function getFileHunks(filesDiff) {
-    const map = new Map();
-    for (const [file, diffText] of Object.entries(filesDiff)) {
-        map.set(file, parseDiffHunks(diffText));
-    }
-    return map;
-}
-function validateFindings(review, filesDiff, changedFiles) {
-    const warnings = [];
-    const hunks = getFileHunks(filesDiff);
-    const validFindings = [];
-    for (const f of review.findings) {
-        if (!changedFiles.has(f.file)) {
-            warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_end != null && f.line_start == null) {
-            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
-            warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_start != null) {
-            const fileHunks = hunks.get(f.file) || [];
-            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
-            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
-            const overlaps = fileHunks.some(h => {
-                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
-                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
-            });
-            if (!overlaps) {
-                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
-                continue;
-            }
-        }
-        validFindings.push(f);
-    }
-    if (validFindings.length === 0 && !review.summary) {
-        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
-    }
-    return { valid: { findings: validFindings, summary: review.summary }, warnings };
-}
-function renderReview(review) {
-    if (review.findings.length === 0) {
-        return review.summary || 'No issues found.';
-    }
-    const lines = [];
-    for (const severity of SEVERITY_ORDER) {
-        const meta = SEVERITY_META[severity];
-        const bucket = review.findings.filter(f => f.severity === severity);
-        if (bucket.length === 0)
-            continue;
-        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
-        const byFile = new Map();
-        for (const f of bucket) {
-            const list = byFile.get(f.file) || [];
-            list.push(f);
-            byFile.set(f.file, list);
-        }
-        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-            lines.push(`**File:** \`${file}\``);
-            for (const f of findings) {
-                const lineInfo = f.line_start != null
-                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                    : '';
-                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
-                const matchAction = f[meta.actionKey];
-                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
-                    : '';
-                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
-            }
-            lines.push('');
-        }
-    }
-    if (review.summary) {
-        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
-    }
-    return lines.join('\n');
-}
-function globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-    return regex.test(str);
-}
-function shouldExclude(filePath, patterns) {
-    for (const pat of patterns) {
-        if (globMatch(filePath, pat))
-            return true;
-        if (globMatch(filePath.split('/').pop() || '', pat))
-            return true;
-    }
-    return false;
-}
-class DiffTooLargeError extends Error {
-    sizeMB;
-    constructor(sizeMB) {
-        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
-        this.name = 'DiffTooLargeError';
-        this.sizeMB = sizeMB;
-    }
-}
-async function fetchDiff(repo, prNumber, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github.v3.diff',
-            },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-        return response;
-    });
-    const raw = await resp.text();
-    const byteLength = new TextEncoder().encode(raw).byteLength;
-    if (byteLength > 5 * 1024 * 1024) {
-        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
-    }
-    return parseDiff(raw);
-}
-const COMMENT_MARKER = '### AI Code Review';
-const GITHUB_API_TIMEOUT_MS = 30_000;
-async function postComment(repo, prNumber, token, body) {
-    const existingId = await findExistingComment(repo, prNumber, token);
-    if (existingId) {
-        await deleteComment(repo, existingId, token);
-    }
-    await createComment(repo, prNumber, token, body);
-}
-async function deleteComment(repo, commentId, token) {
-    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-    });
-}
-async function findExistingComment(repo, prNumber, token) {
-    let page = 1;
-    const perPage = 100;
-    const maxPages = 50;
-    while (page <= maxPages) {
-        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-        let resp;
-        try {
-            resp = await retry_withRetry(async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/vnd.github+json',
-                    },
-                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-                });
-                if (!response.ok) {
-                    const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-                }
-                return response;
-            });
-        }
-        catch (err) {
-            // 404 means PR doesn't exist or token lacks access — skip comment update
-            if (err instanceof RetryableError && err.status === 404)
-                return null;
-            throw err;
-        }
-        const comments = await resp.json();
-        for (const comment of comments) {
-            if (comment.body.startsWith(COMMENT_MARKER)) {
-                return comment.id;
-            }
-        }
-        if (comments.length < perPage)
-            break;
-        page++;
-    }
-    return null;
-}
-async function createComment(repo, prNumber, token, body) {
-    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-        return response;
-    });
-}
-
-;// CONCATENATED MODULE: external "node:fs"
-const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-;// CONCATENATED MODULE: ./src/event.ts
-
-function loadEvent() {
-    const path = process.env.GITHUB_EVENT_PATH;
-    if (!path) {
-        throw new Error('GITHUB_EVENT_PATH not set');
-    }
-    const data = (0,external_node_fs_namespaceObject.readFileSync)(path, 'utf8');
-    const event = JSON.parse(data);
-    if (!event.pull_request?.number) {
-        throw new Error('No PR number in event payload');
-    }
-    return event;
-}
-
-;// CONCATENATED MODULE: ./src/bench-reorder.ts
-/**
- * bench-reorder.ts
- *
- * After a benchmark run, this script:
- * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
- * 2. Ranks models by SWE-bench score with latency penalty
- * 3. Updates nim_models in action.yml
- */
-
-
-/**
- * Parse SWE-bench API response into sorted entries.
- * Filters to score > 0.5, sorts by score descending, returns top 30.
- */
-function parseSweBenchResponse(data) {
-    return (data.results || [])
-        .filter(m => m.score > 0.5)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 30)
-        .map(m => ({
-        modelId: m.model_id,
-        score: m.score,
-        org: m.organization_id || '',
-    }));
-}
-// Module-level counter used to escalate the warning once consecutive
-// fetch failures pile up. This is intentionally process-local: bench-reorder
-// is invoked as a single CLI per workflow run, so there is no concurrency
-// to worry about. If this module is ever reused in a server context,
-// replace this with a per-request counter passed through fetchSweBenchScores.
-let sweBenchFetchFailures = 0;
-const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
-/**
- * Fetch SWE-bench Verified scores from the leaderboard API.
- * Returns top ~30 models by score, filtered to score > 0.5.
- */
-async function fetchSweBenchScores() {
-    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
-    try {
-        const resp = await withRetry(async () => {
-            const r = await fetch(url, {
-                signal: AbortSignal.timeout(30_000),
-            });
-            if (!r.ok)
-                throw new Error(`SWE-bench API returned ${r.status}`);
-            return r;
-        });
-        const data = await resp.json();
-        sweBenchFetchFailures = 0;
-        return parseSweBenchResponse(data);
-    }
-    catch (err) {
-        sweBenchFetchFailures++;
-        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
-            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
-        }
-        else {
-            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
-        }
-        return [];
-    }
-}
-/**
- * Parse the markdown table output from bench-entry.ts
- */
-function parseMarkdownTable(table) {
-    const lines = table.trim().split('\n');
-    const rows = [];
-    for (const line of lines) {
-        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
-            continue;
-        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
-        if (cells.length < 5)
-            continue;
-        const model = cells[0].replace(/`/g, '');
-        const ttftMs = parseDuration(cells[1]);
-        const latencyMs = parseDuration(cells[2]);
-        const tokensPerSec = parseFloat(cells[3]) || 0;
-        const errors = parseInt(cells[4], 10) || 0;
-        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
-    }
-    return rows;
-}
-function parseDuration(s) {
-    s = s.trim();
-    if (s === 'N/A')
-        return Infinity;
-    if (s.endsWith('μs'))
-        return parseFloat(s) / 1000;
-    if (s.endsWith('ms'))
-        return parseFloat(s);
-    if (s.endsWith('s'))
-        return parseFloat(s) * 1000;
-    return parseFloat(s) || Infinity;
-}
-/**
- * Known SWE-bench Verified scores for models available on NIM.
- * Source: https://llm-stats.com/benchmarks/swe-bench-verified
- */
-const SWE_BENCH_SCORES = {
-    'deepseek-ai/deepseek-v4-pro': 0.806,
-    'deepseek-ai/deepseek-v4-flash': 0.790,
-    'minimaxai/minimax-m3': 0.805,
-    'minimaxai/minimax-m2.7': 0.802,
-    'moonshotai/kimi-k2.6': 0.802,
-    'z-ai/glm-5.2': 0.778,
-    'mistralai/mistral-medium-3.5-128b': 0.776,
-    'qwen/qwen3.5-397b-a17b': 0.764,
-    'stepfun-ai/step-3.7-flash': 0.744,
-    'qwen/qwen3.5-122b-a10b': 0.734,
-    'bytedance/seed-oss-36b-instruct': 0.735,
-    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
-    'mistralai/mistral-nemotron': 0.720,
-    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
-    'openai/gpt-oss-120b': 0.720,
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
-    'mistralai/mistral-large': 0.700,
-    'mistralai/mistral-large-2-instruct': 0.700,
-    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
-    'nvidia/nemotron-3-super-120b-a12b': 0.680,
-    'mistralai/mistral-small-4-119b-2603': 0.680,
-    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
-    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
-    'nvidia/nemotron-4-340b-instruct': 0.650,
-    'openai/gpt-oss-20b': 0.650,
-    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
-    'thinkingmachines/inkling': 0.650,
-    'meta/llama-3.3-70b-instruct': 0.620,
-    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
-    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
-    'meta/llama-3.1-70b-instruct': 0.600,
-    'poolside/laguna-xs-2.1': 0.600,
-    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
-    'microsoft/phi-3.5-moe-instruct': 0.580,
-    'databricks/dbrx-instruct': 0.550,
-    'ai21labs/jamba-1.5-large-instruct': 0.550,
-    // Direct Mistral API model IDs
-    'mistral-medium-3.5': 0.776,
-    'mistral-medium-latest': 0.776,
-    'mistral-large-2512': 0.720,
-    'mistral-large-latest': 0.720,
-    'mistral-small-2603': 0.680,
-    'mistral-small-latest': 0.680,
-    'codestral-2508': 0.650,
-    'codestral-latest': 0.650,
-};
-/**
- * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
- * If fetchedScores is provided, checks it before the hardcoded table.
- */
-function getSweBenchScore(model, fetchedScores) {
-    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
-}
-/**
- * Effective score = SWE-bench score × latency multiplier.
- * - Under 60s: no penalty (1.0)
- * - 60-120s: linear penalty (1.0 → 0.7)
- * - Over 120s: heavy penalty (0.5)
- */
-const DEFAULT_MAX_LATENCY_MS = 60_000;
-function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
-    const swe = getSweBenchScore(model, fetchedScores);
-    if (!latencies || !(model in latencies))
-        return swe;
-    const lat = latencies[model];
-    if (lat <= maxLatencyMs)
-        return swe;
-    if (lat <= maxLatencyMs * 2) {
-        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
-        return swe * (1.0 - 0.3 * ratio);
-    }
-    return swe * 0.5;
-}
-/**
- * Rank models by effective score (SWE-bench + latency penalty).
- * Only includes models that worked today (tokensPerSec > 0).
- */
-function rankModels(rows, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
-    return alive
-        .map(r => r.model)
-        .sort((a, b) => {
-        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        if (effB !== effA)
-            return effB - effA;
-        // Tiebreaker: faster today wins
-        const latA = latencies?.[a] ?? Infinity;
-        const latB = latencies?.[b] ?? Infinity;
-        return latA - latB;
-    });
-}
-const TARGET_CONFIG = {
-    nim_models: {
-        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'nim_models',
-    },
-    mistral_models: {
-        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'mistral_models',
-    },
-};
-/**
- * Update action.yml with new model order for the given target.
- */
-function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
-    const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
-    const config = TARGET_CONFIG[target];
-    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
-    if (!config.pattern.test(content)) {
-        // Show context around the target key for debugging
-        const key = config.label + ':';
-        const idx = content.indexOf(key);
-        if (idx === -1) {
-            console.warn(`Warning: '${key}' not found in ${actionPath}`);
-        }
-        else {
-            const snippet = content.substring(idx, idx + 200);
-            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
-            console.warn(`Content around '${key}':\n${snippet}`);
-        }
-        return;
-    }
-    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
-    if (updated === content) {
-        console.log(`${config.label} models already in desired order, no changes needed`);
-        return;
-    }
-    (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
-}
-function updateActionYmlMistral(actionPath, orderedModels) {
-    updateActionYml(actionPath, orderedModels, 'mistral_models');
-}
-/**
- * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
- * Returns the parsed scores map (empty if neither source yields a value).
- * Exported for testability.
- */
-function readFetchedScores(rawInput, scoresFile) {
-    const fetchedScores = new Map();
-    if (scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile)) {
-        try {
-            const fileContent = (0,external_node_fs_namespaceObject.readFileSync)(scoresFile, 'utf-8').trim();
-            const scoresObj = JSON.parse(fileContent);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch (err) {
-            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
-        }
-        return fetchedScores;
-    }
-    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
-    // so we never accidentally match a fragment in the markdown table body.
-    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
-    if (scoresMatch) {
-        try {
-            const scoresObj = JSON.parse(scoresMatch[1]);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch {
-            console.warn('Warning: could not parse FETCHED_SCORES comment');
-        }
-    }
-    return fetchedScores;
-}
-/**
- * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
- * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
- */
-function stripFetchedScoresComment(rawInput, scoresFile) {
-    if (scoresFile)
-        return rawInput;
-    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
-}
-/**
- * Main entry point — reads table from stdin, ranks, updates action.yml.
- */
-async function main() {
-    const actionPath = process.env.ACTION_PATH || 'action.yml';
-    const target = (process.env.ACTION_TARGET || 'nim_models');
-    if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
-        process.exit(1);
-    }
-    // Read benchmark table from stdin
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-    }
-    const rawInput = Buffer.concat(chunks).toString('utf-8');
-    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
-    const scoresFile = process.env.BENCH_SCORES_FILE;
-    const fetchedScores = readFetchedScores(rawInput, scoresFile);
-    if (fetchedScores.size > 0) {
-        const source = scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
-        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
-    }
-    const table = stripFetchedScoresComment(rawInput, scoresFile);
-    if (!table.trim()) {
-        console.error('No benchmark output received on stdin');
-        process.exit(1);
-    }
-    const rows = parseMarkdownTable(table);
-    if (rows.length === 0) {
-        console.error('Could not parse any rows from benchmark output');
-        process.exit(1);
-    }
-    // Extract latencies
-    const latencies = {};
-    for (const row of rows) {
-        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
-            latencies[row.model] = row.latencyMs;
-        }
-    }
-    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
-    const ranked = rankModels(rows, latencies, fetchedScoresMap);
-    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-    for (const model of ranked) {
-        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
-        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
-        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
-    }
-    updateActionYml(actionPath, ranked, target);
-    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
-}
-// Only run when executed directly
-const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
-if (isMainModule) {
-    main().catch(err => {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
-    });
-}
-
-;// CONCATENATED MODULE: ./src/model-chain.ts
-
-/**
- * Build a combined fallback chain from NIM and Mistral model lists,
- * sorted by SWE-bench score descending. Only includes models whose
- * provider key is available.
- *
- * Stable sort — preserves original order within same score.
- */
-function buildCombinedChain(opts) {
-    const chain = [];
-    if (opts.hasNimKey) {
-        for (const id of opts.nimModels) {
-            chain.push({ id, provider: 'nim' });
-        }
-    }
-    if (opts.hasMistralKey) {
-        for (const id of opts.mistralModels) {
-            chain.push({ id, provider: 'mistral' });
-        }
-    }
-    // Stable sort by SWE-bench score descending
-    chain.sort((a, b) => {
-        const scoreA = getSweBenchScore(a.id);
-        const scoreB = getSweBenchScore(b.id);
-        return scoreB - scoreA;
-    });
-    // Prepend custom model — always tried first regardless of score
-    if (opts.customModel && opts.hasCustomConfig) {
-        chain.unshift({ id: opts.customModel, provider: 'custom' });
-    }
-    return chain;
-}
-
 ;// CONCATENATED MODULE: ./src/utils.ts
 function safeParseJson(content) {
     const trimmed = content.trim();
@@ -36282,6 +36289,7 @@ function safeParseJson(content) {
 }
 
 ;// CONCATENATED MODULE: ./src/index.ts
+
 
 
 
@@ -36403,11 +36411,7 @@ async function run() {
             const result = await client.chat(tagged.id, [
                 {
                     role: 'system',
-                    content: config.promptMode === 'replace'
-                        ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-                        : (config.systemPrompt
-                            ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                            : BASE_SYSTEM_PROMPT),
+                    content: buildSystemMessage(config.promptMode, config.systemPrompt),
                 },
                 { role: 'user', content: userMsg },
             ], {
@@ -36437,11 +36441,7 @@ async function run() {
                 const retryResult = await client.chat(tagged.id, [
                     {
                         role: 'system',
-                        content: config.promptMode === 'replace'
-                            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-                            : (config.systemPrompt
-                                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                                : BASE_SYSTEM_PROMPT),
+                        content: buildSystemMessage(config.promptMode, config.systemPrompt),
                     },
                     { role: 'user', content: userMsg },
                     { role: 'assistant', content: truncated },
@@ -36510,7 +36510,10 @@ async function run() {
     }
     await postComment(repo, prNumber, token, sections.join('\n'));
 }
-run().catch(err => {
-    lib_core.setFailed(err instanceof Error ? err.message : String(err));
-});
+const inTest = process.argv.includes('--test');
+if (!inTest) {
+    run().catch(err => {
+        lib_core.setFailed(err instanceof Error ? err.message : String(err));
+    });
+}
 

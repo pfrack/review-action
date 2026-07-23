@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
 import { OpenAIClient } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
+import { buildSystemMessage } from './prompts.js';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 async function run() {
@@ -119,11 +120,7 @@ async function run() {
             const result = await client.chat(tagged.id, [
                 {
                     role: 'system',
-                    content: config.promptMode === 'replace'
-                        ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-                        : (config.systemPrompt
-                            ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                            : BASE_SYSTEM_PROMPT),
+                    content: buildSystemMessage(config.promptMode, config.systemPrompt),
                 },
                 { role: 'user', content: userMsg },
             ], {
@@ -153,11 +150,7 @@ async function run() {
                 const retryResult = await client.chat(tagged.id, [
                     {
                         role: 'system',
-                        content: config.promptMode === 'replace'
-                            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
-                            : (config.systemPrompt
-                                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
-                                : BASE_SYSTEM_PROMPT),
+                        content: buildSystemMessage(config.promptMode, config.systemPrompt),
                     },
                     { role: 'user', content: userMsg },
                     { role: 'assistant', content: truncated },
@@ -226,6 +219,9 @@ async function run() {
     }
     await postComment(repo, prNumber, token, sections.join('\n'));
 }
-run().catch(err => {
-    core.setFailed(err instanceof Error ? err.message : String(err));
-});
+const inTest = process.argv.includes('--test');
+if (!inTest) {
+    run().catch(err => {
+        core.setFailed(err instanceof Error ? err.message : String(err));
+    });
+}
