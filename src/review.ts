@@ -146,6 +146,7 @@ export function validateFindings(
       const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
       if (!overlaps) {
         warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
+        continue;
       }
     }
     validFindings.push(f);
