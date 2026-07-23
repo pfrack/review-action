@@ -35688,9 +35688,14 @@ function validateFindings(review, filesDiff, changedFiles) {
         }
         if (f.line_start != null) {
             const fileHunks = hunks.get(f.file) || [];
-            const overlaps = fileHunks.some(h => f.line_start <= h.end && (f.line_end ?? f.line_start) >= h.start);
+            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+            const overlaps = fileHunks.some(h => {
+                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
+            });
             if (!overlaps) {
-                warnings.push(`Warning: finding line ${f.line_start} outside changed hunks in "${f.file}", dropping`);
+                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
                 continue;
             }
         }
@@ -35768,7 +35773,7 @@ async function fetchDiff(repo, prNumber, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3.diff',
             },
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -35784,15 +35789,30 @@ async function fetchDiff(repo, prNumber, token) {
     return parseDiff(raw);
 }
 const COMMENT_MARKER = '### AI Code Review';
+const GITHUB_API_TIMEOUT_MS = 30_000;
 async function postComment(repo, prNumber, token, body) {
-    // Try to find and update an existing review comment
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
-        await updateComment(repo, existingId, token, body);
+        await deleteComment(repo, existingId, token);
     }
-    else {
-        await createComment(repo, prNumber, token, body);
-    }
+    await createComment(repo, prNumber, token, body);
+}
+async function deleteComment(repo, commentId, token) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
 }
 async function findExistingComment(repo, prNumber, token) {
     let page = 1;
@@ -35808,7 +35828,7 @@ async function findExistingComment(repo, prNumber, token) {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/vnd.github+json',
                     },
-                    signal: AbortSignal.timeout(30_000),
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
                 });
                 if (!response.ok) {
                     const body = await response.text();
@@ -35835,26 +35855,6 @@ async function findExistingComment(repo, prNumber, token) {
     }
     return null;
 }
-async function updateComment(repo, commentId, token, body) {
-    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-        return response;
-    });
-}
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
     const resp = await retry_withRetry(async () => {
@@ -35866,7 +35866,7 @@ async function createComment(repo, prNumber, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -36479,8 +36479,17 @@ async function run() {
         }
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    // No issues found — delete existing comment and stop
+    if (review && review.findings.length === 0) {
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
+            lib_core.info('Deleted previous review comment (no issues found)');
+        }
+        return;
+    }
     const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
-    if (review && review.findings.length > 0) {
+    if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [
             critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
@@ -36488,8 +36497,6 @@ async function run() {
             suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
         ].filter(Boolean).join(' · ');
         sections.push(`\n${tally}\n`);
-    }
-    if (review) {
         sections.push(`\n${renderReview(review)}`);
     }
     else if (!usedModel) {
@@ -36497,9 +36504,6 @@ async function run() {
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
         sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
-    }
-    else {
-        sections.push(`\nNo issues found.`);
     }
     if (truncated) {
         sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);

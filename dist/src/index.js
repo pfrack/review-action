@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { OpenAIClient } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
@@ -195,8 +195,17 @@ async function run() {
         }
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    // No issues found — delete existing comment and stop
+    if (review && review.findings.length === 0) {
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
+            core.info('Deleted previous review comment (no issues found)');
+        }
+        return;
+    }
     const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
-    if (review && review.findings.length > 0) {
+    if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [
             critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
@@ -204,8 +213,6 @@ async function run() {
             suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
         ].filter(Boolean).join(' · ');
         sections.push(`\n${tally}\n`);
-    }
-    if (review) {
         sections.push(`\n${renderReview(review)}`);
     }
     else if (!usedModel) {
@@ -213,9 +220,6 @@ async function run() {
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
         sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
-    }
-    else {
-        sections.push(`\nNo issues found.`);
     }
     if (truncated) {
         sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);

@@ -143,9 +143,15 @@ export function validateFindings(
     }
     if (f.line_start != null) {
       const fileHunks = hunks.get(f.file) || [];
-      const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
+      // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+      // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+      const overlaps = fileHunks.some(h => {
+        const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+        return f.line_start! <= h.end + tolerance && (f.line_end ?? f.line_start!) >= h.start - tolerance;
+      });
       if (!overlaps) {
         warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
+        continue;
       }
     }
     validFindings.push(f);
@@ -234,7 +240,7 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3.diff',
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -253,19 +259,36 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
 }
 
 const COMMENT_MARKER = '### AI Code Review';
+const GITHUB_API_TIMEOUT_MS = 30_000;
 
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
-  // Try to find and update an existing review comment
   const existingId = await findExistingComment(repo, prNumber, token);
-
   if (existingId) {
-    await updateComment(repo, existingId, token, body);
-  } else {
-    await createComment(repo, prNumber, token, body);
+    await deleteComment(repo, existingId, token);
   }
+  await createComment(repo, prNumber, token, body);
 }
 
-async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
+export async function deleteComment(repo: string, commentId: number, token: string): Promise<void> {
+  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+  await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+  });
+}
+
+export async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
   let page = 1;
   const perPage = 100;
   const maxPages = 50;
@@ -280,7 +303,7 @@ async function findExistingComment(repo: string, prNumber: number, token: string
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github+json',
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
 
         if (!response.ok) {
@@ -309,28 +332,6 @@ async function findExistingComment(repo: string, prNumber: number, token: string
   return null;
 }
 
-async function updateComment(repo: string, commentId: number, token: string, body: string): Promise<void> {
-  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-  const resp = await withRetry(async () => {
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json',
-      },
-      body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-    }
-    return response;
-  });
-}
-
 async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
   const resp = await withRetry(async () => {
@@ -342,7 +343,7 @@ async function createComment(repo: string, prNumber: number, token: string, body
         'Accept': 'application/vnd.github+json',
       },
       body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
