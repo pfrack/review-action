@@ -64,7 +64,13 @@ Example: [true, false, true]`;
       maxTokens: 256,
     });
 
-    const parsed = JSON.parse(result.content);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.content);
+    } catch {
+      return { valid: findings, dropped: 0 };
+    }
+
     if (!Array.isArray(parsed)) return { valid: findings, dropped: 0 };
 
     const valid: ReviewFinding[] = [];

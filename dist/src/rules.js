@@ -12,11 +12,17 @@ export function parseRules(input) {
         }
         const categoryMatch = description.match(/^([^:]+):\s*/);
         let category = 'custom';
+        let pattern;
         if (categoryMatch) {
             category = categoryMatch[1].trim().toLowerCase();
             description = description.slice(categoryMatch[0].length);
         }
-        return { category, severity, description: description.trim() };
+        const patternMatch = description.match(/^\/(.+?)\/\s*/);
+        if (patternMatch) {
+            pattern = patternMatch[1];
+            description = description.slice(patternMatch[0].length);
+        }
+        return { category, severity, description: description.trim(), pattern };
     });
 }
 const INJECTION_PATTERNS = [

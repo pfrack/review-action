@@ -2,6 +2,7 @@ export interface Rule {
   category: string;
   severity: 'critical' | 'warning' | 'suggestion';
   description: string;
+  pattern?: string;
 }
 
 export function parseRules(input: string): Rule[] {
@@ -20,12 +21,19 @@ export function parseRules(input: string): Rule[] {
 
     const categoryMatch = description.match(/^([^:]+):\s*/);
     let category = 'custom';
+    let pattern: string | undefined;
     if (categoryMatch) {
       category = categoryMatch[1].trim().toLowerCase();
       description = description.slice(categoryMatch[0].length);
     }
 
-    return { category, severity, description: description.trim() };
+    const patternMatch = description.match(/^\/(.+?)\/\s*/);
+    if (patternMatch) {
+      pattern = patternMatch[1];
+      description = description.slice(patternMatch[0].length);
+    }
+
+    return { category, severity, description: description.trim(), pattern };
   });
 }
 

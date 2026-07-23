@@ -35498,11 +35498,17 @@ function parseRules(input) {
         }
         const categoryMatch = description.match(/^([^:]+):\s*/);
         let category = 'custom';
+        let pattern;
         if (categoryMatch) {
             category = categoryMatch[1].trim().toLowerCase();
             description = description.slice(categoryMatch[0].length);
         }
-        return { category, severity, description: description.trim() };
+        const patternMatch = description.match(/^\/(.+?)\/\s*/);
+        if (patternMatch) {
+            pattern = patternMatch[1];
+            description = description.slice(patternMatch[0].length);
+        }
+        return { category, severity, description: description.trim(), pattern };
     });
 }
 const INJECTION_PATTERNS = [
@@ -35794,7 +35800,13 @@ Example: [true, false, true]`;
             temperature: 0,
             maxTokens: 256,
         });
-        const parsed = JSON.parse(result.content);
+        let parsed;
+        try {
+            parsed = JSON.parse(result.content);
+        }
+        catch {
+            return { valid: findings, dropped: 0 };
+        }
         if (!Array.isArray(parsed))
             return { valid: findings, dropped: 0 };
         const valid = [];
@@ -36614,34 +36626,42 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
     return data.id;
 }
 async function findExistingReview(repo, prNumber, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=100`;
-    let resp;
-    try {
-        resp = await retry_withRetry(async () => {
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github+json',
-                },
-                signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-            }
-            return response;
-        });
-    }
-    catch (err) {
-        if (err instanceof RetryableError && err.status === 404)
-            return null;
-        throw err;
-    }
-    const reviews = await resp.json();
-    for (const review of reviews) {
-        if (review.body?.startsWith('### AI Code Review')) {
-            return review.id;
         }
+        catch (err) {
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith('### AI Code Review')) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
     }
     return null;
 }
@@ -36752,6 +36772,23 @@ function mergeFindings(batchResults) {
 
 
 
+function buildSystemMessage(config, detectedLanguage, rules) {
+    const base = buildSystemPrompt(detectedLanguage, rules);
+    if (config.promptMode === 'replace') {
+        return config.systemPrompt || base;
+    }
+    return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
+}
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    const existingReviewId = await findExistingReview(repo, prNumber, token);
+    if (existingReviewId) {
+        await deleteReview(repo, prNumber, existingReviewId, token);
+    }
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    if (existingCommentId) {
+        await deleteComment(repo, existingCommentId, token);
+    }
+}
 async function run() {
     const config = loadConfig();
     const hasCustom = !!(config.customApiUrl && config.customModel);
@@ -36913,13 +36950,7 @@ async function run() {
                 const result = await client.chat(tagged.id, [
                     {
                         role: 'system',
-                        content: (() => {
-                            const base = buildSystemPrompt(detectedLanguage, rules);
-                            if (config.promptMode === 'replace') {
-                                return config.systemPrompt || base;
-                            }
-                            return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
-                        })(),
+                        content: buildSystemMessage(config, detectedLanguage, rules),
                     },
                     { role: 'user', content: userMsg },
                 ], {
@@ -36948,13 +36979,7 @@ async function run() {
                     const retryResult = await client.chat(tagged.id, [
                         {
                             role: 'system',
-                            content: (() => {
-                                const base = buildSystemPrompt(detectedLanguage, rules);
-                                if (config.promptMode === 'replace') {
-                                    return config.systemPrompt || base;
-                                }
-                                return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
-                            })(),
+                            content: buildSystemMessage(config, detectedLanguage, rules),
                         },
                         { role: 'user', content: userMsg },
                         { role: 'assistant', content: truncated },
@@ -37034,16 +37059,8 @@ async function run() {
     const reviewDuration = Date.now() - reviewStartTime;
     // No issues found — clean up any existing review/comment and stop
     if (review && review.findings.length === 0) {
-        const existingReviewId = await findExistingReview(repo, prNumber, token);
-        if (existingReviewId) {
-            await deleteReview(repo, prNumber, existingReviewId, token);
-            lib_core.info('Deleted previous review (no issues found)');
-        }
-        const existingCommentId = await findExistingComment(repo, prNumber, token);
-        if (existingCommentId) {
-            await deleteComment(repo, existingCommentId, token);
-            lib_core.info('Deleted previous review comment (no issues found)');
-        }
+        await cleanupPreviousOutput(repo, prNumber, token);
+        lib_core.info('Deleted previous review (no issues found)');
         return;
     }
     const { critical, warning, suggestion } = review ? severityTally(review) : { critical: 0, warning: 0, suggestion: 0 };
@@ -37056,14 +37073,7 @@ async function run() {
     if (review && review.findings.length > 0) {
         if (shouldUseInlineComments(review.findings)) {
             // Post findings as inline review comments
-            const existingReviewId = await findExistingReview(repo, prNumber, token);
-            if (existingReviewId) {
-                await deleteReview(repo, prNumber, existingReviewId, token);
-            }
-            const existingCommentId = await findExistingComment(repo, prNumber, token);
-            if (existingCommentId) {
-                await deleteComment(repo, existingCommentId, token);
-            }
+            await cleanupPreviousOutput(repo, prNumber, token);
             let body = `${summaryBody}\n${renderReview(review)}\n`;
             if (truncated) {
                 body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
@@ -37073,14 +37083,7 @@ async function run() {
         }
         else {
             // Too many findings for inline comments — post summary comment instead
-            const existingReviewId = await findExistingReview(repo, prNumber, token);
-            if (existingReviewId) {
-                await deleteReview(repo, prNumber, existingReviewId, token);
-            }
-            const existingCommentId = await findExistingComment(repo, prNumber, token);
-            if (existingCommentId) {
-                await deleteComment(repo, existingCommentId, token);
-            }
+            await cleanupPreviousOutput(repo, prNumber, token);
             const sections = [summaryBody];
             sections.push(`\n${renderReview(review)}\n`);
             if (truncated) {
@@ -37091,25 +37094,11 @@ async function run() {
         }
     }
     else if (!usedModel) {
-        const existingReviewId = await findExistingReview(repo, prNumber, token);
-        if (existingReviewId) {
-            await deleteReview(repo, prNumber, existingReviewId, token);
-        }
-        const existingCommentId = await findExistingComment(repo, prNumber, token);
-        if (existingCommentId) {
-            await deleteComment(repo, existingCommentId, token);
-        }
+        await cleanupPreviousOutput(repo, prNumber, token);
         await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
-        const existingReviewId = await findExistingReview(repo, prNumber, token);
-        if (existingReviewId) {
-            await deleteReview(repo, prNumber, existingReviewId, token);
-        }
-        const existingCommentId = await findExistingComment(repo, prNumber, token);
-        if (existingCommentId) {
-            await deleteComment(repo, existingCommentId, token);
-        }
+        await cleanupPreviousOutput(repo, prNumber, token);
         await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
     }
     // Collect and output metrics

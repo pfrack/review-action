@@ -7,11 +7,30 @@ import { buildCombinedChain, type Provider } from './model-chain.js';
 import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { safeParseJson } from './utils.js';
-import { parseRules, validateRules } from './rules.js';
+import { parseRules, validateRules, type Rule } from './rules.js';
 import { validateCodeContext, revalidateFindings } from './validation.js';
 import { createReview, shouldUseInlineComments, findExistingReview, deleteReview } from './github-review.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
+
+function buildSystemMessage(config: { promptMode: string; systemPrompt: string }, detectedLanguage?: string, rules?: Rule[]): string {
+  const base = buildSystemPrompt(detectedLanguage, rules);
+  if (config.promptMode === 'replace') {
+    return config.systemPrompt || base;
+  }
+  return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
+}
+
+async function cleanupPreviousOutput(repo: string, prNumber: number, token: string): Promise<void> {
+  const existingReviewId = await findExistingReview(repo, prNumber, token);
+  if (existingReviewId) {
+    await deleteReview(repo, prNumber, existingReviewId, token);
+  }
+  const existingCommentId = await findExistingComment(repo, prNumber, token);
+  if (existingCommentId) {
+    await deleteComment(repo, existingCommentId, token);
+  }
+}
 
 async function run(): Promise<void> {
   const config = loadConfig();
@@ -208,13 +227,7 @@ async function run(): Promise<void> {
         const result = await client.chat(tagged.id, [
           {
             role: 'system',
-            content: (() => {
-              const base = buildSystemPrompt(detectedLanguage, rules);
-              if (config.promptMode === 'replace') {
-                return config.systemPrompt || base;
-              }
-              return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
-            })(),
+            content: buildSystemMessage(config, detectedLanguage, rules),
           },
           { role: 'user', content: userMsg },
         ], {
@@ -247,13 +260,7 @@ async function run(): Promise<void> {
           const retryResult = await client.chat(tagged.id, [
             {
               role: 'system',
-              content: (() => {
-                const base = buildSystemPrompt(detectedLanguage, rules);
-                if (config.promptMode === 'replace') {
-                  return config.systemPrompt || base;
-                }
-                return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
-              })(),
+              content: buildSystemMessage(config, detectedLanguage, rules),
             },
             { role: 'user', content: userMsg },
             { role: 'assistant', content: truncated },
@@ -340,16 +347,8 @@ async function run(): Promise<void> {
 
   // No issues found — clean up any existing review/comment and stop
   if (review && review.findings.length === 0) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-      await deleteReview(repo, prNumber, existingReviewId, token);
-      core.info('Deleted previous review (no issues found)');
-    }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-      await deleteComment(repo, existingCommentId, token);
-      core.info('Deleted previous review comment (no issues found)');
-    }
+    await cleanupPreviousOutput(repo, prNumber, token);
+    core.info('Deleted previous review (no issues found)');
     return;
   }
 
@@ -365,14 +364,7 @@ async function run(): Promise<void> {
   if (review && review.findings.length > 0) {
     if (shouldUseInlineComments(review.findings)) {
       // Post findings as inline review comments
-      const existingReviewId = await findExistingReview(repo, prNumber, token);
-      if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
-      }
-      const existingCommentId = await findExistingComment(repo, prNumber, token);
-      if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
-      }
+      await cleanupPreviousOutput(repo, prNumber, token);
 
       let body = `${summaryBody}\n${renderReview(review)}\n`;
       if (truncated) {
@@ -383,14 +375,7 @@ async function run(): Promise<void> {
       core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
     } else {
       // Too many findings for inline comments — post summary comment instead
-      const existingReviewId = await findExistingReview(repo, prNumber, token);
-      if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
-      }
-      const existingCommentId = await findExistingComment(repo, prNumber, token);
-      if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
-      }
+      await cleanupPreviousOutput(repo, prNumber, token);
 
       const sections: string[] = [summaryBody];
       sections.push(`\n${renderReview(review)}\n`);
@@ -401,24 +386,10 @@ async function run(): Promise<void> {
       core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
     }
   } else if (!usedModel) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-      await deleteReview(repo, prNumber, existingReviewId, token);
-    }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-      await deleteComment(repo, existingCommentId, token);
-    }
+    await cleanupPreviousOutput(repo, prNumber, token);
     await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-      await deleteReview(repo, prNumber, existingReviewId, token);
-    }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-      await deleteComment(repo, existingCommentId, token);
-    }
+    await cleanupPreviousOutput(repo, prNumber, token);
     await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
   }
 

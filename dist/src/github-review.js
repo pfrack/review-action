@@ -56,34 +56,42 @@ export async function createReview(repo, prNumber, commitSha, findings, body, to
     return data.id;
 }
 export async function findExistingReview(repo, prNumber, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=100`;
-    let resp;
-    try {
-        resp = await withRetry(async () => {
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github+json',
-                },
-                signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-            }
-            return response;
-        });
-    }
-    catch (err) {
-        if (err instanceof RetryableError && err.status === 404)
-            return null;
-        throw err;
-    }
-    const reviews = await resp.json();
-    for (const review of reviews) {
-        if (review.body?.startsWith('### AI Code Review')) {
-            return review.id;
         }
+        catch (err) {
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith('### AI Code Review')) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
     }
     return null;
 }
