@@ -124,6 +124,7 @@ export class OpenAIClient {
         const body = await response.text();
         const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
                          this.baseURL.includes('mistral') ? 'Mistral' :
+                         this.baseURL.includes('groq') ? 'Groq' :
                          this.baseURL.split('/')[2] || 'API';
         throw new RetryableError(`${provider} returned ${response.status}: ${body}`, response.status);
       }
