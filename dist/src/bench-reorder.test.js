@@ -7,8 +7,9 @@ import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fe
 describe('updateActionYml groq target', () => {
     it('correctly replaces groq_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
-        const actionPath = join(tmpDir, 'action.yml');
-        const content = `name: 'NIM Code Review'
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
 inputs:
   groq_models:
     description: 'Comma-separated Groq model fallback chain'
@@ -17,12 +18,15 @@ inputs:
     description: 'Comma-separated Mistral model fallback chain'
     default: 'mistral-medium-3.5'
 `;
-        writeFileSync(actionPath, content, 'utf-8');
-        updateActionYml(actionPath, ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'], 'groq_models');
-        const result = readFileSync(actionPath, 'utf-8');
-        assert.ok(result.includes("default: 'llama-3.3-70b-versatile,openai/gpt-oss-120b'"));
-        assert.ok(result.includes("default: 'mistral-medium-3.5'"));
-        rmSync(tmpDir, { recursive: true, force: true });
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYml(actionPath, ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'], 'groq_models');
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.ok(result.includes("default: 'llama-3.3-70b-versatile,openai/gpt-oss-120b'"));
+            assert.ok(result.includes("default: 'mistral-medium-3.5'"));
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
     });
 });
 describe('parseMarkdownTable', () => {
@@ -150,8 +154,9 @@ describe('getSweBenchScore — Mistral direct-API IDs', () => {
 describe('updateActionYmlMistral', () => {
     it('correctly replaces mistral_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
-        const actionPath = join(tmpDir, 'action.yml');
-        const content = `name: 'NIM Code Review'
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
 inputs:
   mistral_models:
     description: 'Comma-separated Mistral model fallback chain'
@@ -160,28 +165,35 @@ inputs:
     description: 'Comma-separated fallback model chain'
     default: 'deepseek-ai/deepseek-v4-pro'
 `;
-        writeFileSync(actionPath, content, 'utf-8');
-        updateActionYmlMistral(actionPath, ['codestral-2508', 'mistral-medium-3.5']);
-        const result = readFileSync(actionPath, 'utf-8');
-        assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
-        // nim_models should be unchanged
-        assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
-        rmSync(tmpDir, { recursive: true, force: true });
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlMistral(actionPath, ['codestral-2508', 'mistral-medium-3.5']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
+            // nim_models should be unchanged
+            assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
     });
     it('does not modify file when mistral_models block not found', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
-        const actionPath = join(tmpDir, 'action.yml');
-        const content = `name: 'NIM Code Review'
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
 inputs:
   nim_models:
     description: 'Comma-separated fallback model chain'
     default: 'deepseek-ai/deepseek-v4-pro'
 `;
-        writeFileSync(actionPath, content, 'utf-8');
-        updateActionYmlMistral(actionPath, ['codestral-2508']);
-        const result = readFileSync(actionPath, 'utf-8');
-        assert.strictEqual(result, content); // unchanged
-        rmSync(tmpDir, { recursive: true, force: true });
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlMistral(actionPath, ['codestral-2508']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.strictEqual(result, content); // unchanged
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
     });
 });
 describe('getSweBenchScore with fetched scores', () => {

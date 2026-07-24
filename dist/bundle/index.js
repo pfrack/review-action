@@ -27492,6 +27492,8 @@ var __webpack_exports__ = {};
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var lib_core = __nccwpck_require__(7484);
+;// CONCATENATED MODULE: external "node:dns/promises"
+const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:dns/promises");
 ;// CONCATENATED MODULE: ./src/retry.ts
 class RetryableError extends Error {
     status;
@@ -27588,7 +27590,13 @@ class OpenAIClient {
             }
             return response;
         });
-        const data = await resp.json();
+        let data;
+        try {
+            data = await resp.json();
+        }
+        catch {
+            throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+        }
         if (!data.choices || data.choices.length === 0) {
             throw new Error('API returned no choices');
         }
@@ -27725,8 +27733,7 @@ function validateCodeContext(finding, diff) {
             idx += 1;
         }
     }
-    // Check for backtick-wrapped identifiers (most reliable)
-    const backtickRefs = issue.match(/`(\w+)`/g);
+    const backtickRefs = issue.match(/(?<!\\)`(\w+)`/g) ?? issue.match(/`(\w+)`/g);
     if (backtickRefs) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
@@ -27735,7 +27742,6 @@ function validateCodeContext(finding, diff) {
             }
         }
     }
-    // Check for explicit references like "function X", "variable X", "class X"
     const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
     if (explicitRef) {
         const name = explicitRef[1];
@@ -27745,7 +27751,24 @@ function validateCodeContext(finding, diff) {
     }
     return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
-async function revalidateFindings(findings, diff, client, model) {
+function parseHunkRanges(diffLines) {
+    const ranges = [];
+    const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+    for (const line of diffLines) {
+        const m = line.match(re);
+        if (m) {
+            const start = parseInt(m[1], 10);
+            const count = m[2] ? parseInt(m[2], 10) : 1;
+            ranges.push({ start, end: start + count - 1 });
+        }
+    }
+    return ranges;
+}
+function strictOverlapsHunks(lineStart, lineEnd, hunks) {
+    const end = lineEnd ?? lineStart;
+    return hunks.some(h => lineStart <= h.end && end >= h.start);
+}
+async function revalidateFindings(findings, filesDiff, client, model) {
     if (findings.length === 0)
         return { valid: [], dropped: 0 };
     const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue}`).join('\n');
@@ -27758,10 +27781,34 @@ ${findingsText}
 Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
 Example: [true, false, true]`;
     const MAX_DIFF_LENGTH = 8000;
-    let truncatedDiff = diff;
-    if (diff.length > MAX_DIFF_LENGTH) {
-        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
-        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
+    let allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+    let truncatedDiff = allDiff;
+    if (allDiff.length > MAX_DIFF_LENGTH) {
+        const lastNewline = allDiff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+        truncatedDiff = allDiff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
+    }
+    const fileHunksCache = new Map();
+    function getFileHunks(file) {
+        if (!fileHunksCache.has(file)) {
+            const fileDiff = filesDiff[file] || '';
+            fileHunksCache.set(file, parseHunkRanges(fileDiff.split('\n')));
+        }
+        return fileHunksCache.get(file);
+    }
+    function strictMechanicalFilter() {
+        const valid = [];
+        let dropped = 0;
+        for (const f of findings) {
+            if (f.line_start != null) {
+                const hunks = getFileHunks(f.file);
+                if (!strictOverlapsHunks(f.line_start, f.line_end ?? null, hunks)) {
+                    dropped++;
+                    continue;
+                }
+            }
+            valid.push(f);
+        }
+        return { valid, dropped };
     }
     try {
         const result = await client.chat(model, [
@@ -27776,11 +27823,13 @@ Example: [true, false, true]`;
             parsed = JSON.parse(result.content);
         }
         catch {
-            lib_core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
-            return { valid: findings, dropped: 0 };
+            lib_core.warning('LLM revalidation failed: could not parse model response. Applying strict mechanical filter.');
+            return strictMechanicalFilter();
         }
-        if (!Array.isArray(parsed))
-            return { valid: findings, dropped: 0 };
+        if (!Array.isArray(parsed)) {
+            lib_core.warning('LLM revalidation returned non-array. Applying strict mechanical filter.');
+            return strictMechanicalFilter();
+        }
         const valid = [];
         let dropped = 0;
         for (let i = 0; i < findings.length; i++) {
@@ -27794,8 +27843,8 @@ Example: [true, false, true]`;
         return { valid, dropped };
     }
     catch {
-        lib_core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
-        return { valid: findings, dropped: 0 };
+        lib_core.warning('LLM revalidation failed: model call threw an error. Applying strict mechanical filter.');
+        return strictMechanicalFilter();
     }
 }
 
@@ -27812,7 +27861,7 @@ function safeParseJson(content) {
     }
 }
 function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+    return text.replace(/[\\*_{}\[\]()#`<>&+~|!]/g, '\\$&');
 }
 
 ;// CONCATENATED MODULE: ./src/github-review.ts
@@ -27838,6 +27887,14 @@ function formatFindingComment(finding) {
         parts.push(`**Action:** ${escapeMarkdown(action)}`);
     }
     return parts.join('\n\n');
+}
+class ReviewCreationError extends Error {
+    status;
+    constructor(message, status) {
+        super(message);
+        this.name = 'ReviewCreationError';
+        this.status = status;
+    }
 }
 async function createReview(repo, prNumber, commitSha, findings, body, token) {
     if (!token)
@@ -27869,25 +27926,36 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
     if (body)
         payload.body = body;
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    try {
+        const resp = await retry_withRetry(async () => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github+json',
+                },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                const errBody = await response.text();
+                throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+            }
+            return response;
         });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+        const data = await resp.json();
+        return data.id;
+    }
+    catch (err) {
+        // If inline review creation fails (500 from stale commit_id or invalid line positions,
+        // or 422 from validation errors), throw a typed error so callers can fall back to
+        // posting a plain comment.
+        if (err instanceof RetryableError && (err.status >= 500 || err.status === 422)) {
+            throw new ReviewCreationError(`Failed to create inline review (HTTP ${err.status}): ${err.message}`, err.status);
         }
-        return response;
-    });
-    const data = await resp.json();
-    return data.id;
+        throw err;
+    }
 }
 async function findExistingReview(repo, prNumber, token) {
     let page = 1;
@@ -27964,9 +28032,10 @@ function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 function loadConfig() {
-    const promptMode = lib_core.getInput('nim_prompt_mode') || 'append';
-    if (promptMode !== 'append' && promptMode !== 'replace') {
-        lib_core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+    const promptModeRaw = lib_core.getInput('nim_prompt_mode');
+    const promptMode = (promptModeRaw === 'replace') ? 'replace' : 'append';
+    if (promptModeRaw && promptModeRaw !== 'append' && promptModeRaw !== 'replace') {
+        lib_core.warning(`Invalid nim_prompt_mode "${promptModeRaw}", defaulting to "append"`);
     }
     return {
         baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
@@ -27983,7 +28052,15 @@ function loadConfig() {
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
         customApiKey: lib_core.getInput('custom_api_key') || '',
-        maxFiles: parseInt(lib_core.getInput('max_files') || '100', 10) || 100,
+        maxFiles: (() => {
+            const raw = lib_core.getInput('max_files') || '100';
+            const n = Number.parseInt(raw, 10);
+            if (!Number.isInteger(n) || n < 0) {
+                lib_core.warning(`Invalid max_files "${raw}", defaulting to 100`);
+                return 100;
+            }
+            return Math.min(n, 500);
+        })(),
         excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: lib_core.getInput('nim_system_prompt'),
         promptMode,
@@ -28085,8 +28162,7 @@ async function validateFindings(review, filesDiff, changedFiles, client, model) 
     // Step 5: Optional LLM re-validation to catch hallucinated findings
     let dropped = 0;
     if (client && model && validFindings.length > 0) {
-        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        const revalidated = await revalidateFindings(validFindings, filesDiff, client, model);
         validFindings.length = 0;
         validFindings.push(...revalidated.valid);
         dropped = revalidated.dropped;
@@ -36716,41 +36792,43 @@ if (isMainModule) {
 ;// CONCATENATED MODULE: ./src/model-chain.ts
 
 /**
- * Build a combined fallback chain from NIM, Mistral, and Groq model lists,
- * sorted by SWE-bench score descending. Only includes models whose
- * provider key is available.
+ * Build the model fallback chain.
  *
- * Stable sort — preserves original order within same score.
+ * Custom models (no SWE-bench score) are always first — never sorted
+ * alongside provider models.
+ *
+ * Provider models (NIM, Mistral, Groq) are combined and sorted by
+ * SWE-bench score descending as the fallback chain.
+ *
+ * Only includes models whose provider key is available.
  */
 function buildCombinedChain(opts) {
-    const chain = [];
+    const providerModels = [];
     const { groqModels = [], hasGroqKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
-            chain.push({ id, provider: 'nim' });
+            providerModels.push({ id, provider: 'nim' });
         }
     }
     if (opts.hasMistralKey) {
         for (const id of opts.mistralModels) {
-            chain.push({ id, provider: 'mistral' });
+            providerModels.push({ id, provider: 'mistral' });
         }
     }
     if (hasGroqKey) {
         for (const id of groqModels) {
-            chain.push({ id, provider: 'groq' });
+            providerModels.push({ id, provider: 'groq' });
         }
     }
-    // Stable sort by SWE-bench score descending
-    chain.sort((a, b) => {
+    providerModels.sort((a, b) => {
         const scoreA = getSweBenchScore(a.id);
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
-    // Prepend custom model — always tried first regardless of score
     if (opts.customModel && opts.hasCustomConfig) {
-        chain.unshift({ id: opts.customModel, provider: 'custom' });
+        return [{ id: opts.customModel, provider: 'custom' }, ...providerModels];
     }
-    return chain;
+    return providerModels;
 }
 const PROBE_TIMEOUT_MS = 10_000;
 async function probeModels(chain, clients) {
@@ -36869,14 +36947,73 @@ function mergeFindings(batchResults) {
 
 
 
-async function cleanupPreviousOutput(repo, prNumber, token) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
+
+const METADATA_HOSTNAMES = new Set([
+    '169.254.169.254',
+    'metadata.google.internal',
+    '100.100.100.200',
+    'metadata.internal',
+]);
+function isPrivateIp(ip) {
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0')
+        return false;
+    if (/^169\.254\./.test(ip))
+        return true;
+    if (/^10\./.test(ip))
+        return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip))
+        return true;
+    if (/^192\.168\./.test(ip))
+        return true;
+    if (/^fd[0-9a-f]{2}:/i.test(ip))
+        return true;
+    return false;
+}
+async function validateUrlForSSRF(urlString, label) {
+    const url = new URL(urlString);
+    const isLoopback = url.hostname === 'localhost'
+        || url.hostname === '127.0.0.1'
+        || url.hostname === '::1'
+        || url.hostname === '0.0.0.0';
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+        throw new Error(`${label} must use https:// (or http:// for localhost only)`);
     }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
+    if (METADATA_HOSTNAMES.has(url.hostname.toLowerCase())) {
+        throw new Error(`${label} points to a blocked host (${url.hostname})`);
+    }
+    if (isPrivateIp(url.hostname)) {
+        throw new Error(`${label} points to a blocked IP range (${url.hostname})`);
+    }
+    try {
+        const result = await (0,promises_namespaceObject.lookup)(url.hostname, { all: true });
+        for (const entry of result) {
+            if (isPrivateIp(entry.address)) {
+                throw new Error(`${label} resolves to a private IP (${entry.address})`);
+            }
+        }
+    }
+    catch (err) {
+        if (err instanceof Error && !err.message.includes('resolves to a private IP')) {
+            // DNS lookup failed — connection will fail naturally
+        }
+        else {
+            throw err;
+        }
+    }
+}
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    try {
+        const existingReviewId = await findExistingReview(repo, prNumber, token);
+        if (existingReviewId) {
+            await deleteReview(repo, prNumber, existingReviewId, token);
+        }
+        const existingCommentId = await findExistingComment(repo, prNumber, token);
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
+        }
+    }
+    catch (err) {
+        lib_core.warning(`Failed to cleanup previous output: ${err}`);
     }
 }
 async function run() {
@@ -36884,14 +37021,7 @@ async function run() {
     const hasCustom = !!(config.customApiUrl && config.customModel);
     // Validate custom URL protocol first (more specific error)
     if (config.customApiUrl) {
-        const url = new URL(config.customApiUrl);
-        const isLoopback = url.hostname === 'localhost'
-            || url.hostname === '127.0.0.1'
-            || url.hostname === '::1'
-            || url.hostname === '0.0.0.0';
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
-            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
-        }
+        await validateUrlForSSRF(config.customApiUrl, 'custom_api_url');
     }
     if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
         throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
@@ -37073,7 +37203,10 @@ async function run() {
                     const truncatedContent = result.content.length > 500
                         ? '...' + result.content.slice(-500)
                         : result.content;
-                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
+                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => {
+                        const msg = i.message.replace(/, received '.*'/s, '').replace(/Received: .*/s, '');
+                        return `- ${i.path.join('.')}: ${msg}`;
+                    }).join('\n');
                     const retryResult = await client.chat(tagged.id, [
                         {
                             role: 'system',
@@ -37170,8 +37303,27 @@ async function run() {
             if (truncated) {
                 body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
             }
-            const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
-            lib_core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+            try {
+                const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
+                lib_core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+            }
+            catch (err) {
+                if (err instanceof ReviewCreationError) {
+                    // Inline review creation failed (stale commit, invalid line positions, or GitHub 500).
+                    // Fall back to posting a regular comment with the full review rendered as markdown.
+                    lib_core.warning(`Inline review failed (${err.status}), falling back to summary comment: ${err.message}`);
+                    const sections = [summaryBody];
+                    sections.push(`\n${renderReview(review)}\n`);
+                    if (truncated) {
+                        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+                    }
+                    await postComment(repo, prNumber, token, sections.join('\n'));
+                    lib_core.info(`Posted fallback summary comment with ${review.findings.length} findings`);
+                }
+                else {
+                    throw err;
+                }
+            }
         }
         else {
             // Too many findings for inline comments — post summary comment instead
@@ -37191,7 +37343,7 @@ async function run() {
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
         await cleanupPreviousOutput(repo, prNumber, token);
-        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     }
     // Collect and output metrics
     const metrics = {

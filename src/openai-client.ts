@@ -133,7 +133,12 @@ throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${b
       return response;
     });
 
-    const data = await resp.json() as ChatResponse;
+    let data: ChatResponse;
+    try {
+      data = await resp.json() as ChatResponse;
+    } catch {
+      throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+    }
     if (!data.choices || data.choices.length === 0) {
       throw new Error('API returned no choices');
     }

@@ -1,40 +1,42 @@
 import { getSweBenchScore } from './bench-reorder.js';
 /**
- * Build a combined fallback chain from NIM, Mistral, and Groq model lists,
- * sorted by SWE-bench score descending. Only includes models whose
- * provider key is available.
+ * Build the model fallback chain.
  *
- * Stable sort — preserves original order within same score.
+ * Custom models (no SWE-bench score) are always first — never sorted
+ * alongside provider models.
+ *
+ * Provider models (NIM, Mistral, Groq) are combined and sorted by
+ * SWE-bench score descending as the fallback chain.
+ *
+ * Only includes models whose provider key is available.
  */
 export function buildCombinedChain(opts) {
-    const chain = [];
+    const providerModels = [];
     const { groqModels = [], hasGroqKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
-            chain.push({ id, provider: 'nim' });
+            providerModels.push({ id, provider: 'nim' });
         }
     }
     if (opts.hasMistralKey) {
         for (const id of opts.mistralModels) {
-            chain.push({ id, provider: 'mistral' });
+            providerModels.push({ id, provider: 'mistral' });
         }
     }
     if (hasGroqKey) {
         for (const id of groqModels) {
-            chain.push({ id, provider: 'groq' });
+            providerModels.push({ id, provider: 'groq' });
         }
     }
-    // Stable sort by SWE-bench score descending
-    chain.sort((a, b) => {
+    providerModels.sort((a, b) => {
         const scoreA = getSweBenchScore(a.id);
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
-    // Prepend custom model — always tried first regardless of score
     if (opts.customModel && opts.hasCustomConfig) {
-        chain.unshift({ id: opts.customModel, provider: 'custom' });
+        return [{ id: opts.customModel, provider: 'custom' }, ...providerModels];
     }
-    return chain;
+    return providerModels;
 }
 const PROBE_TIMEOUT_MS = 10_000;
 export async function probeModels(chain, clients) {

@@ -10,5 +10,5 @@ export function safeParseJson(content) {
     }
 }
 export function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+    return text.replace(/[\\*_{}\[\]()#`<>&+~|!]/g, '\\$&');
 }

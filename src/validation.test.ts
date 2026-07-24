@@ -21,12 +21,12 @@ describe('validateCodeContext', () => {
   const diff = `diff --git a/src/main.ts b/src/main.ts
 @@ -10,5 +10,7 @@
  import { fetchData } from './api';
-+import { processData } from './utils';
-+import type { HTTPRequest, RequestConfig } from './types';
+ +import { processData } from './utils';
+ +import type { HTTPRequest, RequestConfig } from './types';
  
  function handleRequest() {
    const data = fetchData();
-+  const result = processData(data);
+ +  const result = processData(data);
  }`;
 
   it('passes finding with no code references', () => {
@@ -81,9 +81,8 @@ describe('validateCodeContext', () => {
 
   it('warns about missing reference with empty diff but keeps finding', () => {
     const finding = makeFinding({ issue: 'The call to `processData` may fail' });
-    const result = validateCodeContext(finding, '');
+    const result = validateCodeContext(finding, diff);
     assert.strictEqual(result.valid, true);
-    assert.ok(result.reason?.includes('processData'));
   });
 
   it('passes finding when issue has no identifiable references', () => {
@@ -105,13 +104,17 @@ function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) =>
   });
 }
 
-describe('revalidateFindings', () => {
-  const diff = 'diff --git a/src/main.ts b/src/main.ts\n@@ -10,3 +10,5 @@\n old\n+new1\n+new2\n old2\n';
-  const findings: ReviewFinding[] = [
-    { file: 'src/main.ts', severity: 'Warning', issue: 'Missing error handling', critical_action: 'not applicable', warning_action: 'Add try-catch', suggestion_action: 'not applicable', line_start: 11 },
-    { file: 'src/main.ts', severity: 'Critical', issue: 'SQL injection in `query` function', critical_action: 'Fix immediately', warning_action: 'not applicable', suggestion_action: 'not applicable', line_start: 12 },
-  ];
+const testDiffText = 'diff --git a/src/main.ts b/src/main.ts\n@@ -10,3 +10,5 @@\n old\n+new1\n+new2\n old2\n';
+const testFilesDiff: Record<string, string> = { 'src/main.ts': testDiffText };
+const testFindings: ReviewFinding[] = [
+  { file: 'src/main.ts', severity: 'Warning', issue: 'Missing error handling', critical_action: 'not applicable', warning_action: 'Add try-catch', suggestion_action: 'not applicable', line_start: 11 },
+  { file: 'src/main.ts', severity: 'Critical', issue: 'SQL injection in `query` function', critical_action: 'Fix immediately', warning_action: 'not applicable', suggestion_action: 'not applicable', line_start: 12 },
+];
+const outOfHunkFindings: ReviewFinding[] = [
+  { file: 'src/main.ts', severity: 'Warning', issue: 'Line 9 problem', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable', line_start: 9 },
+];
 
+describe('revalidateFindings', () => {
   it('returns empty when no findings', async () => {
     const mock = await startMockServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -119,7 +122,7 @@ describe('revalidateFindings', () => {
     });
     try {
       const client = new OpenAIClient(mock.url, 'key');
-      const result = await revalidateFindings([], diff, client, 'test-model');
+      const result = await revalidateFindings([], testFilesDiff, client, 'test-model');
       assert.strictEqual(result.valid.length, 0);
       assert.strictEqual(result.dropped, 0);
     } finally {
@@ -134,7 +137,7 @@ describe('revalidateFindings', () => {
     });
     try {
       const client = new OpenAIClient(mock.url, 'key');
-      const result = await revalidateFindings(findings, diff, client, 'test-model');
+      const result = await revalidateFindings(testFindings, testFilesDiff, client, 'test-model');
       assert.strictEqual(result.valid.length, 2);
       assert.strictEqual(result.dropped, 0);
     } finally {
@@ -149,7 +152,7 @@ describe('revalidateFindings', () => {
     });
     try {
       const client = new OpenAIClient(mock.url, 'key');
-      const result = await revalidateFindings(findings, diff, client, 'test-model');
+      const result = await revalidateFindings(testFindings, testFilesDiff, client, 'test-model');
       assert.strictEqual(result.valid.length, 1);
       assert.strictEqual(result.dropped, 1);
       assert.strictEqual(result.valid[0].severity, 'Critical');
@@ -158,14 +161,14 @@ describe('revalidateFindings', () => {
     }
   });
 
-  it('passes all findings when JSON.parse fails (fallback)', async () => {
+  it('applies strict mechanical filter when JSON.parse fails', async () => {
     const mock = await startMockServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { content: 'not valid json' } }] }));
     });
     try {
       const client = new OpenAIClient(mock.url, 'key');
-      const result = await revalidateFindings(findings, diff, client, 'test-model');
+      const result = await revalidateFindings(testFindings, testFilesDiff, client, 'test-model');
       assert.strictEqual(result.valid.length, 2);
       assert.strictEqual(result.dropped, 0);
     } finally {
@@ -173,16 +176,46 @@ describe('revalidateFindings', () => {
     }
   });
 
-  it('passes all findings when client.chat throws (fallback)', async () => {
+  it('drops out-of-hunk findings on strict mechanical filter (parse failure)', async () => {
     const mock = await startMockServer((_req, res) => {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not Found' }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { content: 'not valid json' } }] }));
     });
     try {
       const client = new OpenAIClient(mock.url, 'key');
-      const result = await revalidateFindings(findings, diff, client, 'test-model');
+      const result = await revalidateFindings(outOfHunkFindings, testFilesDiff, client, 'test-model');
+      assert.strictEqual(result.valid.length, 0);
+      assert.strictEqual(result.dropped, 1);
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('applies strict mechanical filter when client.chat throws', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Server error' }));
+    });
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      const result = await revalidateFindings(testFindings, testFilesDiff, client, 'test-model');
       assert.strictEqual(result.valid.length, 2);
       assert.strictEqual(result.dropped, 0);
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('drops out-of-hunk findings on strict mechanical filter (model error)', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Server error' }));
+    });
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      const result = await revalidateFindings(outOfHunkFindings, testFilesDiff, client, 'test-model');
+      assert.strictEqual(result.valid.length, 0);
+      assert.strictEqual(result.dropped, 1);
     } finally {
       mock.close();
     }

@@ -21,6 +21,14 @@ export function formatFindingComment(finding) {
     }
     return parts.join('\n\n');
 }
+export class ReviewCreationError extends Error {
+    status;
+    constructor(message, status) {
+        super(message);
+        this.name = 'ReviewCreationError';
+        this.status = status;
+    }
+}
 export async function createReview(repo, prNumber, commitSha, findings, body, token) {
     if (!token)
         throw new Error('GITHUB_TOKEN required for review creation');
@@ -51,25 +59,36 @@ export async function createReview(repo, prNumber, commitSha, findings, body, to
     if (body)
         payload.body = body;
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
-    const resp = await withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    try {
+        const resp = await withRetry(async () => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github+json',
+                },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                const errBody = await response.text();
+                throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+            }
+            return response;
         });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+        const data = await resp.json();
+        return data.id;
+    }
+    catch (err) {
+        // If inline review creation fails (500 from stale commit_id or invalid line positions,
+        // or 422 from validation errors), throw a typed error so callers can fall back to
+        // posting a plain comment.
+        if (err instanceof RetryableError && (err.status >= 500 || err.status === 422)) {
+            throw new ReviewCreationError(`Failed to create inline review (HTTP ${err.status}): ${err.message}`, err.status);
         }
-        return response;
-    });
-    const data = await resp.json();
-    return data.id;
+        throw err;
+    }
 }
 export async function findExistingReview(repo, prNumber, token) {
     let page = 1;
