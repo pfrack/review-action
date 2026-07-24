@@ -5,7 +5,10 @@ import { withRetry, RetryableError } from './retry.js';
 import { validateCodeContext, revalidateFindings } from './validation.js';
 import type { OpenAIClient } from './openai-client.js';
 import { escapeMarkdown } from './utils.js';
-import { BOT_LOGIN, AI_REVIEW_MARKER } from './github-review.js';
+
+export const AI_REVIEW_MARKER = '### AI Code Review';
+export const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
+export const GITHUB_API_TIMEOUT_MS = 30_000;
 
 export interface Config {
   baseURL: string;
@@ -285,8 +288,6 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
   }
   return parseDiff(raw);
 }
-
-const GITHUB_API_TIMEOUT_MS = 30_000;
 
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const existingId = await findExistingComment(repo, prNumber, token);

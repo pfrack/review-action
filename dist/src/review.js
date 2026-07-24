@@ -2,7 +2,9 @@ import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 import { validateCodeContext, revalidateFindings } from './validation.js';
 import { escapeMarkdown } from './utils.js';
-import { BOT_LOGIN, AI_REVIEW_MARKER } from './github-review.js';
+export const AI_REVIEW_MARKER = '### AI Code Review';
+export const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
+export const GITHUB_API_TIMEOUT_MS = 30_000;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -229,7 +231,6 @@ export async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
-const GITHUB_API_TIMEOUT_MS = 30_000;
 export async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {

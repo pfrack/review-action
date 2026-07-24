@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { lookup } from 'node:dns/promises';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
-import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
+import { AI_REVIEW_MARKER, loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
 import { buildSystemPrompt, buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
@@ -9,7 +9,6 @@ import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 import { parseRules, validateRules, type Rule } from './rules.js';
-import { createReview, ReviewCreationError, shouldUseInlineComments, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
 
@@ -65,26 +64,10 @@ async function validateUrlForSSRF(urlString: string, label: string): Promise<voi
   }
 }
 
-async function cleanupPreviousOutput(repo: string, prNumber: number, token: string): Promise<void> {
-  try {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-      await deleteReview(repo, prNumber, existingReviewId, token);
-    }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-      await deleteComment(repo, existingCommentId, token);
-    }
-  } catch (err) {
-    core.warning(`Failed to cleanup previous output: ${err}`);
-  }
-}
-
 async function run(): Promise<void> {
   const config = loadConfig();
   const hasCustom = !!(config.customApiUrl && config.customModel);
 
-  // Validate custom URL protocol first (more specific error)
   if (config.customApiUrl) {
     await validateUrlForSSRF(config.customApiUrl, 'custom_api_url');
   }
@@ -93,7 +76,6 @@ async function run(): Promise<void> {
     throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
   }
 
-  // Informational: custom-only means no fallback if custom model fails
   if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
@@ -125,8 +107,6 @@ async function run(): Promise<void> {
 
   const event = loadEvent();
   const prNumber = event.pull_request.number;
-  const commitSha = event.pull_request.head.sha;
-
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) {
     throw new Error('GITHUB_REPOSITORY not set');
@@ -140,7 +120,6 @@ async function run(): Promise<void> {
   core.info(`Reviewing PR #${prNumber} in ${repo}`);
   core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
 
-  // Parse and validate custom rules
   const rules = parseRules(config.customRules);
   const rulesValidation = validateRules(rules);
   if (!rulesValidation.valid) {
@@ -174,7 +153,6 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Filter files
   const filenames = Object.keys(filesDiff).sort();
   const reviewableFiles: string[] = [];
 
@@ -190,13 +168,11 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Truncate if too many files
   const filesToReview = reviewableFiles.slice(0, config.maxFiles);
   const truncated = reviewableFiles.length > config.maxFiles;
 
   core.info(`Reviewing ${filesToReview.length} files...`);
 
-  // Detect most common language for prompt selection
   const langCounts: Record<string, number> = {};
   for (const filePath of filesToReview) {
     const lang = languageForFile(filePath);
@@ -209,7 +185,6 @@ async function run(): Promise<void> {
     core.info(`Detected language: ${detectedLanguage}`);
   }
 
-  // Probe models in parallel to find the fastest, move it to front of chain
   try {
     const fastest = await probeModels(chain, clients);
     if (fastest) {
@@ -236,7 +211,6 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Build diff map and split into batches if needed
   const filesDiffMap: Record<string, string> = {};
   for (const f of filesToReview) {
     filesDiffMap[f] = filesDiff[f] || '';
@@ -297,19 +271,17 @@ async function run(): Promise<void> {
           continue;
         }
 
-        // Try parsing as structured JSON
         let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
 
         if (!parsed.success) {
-          // Retry once with validation error appended
           core.info(`${tagged.id} schema validation failed, retrying...`);
           const truncatedContent = result.content.length > 500
             ? '...' + result.content.slice(-500)
             : result.content;
           const errorSummary = parsed.error.issues.slice(0, 3).map(i => {
-    const msg = i.message.replace(/, received '.*'/s, '').replace(/Received: .*/s, '');
-    return `- ${i.path.join('.')}: ${msg}`;
-  }).join('\n');
+            const msg = i.message.replace(/, received '.*'/s, '').replace(/Received: .*/s, '');
+            return `- ${i.path.join('.')}: ${msg}`;
+          }).join('\n');
           const retryResult = await client.chat(tagged.id, [
             {
               role: 'system',
@@ -338,7 +310,6 @@ async function run(): Promise<void> {
           }
         }
 
-        // Both first-attempt and retry success paths converge here
         batchReview = parsed.data;
         const changedFiles = new Set(batchFileList);
         const validated = await validateFindings(
@@ -395,10 +366,10 @@ async function run(): Promise<void> {
   const modelShort = usedModel.split('/').pop() || usedModel;
   const reviewDuration = Date.now() - reviewStartTime;
 
-  // No issues found — clean up any existing review/comment and stop
+  // No findings — replace any existing comment with a clean "no issues" summary
   if (review && review.findings.length === 0) {
-    await cleanupPreviousOutput(repo, prNumber, token);
-    core.info('Deleted previous review (no issues found)');
+    await postComment(repo, prNumber, token, `${AI_REVIEW_MARKER}\n\nNo issues found.`);
+    core.info('No findings — posted clean summary comment');
     return;
   }
 
@@ -412,55 +383,19 @@ async function run(): Promise<void> {
   const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
   if (review && review.findings.length > 0) {
-    if (shouldUseInlineComments(review.findings)) {
-      // Post findings as inline review comments
-      await cleanupPreviousOutput(repo, prNumber, token);
-
-      let body = `${summaryBody}\n${renderReview(review)}\n`;
-      if (truncated) {
-        body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
-      }
-
-      try {
-        const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
-        core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
-      } catch (err) {
-        if (err instanceof ReviewCreationError) {
-          // Inline review creation failed (stale commit, invalid line positions, or GitHub 500).
-          // Fall back to posting a regular comment with the full review rendered as markdown.
-          core.warning(`Inline review failed (${err.status}), falling back to summary comment: ${err.message}`);
-          const sections: string[] = [summaryBody];
-          sections.push(`\n${renderReview(review)}\n`);
-          if (truncated) {
-            sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-          }
-          await postComment(repo, prNumber, token, sections.join('\n'));
-          core.info(`Posted fallback summary comment with ${review.findings.length} findings`);
-        } else {
-          throw err;
-        }
-      }
-    } else {
-      // Too many findings for inline comments — post summary comment instead
-      await cleanupPreviousOutput(repo, prNumber, token);
-
-      const sections: string[] = [summaryBody];
-      sections.push(`\n${renderReview(review)}\n`);
-      if (truncated) {
-        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-      }
-      await postComment(repo, prNumber, token, sections.join('\n'));
-      core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
+    const sections: string[] = [summaryBody];
+    sections.push(`\n${renderReview(review)}\n`);
+    if (truncated) {
+      sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
     }
+    await postComment(repo, prNumber, token, sections.join('\n'));
+    core.info(`Posted comment with ${review.findings.length} findings`);
   } else if (!usedModel) {
-    await cleanupPreviousOutput(repo, prNumber, token);
     await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
-    await cleanupPreviousOutput(repo, prNumber, token);
-    await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
+    await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
   }
 
-  // Collect and output metrics
   const metrics: ReviewMetrics = {
     pr_number: prNumber,
     model_used: modelShort,
