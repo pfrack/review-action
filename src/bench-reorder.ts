@@ -7,7 +7,7 @@
  * 3. Updates nim_models in action.yml
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
 import { withRetry } from './retry.js';
 
 export interface SweBenchEntry {
@@ -226,7 +226,7 @@ export function rankModels(
     });
 }
 
-type ActionTarget = 'nim_models' | 'mistral_models';
+type ActionTarget = 'nim_models' | 'mistral_models' | 'groq_models';
 
 const TARGET_CONFIG: Record<ActionTarget, { pattern: RegExp; label: string }> = {
   nim_models: {
@@ -236,6 +236,10 @@ const TARGET_CONFIG: Record<ActionTarget, { pattern: RegExp; label: string }> = 
   mistral_models: {
     pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
     label: 'mistral_models',
+  },
+  groq_models: {
+    pattern: /(groq_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+    label: 'groq_models',
   },
 };
 
@@ -333,7 +337,7 @@ async function main(): Promise<void> {
   const target = (process.env.ACTION_TARGET || 'nim_models') as ActionTarget;
 
   if (!(target in TARGET_CONFIG)) {
-    console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+    console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
     process.exit(1);
   }
 
@@ -377,11 +381,22 @@ async function main(): Promise<void> {
   const ranked = rankModels(rows, latencies, fetchedScoresMap);
 
   console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-  for (const model of ranked) {
+  const summaryLines = [
+    `\n## Model Ranking (${target})\n`,
+    '| # | Model | SWE | Effective | Latency |',
+    '|---|-------|-----|-----------|---------|',
+  ];
+  ranked.forEach((model, index) => {
     const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
     const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
     const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
     console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+    summaryLines.push(`| ${index + 1} | \`${model}\` | ${swe} | ${eff} | ${lat} |`);
+  });
+
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    appendFileSync(summaryPath, summaryLines.join('\n') + '\n');
   }
 
   updateActionYml(actionPath, ranked, target);

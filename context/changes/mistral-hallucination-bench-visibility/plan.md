@@ -201,9 +201,9 @@ Add a daily benchmark job for Groq and write the ranked model list to GITHUB_STE
 
 #### Automated
 
-- [x] 1.1 TypeScript compiles: `npm run build`
-- [x] 1.2 Tests pass: `npm test`
-- [x] 1.3 Linting passes
+- [x] 1.1 TypeScript compiles: `npm run build` — 971544c
+- [x] 1.2 Tests pass: `npm test` — 971544c
+- [x] 1.3 Linting passes — 971544c
 
 #### Manual
 
@@ -214,8 +214,8 @@ Add a daily benchmark job for Groq and write the ranked model list to GITHUB_STE
 
 #### Automated
 
-- [ ] 2.1 TypeScript compiles: `npm run build`
-- [ ] 2.2 Tests pass: `npm test`
+- [x] 2.1 TypeScript compiles: `npm run build`
+- [x] 2.2 Tests pass: `npm test`
 
 #### Manual
 
