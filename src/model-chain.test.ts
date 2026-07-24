@@ -130,7 +130,7 @@ describe('buildCombinedChain', () => {
     assert.strictEqual(chain[1].id, 'mistralai/mistral-large-3-675b-instruct-2512');
   });
 
-  it('custom model is prepended before scored models', () => {
+  it('custom model is always first, providers follow as fallback chain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: ['mistralai/mistral-medium-3.5-128b'],
@@ -145,7 +145,6 @@ describe('buildCombinedChain', () => {
     assert.strictEqual(chain.length, 3);
     assert.strictEqual(chain[0].id, 'my-custom/model');
     assert.strictEqual(chain[0].provider, 'custom');
-    // Remaining models sorted by score
     assert.strictEqual(chain[1].id, 'deepseek-ai/deepseek-v4-pro');
     assert.strictEqual(chain[2].id, 'mistralai/mistral-medium-3.5-128b');
   });
