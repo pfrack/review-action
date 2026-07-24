@@ -27973,6 +27973,9 @@ function loadConfig() {
         mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        groqApiKey: lib_core.getInput('groq_api_key') || '',
+        groqModels: splitCSV(lib_core.getInput('groq_models') ||
+            'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
         customApiKey: lib_core.getInput('custom_api_key') || '',
@@ -36461,6 +36464,7 @@ const SWE_BENCH_SCORES = {
     'mistralai/mistral-nemotron': 0.720,
     'qwen/qwen3-next-80b-a3b-instruct': 0.720,
     'openai/gpt-oss-120b': 0.720,
+    'moonshotai/kimi-k2-instruct': 0.802,
     'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
     'mistralai/mistral-large': 0.700,
     'mistralai/mistral-large-2-instruct': 0.700,
@@ -36474,6 +36478,7 @@ const SWE_BENCH_SCORES = {
     'meta/llama-4-maverick-17b-128e-instruct': 0.650,
     'thinkingmachines/inkling': 0.650,
     'meta/llama-3.3-70b-instruct': 0.620,
+    'llama-3.3-70b-versatile': 0.620,
     'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
     'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
     'meta/llama-3.1-70b-instruct': 0.600,
@@ -36546,6 +36551,10 @@ const TARGET_CONFIG = {
     mistral_models: {
         pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
         label: 'mistral_models',
+    },
+    groq_models: {
+        pattern: /(groq_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'groq_models',
     },
 };
 /**
@@ -36632,7 +36641,7 @@ async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
     const target = (process.env.ACTION_TARGET || 'nim_models');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin
@@ -36668,11 +36677,21 @@ async function main() {
     const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
     const ranked = rankModels(rows, latencies, fetchedScoresMap);
     console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-    for (const model of ranked) {
+    const summaryLines = [
+        `\n## Model Ranking (${target})\n`,
+        '| # | Model | SWE | Effective | Latency |',
+        '|---|-------|-----|-----------|---------|',
+    ];
+    ranked.forEach((model, index) => {
         const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
         const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
         const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
         console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+        summaryLines.push(`| ${index + 1} | \`${model}\` | ${swe} | ${eff} | ${lat} |`);
+    });
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+        (0,external_node_fs_.appendFileSync)(summaryPath, summaryLines.join('\n') + '\n');
     }
     updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
@@ -36689,7 +36708,7 @@ if (isMainModule) {
 ;// CONCATENATED MODULE: ./src/model-chain.ts
 
 /**
- * Build a combined fallback chain from NIM and Mistral model lists,
+ * Build a combined fallback chain from NIM, Mistral, and Groq model lists,
  * sorted by SWE-bench score descending. Only includes models whose
  * provider key is available.
  *
@@ -36705,6 +36724,11 @@ function buildCombinedChain(opts) {
     if (opts.hasMistralKey) {
         for (const id of opts.mistralModels) {
             chain.push({ id, provider: 'mistral' });
+        }
+    }
+    if (opts.hasGroqKey) {
+        for (const id of opts.groqModels) {
+            chain.push({ id, provider: 'groq' });
         }
     }
     // Stable sort by SWE-bench score descending
@@ -36860,28 +36884,32 @@ async function run() {
             throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
         }
     }
-    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
     }
     // Informational: custom-only means no fallback if custom model fails
-    if (hasCustom && !config.apiKey && !config.mistralApiKey) {
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
         lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const groqClient = config.groqApiKey ? new OpenAIClient('https://api.groq.com/openai/v1', config.groqApiKey) : null;
     const customClient = hasCustom
         ? new OpenAIClient(config.customApiUrl, config.customApiKey)
         : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,
+        groq: groqClient,
         custom: customClient,
     };
     const chain = buildCombinedChain({
         nimModels: config.models,
         mistralModels: config.mistralModels,
+        groqModels: config.groqModels,
         hasNimKey: !!config.apiKey,
         hasMistralKey: !!config.mistralApiKey,
+        hasGroqKey: !!config.groqApiKey,
         customModel: config.customModel,
         hasCustomConfig: hasCustom,
     });

@@ -35,28 +35,32 @@ async function run() {
             throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
         }
     }
-    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
     }
     // Informational: custom-only means no fallback if custom model fails
-    if (hasCustom && !config.apiKey && !config.mistralApiKey) {
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
         core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const groqClient = config.groqApiKey ? new OpenAIClient('https://api.groq.com/openai/v1', config.groqApiKey) : null;
     const customClient = hasCustom
         ? new OpenAIClient(config.customApiUrl, config.customApiKey)
         : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,
+        groq: groqClient,
         custom: customClient,
     };
     const chain = buildCombinedChain({
         nimModels: config.models,
         mistralModels: config.mistralModels,
+        groqModels: config.groqModels,
         hasNimKey: !!config.apiKey,
         hasMistralKey: !!config.mistralApiKey,
+        hasGroqKey: !!config.groqApiKey,
         customModel: config.customModel,
         hasCustomConfig: hasCustom,
     });
