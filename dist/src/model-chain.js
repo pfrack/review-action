@@ -8,6 +8,7 @@ import { getSweBenchScore } from './bench-reorder.js';
  */
 export function buildCombinedChain(opts) {
     const chain = [];
+    const { groqModels = [], hasGroqKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             chain.push({ id, provider: 'nim' });
@@ -18,8 +19,8 @@ export function buildCombinedChain(opts) {
             chain.push({ id, provider: 'mistral' });
         }
     }
-    if (opts.hasGroqKey) {
-        for (const id of opts.groqModels) {
+    if (hasGroqKey) {
+        for (const id of groqModels) {
             chain.push({ id, provider: 'groq' });
         }
     }

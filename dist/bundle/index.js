@@ -27528,9 +27528,15 @@ async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
 class OpenAIClient {
     baseURL;
     apiKey;
-    constructor(baseURL, apiKey) {
+    providerLabel;
+    constructor(baseURL, apiKey, providerLabel) {
         this.baseURL = baseURL.replace(/\/+$/, '');
         this.apiKey = apiKey;
+        this.providerLabel = providerLabel ||
+            (baseURL.includes('nvidia.com') ? 'NIM' :
+                baseURL.includes('mistral') ? 'Mistral' :
+                    baseURL.includes('groq') ? 'Groq' :
+                        baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
         const payload = {
@@ -27578,10 +27584,7 @@ class OpenAIClient {
             });
             if (!response.ok) {
                 const body = await response.text();
-                const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
-                    this.baseURL.includes('mistral') ? 'Mistral' :
-                        this.baseURL.split('/')[2] || 'API';
-                throw new RetryableError(`${provider} returned ${response.status}: ${body}`, response.status);
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
             }
             return response;
         });
@@ -27630,7 +27633,7 @@ class OpenAIClient {
             });
             if (!r.ok) {
                 const body = await r.text();
-                throw new RetryableError(`${r.status}: ${body}`, r.status);
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
             }
             return r;
         });
@@ -27976,6 +27979,7 @@ function loadConfig() {
         groqApiKey: lib_core.getInput('groq_api_key') || '',
         groqModels: splitCSV(lib_core.getInput('groq_models') ||
             'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
+        groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
         customApiKey: lib_core.getInput('custom_api_key') || '',
@@ -36445,8 +36449,13 @@ function parseDuration(s) {
     return parseFloat(s) || Infinity;
 }
 /**
- * Known SWE-bench Verified scores for models available on NIM.
+ * Known SWE-bench Verified scores for models available on NIM and Groq.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Model identifiers are provider-specific — Groq uses different IDs than
+ * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
+ * moonshotai/kimi-k2.6). If provider catalogs change, entries may drift;
+ * configured models without a score entry return 0.5 and rank lower.
  */
 const SWE_BENCH_SCORES = {
     'deepseek-ai/deepseek-v4-pro': 0.806,
@@ -36543,19 +36552,13 @@ function rankModels(rows, latencies, fetchedScores) {
         return latA - latB;
     });
 }
+function buildTargetPattern(targetKey) {
+    return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
+}
 const TARGET_CONFIG = {
-    nim_models: {
-        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'nim_models',
-    },
-    mistral_models: {
-        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'mistral_models',
-    },
-    groq_models: {
-        pattern: /(groq_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'groq_models',
-    },
+    nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
+    mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
+    groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -36691,7 +36694,12 @@ async function main() {
     });
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
-        (0,external_node_fs_.appendFileSync)(summaryPath, summaryLines.join('\n') + '\n');
+        try {
+            (0,external_node_fs_.appendFileSync)(summaryPath, summaryLines.join('\n') + '\n');
+        }
+        catch (err) {
+            console.warn(`Warning: could not write to GITHUB_STEP_SUMMARY: ${err}`);
+        }
     }
     updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
@@ -36716,6 +36724,7 @@ if (isMainModule) {
  */
 function buildCombinedChain(opts) {
     const chain = [];
+    const { groqModels = [], hasGroqKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             chain.push({ id, provider: 'nim' });
@@ -36726,8 +36735,8 @@ function buildCombinedChain(opts) {
             chain.push({ id, provider: 'mistral' });
         }
     }
-    if (opts.hasGroqKey) {
-        for (const id of opts.groqModels) {
+    if (hasGroqKey) {
+        for (const id of groqModels) {
             chain.push({ id, provider: 'groq' });
         }
     }
@@ -36891,11 +36900,11 @@ async function run() {
     if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
         lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
-    const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
-    const groqClient = config.groqApiKey ? new OpenAIClient('https://api.groq.com/openai/v1', config.groqApiKey) : null;
+    const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null;
+    const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null;
+    const groqClient = config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null;
     const customClient = hasCustom
-        ? new OpenAIClient(config.customApiUrl, config.customApiKey)
+        ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom')
         : null;
     const clients = {
         nim: nimClient,

@@ -48,11 +48,11 @@ async function run(): Promise<void> {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
 
-  const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey) : null;
-  const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey) : null;
-  const groqClient = config.groqApiKey ? new OpenAIClient('https://api.groq.com/openai/v1', config.groqApiKey) : null;
+  const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null;
+  const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null;
+  const groqClient = config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null;
   const customClient = hasCustom
-    ? new OpenAIClient(config.customApiUrl, config.customApiKey)
+    ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom')
     : null;
 
   const clients: Record<Provider, OpenAIClient | null> = {

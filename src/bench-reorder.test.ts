@@ -26,6 +26,7 @@ inputs:
     const result = readFileSync(actionPath, 'utf-8');
     assert.ok(result.includes("default: 'llama-3.3-70b-versatile,openai/gpt-oss-120b'"));
     assert.ok(result.includes("default: 'mistral-medium-3.5'"));
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 
@@ -201,6 +202,7 @@ inputs:
     assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
     // nim_models should be unchanged
     assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('does not modify file when mistral_models block not found', () => {
@@ -220,6 +222,7 @@ inputs:
 
     const result = readFileSync(actionPath, 'utf-8');
     assert.strictEqual(result, content); // unchanged
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 

@@ -94,8 +94,13 @@ function parseDuration(s) {
     return parseFloat(s) || Infinity;
 }
 /**
- * Known SWE-bench Verified scores for models available on NIM.
+ * Known SWE-bench Verified scores for models available on NIM and Groq.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Model identifiers are provider-specific — Groq uses different IDs than
+ * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
+ * moonshotai/kimi-k2.6). If provider catalogs change, entries may drift;
+ * configured models without a score entry return 0.5 and rank lower.
  */
 export const SWE_BENCH_SCORES = {
     'deepseek-ai/deepseek-v4-pro': 0.806,
@@ -192,19 +197,13 @@ export function rankModels(rows, latencies, fetchedScores) {
         return latA - latB;
     });
 }
+function buildTargetPattern(targetKey) {
+    return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
+}
 const TARGET_CONFIG = {
-    nim_models: {
-        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'nim_models',
-    },
-    mistral_models: {
-        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'mistral_models',
-    },
-    groq_models: {
-        pattern: /(groq_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'groq_models',
-    },
+    nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
+    mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
+    groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -340,7 +339,12 @@ async function main() {
     });
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
-        appendFileSync(summaryPath, summaryLines.join('\n') + '\n');
+        try {
+            appendFileSync(summaryPath, summaryLines.join('\n') + '\n');
+        }
+        catch (err) {
+            console.warn(`Warning: could not write to GITHUB_STEP_SUMMARY: ${err}`);
+        }
     }
     updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);

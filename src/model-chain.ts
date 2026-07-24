@@ -11,10 +11,10 @@ export interface TaggedModel {
 export interface ChainOptions {
   nimModels: string[];
   mistralModels: string[];
-  groqModels: string[];
+  groqModels?: string[];
   hasNimKey: boolean;
   hasMistralKey: boolean;
-  hasGroqKey: boolean;
+  hasGroqKey?: boolean;
   customModel?: string;
   hasCustomConfig?: boolean;
 }
@@ -28,6 +28,7 @@ export interface ChainOptions {
  */
 export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   const chain: TaggedModel[] = [];
+  const { groqModels = [], hasGroqKey = false } = opts;
 
   if (opts.hasNimKey) {
     for (const id of opts.nimModels) {
@@ -41,8 +42,8 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
     }
   }
 
-  if (opts.hasGroqKey) {
-    for (const id of opts.groqModels) {
+  if (hasGroqKey) {
+    for (const id of groqModels) {
       chain.push({ id, provider: 'groq' });
     }
   }

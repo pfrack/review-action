@@ -22,6 +22,7 @@ export function loadConfig() {
         groqApiKey: core.getInput('groq_api_key') || '',
         groqModels: splitCSV(core.getInput('groq_models') ||
             'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
+        groqBaseUrl: core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
         customApiUrl: core.getInput('custom_api_url') || '',
         customModel: core.getInput('custom_model') || '',
         customApiKey: core.getInput('custom_api_key') || '',

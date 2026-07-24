@@ -26,6 +26,9 @@ inputs:
   groq_api_key:
     description: 'Groq API key (enables Groq models in fallback chain)'
     default: ''
+  groq_base_url:
+    description: 'Groq API base URL'
+    default: 'https://api.groq.com/openai/v1'
   groq_models:
     description: 'Comma-separated Groq model fallback chain'
     default: 'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'

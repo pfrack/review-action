@@ -2,9 +2,15 @@ import { withRetry, RetryableError } from './retry.js';
 export class OpenAIClient {
     baseURL;
     apiKey;
-    constructor(baseURL, apiKey) {
+    providerLabel;
+    constructor(baseURL, apiKey, providerLabel) {
         this.baseURL = baseURL.replace(/\/+$/, '');
         this.apiKey = apiKey;
+        this.providerLabel = providerLabel ||
+            (baseURL.includes('nvidia.com') ? 'NIM' :
+                baseURL.includes('mistral') ? 'Mistral' :
+                    baseURL.includes('groq') ? 'Groq' :
+                        baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
         const payload = {
@@ -52,10 +58,7 @@ export class OpenAIClient {
             });
             if (!response.ok) {
                 const body = await response.text();
-                const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
-                    this.baseURL.includes('mistral') ? 'Mistral' :
-                        this.baseURL.split('/')[2] || 'API';
-                throw new RetryableError(`${provider} returned ${response.status}: ${body}`, response.status);
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
             }
             return response;
         });
@@ -104,7 +107,7 @@ export class OpenAIClient {
             });
             if (!r.ok) {
                 const body = await r.text();
-                throw new RetryableError(`${r.status}: ${body}`, r.status);
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
             }
             return r;
         });
