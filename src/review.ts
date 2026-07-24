@@ -33,9 +33,10 @@ function splitCSV(s: string): string[] {
 }
 
 export function loadConfig(): Config {
-  const promptMode = core.getInput('nim_prompt_mode') || 'append';
-  if (promptMode !== 'append' && promptMode !== 'replace') {
-    core.warning(`Invalid nim_prompt_mode "${promptMode}", defaulting to "append"`);
+  const promptModeRaw = core.getInput('nim_prompt_mode');
+  const promptMode = (promptModeRaw === 'replace') ? 'replace' : 'append';
+  if (promptModeRaw && promptModeRaw !== 'append' && promptModeRaw !== 'replace') {
+    core.warning(`Invalid nim_prompt_mode "${promptModeRaw}", defaulting to "append"`);
   }
   return {
     baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
@@ -52,7 +53,15 @@ export function loadConfig(): Config {
     customApiUrl: core.getInput('custom_api_url') || '',
     customModel: core.getInput('custom_model') || '',
     customApiKey: core.getInput('custom_api_key') || '',
-    maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
+    maxFiles: (() => {
+      const raw = core.getInput('max_files') || '100';
+      const n = Number.parseInt(raw, 10);
+      if (!Number.isInteger(n) || n < 0) {
+        core.warning(`Invalid max_files "${raw}", defaulting to 100`);
+        return 100;
+      }
+      return Math.min(n, 500);
+    })(),
     excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
     systemPrompt: core.getInput('nim_system_prompt'),
     promptMode,
@@ -170,8 +179,7 @@ export async function validateFindings(
   // Step 5: Optional LLM re-validation to catch hallucinated findings
   let dropped = 0;
   if (client && model && validFindings.length > 0) {
-    const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-    const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+    const revalidated = await revalidateFindings(validFindings, filesDiff, client, model);
     validFindings.length = 0;
     validFindings.push(...revalidated.valid);
     dropped = revalidated.dropped;

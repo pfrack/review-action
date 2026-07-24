@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { lookup } from 'node:dns/promises';
 import { OpenAIClient } from './openai-client.js';
 import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
 import { buildSystemMessage, languageForFile } from './prompts.js';
@@ -8,17 +9,75 @@ import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 import { parseRules, validateRules } from './rules.js';
-import { createReview, shouldUseInlineComments, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
+import { createReview, ReviewCreationError, shouldUseInlineComments, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
 import { formatMetrics } from './metrics.js';
 import { batchFiles, mergeFindings } from './batching.js';
-async function cleanupPreviousOutput(repo, prNumber, token) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
+const METADATA_HOSTNAMES = new Set([
+    '169.254.169.254',
+    'metadata.google.internal',
+    '100.100.100.200',
+    'metadata.internal',
+]);
+function isPrivateIp(ip) {
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0')
+        return false;
+    if (/^169\.254\./.test(ip))
+        return true;
+    if (/^10\./.test(ip))
+        return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip))
+        return true;
+    if (/^192\.168\./.test(ip))
+        return true;
+    if (/^fd[0-9a-f]{2}:/i.test(ip))
+        return true;
+    return false;
+}
+async function validateUrlForSSRF(urlString, label) {
+    const url = new URL(urlString);
+    const isLoopback = url.hostname === 'localhost'
+        || url.hostname === '127.0.0.1'
+        || url.hostname === '::1'
+        || url.hostname === '0.0.0.0';
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+        throw new Error(`${label} must use https:// (or http:// for localhost only)`);
     }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
+    if (METADATA_HOSTNAMES.has(url.hostname.toLowerCase())) {
+        throw new Error(`${label} points to a blocked host (${url.hostname})`);
+    }
+    if (isPrivateIp(url.hostname)) {
+        throw new Error(`${label} points to a blocked IP range (${url.hostname})`);
+    }
+    try {
+        const result = await lookup(url.hostname, { all: true });
+        for (const entry of result) {
+            if (isPrivateIp(entry.address)) {
+                throw new Error(`${label} resolves to a private IP (${entry.address})`);
+            }
+        }
+    }
+    catch (err) {
+        if (err instanceof Error && !err.message.includes('resolves to a private IP')) {
+            // DNS lookup failed — connection will fail naturally
+        }
+        else {
+            throw err;
+        }
+    }
+}
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    try {
+        const existingReviewId = await findExistingReview(repo, prNumber, token);
+        if (existingReviewId) {
+            await deleteReview(repo, prNumber, existingReviewId, token);
+        }
+        const existingCommentId = await findExistingComment(repo, prNumber, token);
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
+        }
+    }
+    catch (err) {
+        core.warning(`Failed to cleanup previous output: ${err}`);
     }
 }
 async function run() {
@@ -26,14 +85,7 @@ async function run() {
     const hasCustom = !!(config.customApiUrl && config.customModel);
     // Validate custom URL protocol first (more specific error)
     if (config.customApiUrl) {
-        const url = new URL(config.customApiUrl);
-        const isLoopback = url.hostname === 'localhost'
-            || url.hostname === '127.0.0.1'
-            || url.hostname === '::1'
-            || url.hostname === '0.0.0.0';
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
-            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
-        }
+        await validateUrlForSSRF(config.customApiUrl, 'custom_api_url');
     }
     if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
         throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
@@ -215,7 +267,10 @@ async function run() {
                     const truncatedContent = result.content.length > 500
                         ? '...' + result.content.slice(-500)
                         : result.content;
-                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
+                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => {
+                        const msg = i.message.replace(/, received '.*'/s, '').replace(/Received: .*/s, '');
+                        return `- ${i.path.join('.')}: ${msg}`;
+                    }).join('\n');
                     const retryResult = await client.chat(tagged.id, [
                         {
                             role: 'system',
@@ -312,8 +367,27 @@ async function run() {
             if (truncated) {
                 body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
             }
-            const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
-            core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+            try {
+                const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
+                core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+            }
+            catch (err) {
+                if (err instanceof ReviewCreationError) {
+                    // Inline review creation failed (stale commit, invalid line positions, or GitHub 500).
+                    // Fall back to posting a regular comment with the full review rendered as markdown.
+                    core.warning(`Inline review failed (${err.status}), falling back to summary comment: ${err.message}`);
+                    const sections = [summaryBody];
+                    sections.push(`\n${renderReview(review)}\n`);
+                    if (truncated) {
+                        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+                    }
+                    await postComment(repo, prNumber, token, sections.join('\n'));
+                    core.info(`Posted fallback summary comment with ${review.findings.length} findings`);
+                }
+                else {
+                    throw err;
+                }
+            }
         }
         else {
             // Too many findings for inline comments — post summary comment instead
@@ -333,7 +407,7 @@ async function run() {
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
         await cleanupPreviousOutput(repo, prNumber, token);
-        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     }
     // Collect and output metrics
     const metrics = {

@@ -62,7 +62,13 @@ export class OpenAIClient {
             }
             return response;
         });
-        const data = await resp.json();
+        let data;
+        try {
+            data = await resp.json();
+        }
+        catch {
+            throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+        }
         if (!data.choices || data.choices.length === 0) {
             throw new Error('API returned no choices');
         }
