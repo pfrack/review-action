@@ -30,3 +30,30 @@ export function buildCombinedChain(opts) {
     }
     return chain;
 }
+const PROBE_TIMEOUT_MS = 10_000;
+export async function probeModels(chain, clients) {
+    const probes = chain.map(async (tagged) => {
+        const client = clients[tagged.provider];
+        if (!client)
+            return null;
+        try {
+            const start = Date.now();
+            const ok = await Promise.race([
+                client.probeModel(tagged.id),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)),
+            ]);
+            if (ok)
+                return { model: tagged, latency: Date.now() - start };
+            return null;
+        }
+        catch {
+            return null;
+        }
+    });
+    const results = await Promise.all(probes);
+    const available = results.filter((r) => r !== null);
+    if (available.length === 0)
+        return null;
+    available.sort((a, b) => a.latency - b.latency);
+    return available[0].model;
+}

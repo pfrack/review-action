@@ -47,6 +47,14 @@ inputs:
   nim_prompt_mode:
     description: 'How to use custom prompt: append (default, appends after default) or replace (replaces default entirely)'
     default: 'append'
+  custom_rules:
+    description: 'Custom review rules (one per line, e.g., "Always check for SQL injection")'
+    required: false
+    default: ''
+  revalidate_findings:
+    description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
+    required: false
+    default: 'false'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'

@@ -1,5 +1,8 @@
 import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
+import { validateCodeContext, revalidateFindings } from './validation.js';
+import { escapeMarkdown } from './utils.js';
+import { BOT_LOGIN, AI_REVIEW_MARKER } from './github-review.js';
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -23,6 +26,8 @@ export function loadConfig() {
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
         promptMode,
+        customRules: core.getInput('custom_rules') || '',
+        revalidateFindings: core.getInput('revalidate_findings') === 'true',
     };
 }
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
@@ -41,9 +46,6 @@ export function parseDiff(raw) {
         }
     }
     return files;
-}
-function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
 }
 const SEVERITY_META = {
     Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
@@ -83,7 +85,7 @@ export function getFileHunks(filesDiff) {
     }
     return map;
 }
-export function validateFindings(review, filesDiff, changedFiles) {
+export async function validateFindings(review, filesDiff, changedFiles, client, model) {
     const warnings = [];
     const hunks = getFileHunks(filesDiff);
     const validFindings = [];
@@ -113,12 +115,25 @@ export function validateFindings(review, filesDiff, changedFiles) {
                 continue;
             }
         }
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        if (codeContext.reason) {
+            warnings.push(`${codeContext.reason} in "${f.file}"`);
+        }
         validFindings.push(f);
     }
-    if (validFindings.length === 0 && !review.summary) {
-        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
+    // Step 5: Optional LLM re-validation to catch hallucinated findings
+    let dropped = 0;
+    if (client && model && validFindings.length > 0) {
+        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        validFindings.length = 0;
+        validFindings.push(...revalidated.valid);
+        dropped = revalidated.dropped;
     }
-    return { valid: { findings: validFindings, summary: review.summary }, warnings };
+    if (validFindings.length === 0 && !review.summary) {
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
+    }
+    return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
 }
 export function renderReview(review) {
     if (review.findings.length === 0) {
@@ -202,7 +217,6 @@ export async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
-const COMMENT_MARKER = '### AI Code Review';
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
@@ -259,7 +273,7 @@ export async function findExistingComment(repo, prNumber, token) {
         }
         const comments = await resp.json();
         for (const comment of comments) {
-            if (comment.body.startsWith(COMMENT_MARKER)) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
                 return comment.id;
             }
         }

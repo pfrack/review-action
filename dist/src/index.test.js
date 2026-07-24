@@ -80,12 +80,12 @@ describe('severityTally', () => {
     });
 });
 describe('validateFindings edge cases', () => {
-    it('returns summary when all findings dropped', () => {
-        const result = validateFindings({ findings: [], summary: '' }, {}, new Set());
+    it('returns summary when all findings dropped', async () => {
+        const result = await validateFindings({ findings: [], summary: '' }, {}, new Set());
         assert.strictEqual(result.valid.findings.length, 0);
         assert.ok(result.valid.summary && result.valid.summary.includes('invalid'));
     });
-    it('preserves summary from review when valid findings exist', () => {
+    it('preserves summary from review when valid findings exist', async () => {
         const diffText = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,5 +1,6 @@\n line1\n+added line\n';
         const review = {
             findings: [
@@ -93,7 +93,7 @@ describe('validateFindings edge cases', () => {
             ],
             summary: 'my summary',
         };
-        const result = validateFindings(review, { 'a.ts': diffText }, new Set(['a.ts']));
+        const result = await validateFindings(review, { 'a.ts': diffText }, new Set(['a.ts']));
         assert.strictEqual(result.valid.findings.length, 1);
         assert.strictEqual(result.valid.summary, 'my summary');
     });

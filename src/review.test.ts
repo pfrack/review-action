@@ -217,55 +217,55 @@ describe('validateFindings', () => {
   };
   const changedFiles = new Set(['src/main.ts']);
 
-  it('drops finding for file not in changed set', () => {
+  it('drops finding for file not in changed set', async () => {
     const review = { findings: [{ file: 'unknown.ts', severity: 'Warning' as const, issue: 'bad', line_start: 11, line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.ok(result.valid.summary);
     assert.ok(result.warnings.some(w => w.includes('unknown.ts')));
   });
 
-  it('drops finding with line outside all hunks', () => {
+  it('drops finding with line outside all hunks', async () => {
     const review = { findings: [{ file: 'src/main.ts', severity: 'Critical' as const, issue: 'bad', line_start: 100, line_end: 105, critical_action: 'fix', warning_action: 'not applicable', suggestion_action: 'not applicable' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.ok(result.valid.summary);
     assert.ok(result.warnings.some(w => w.includes('100')));
   });
 
-  it('keeps finding with line inside hunk', () => {
+  it('keeps finding with line inside hunk', async () => {
     const review = { findings: [{ file: 'src/main.ts', severity: 'Warning' as const, issue: 'ok', line_start: 11, line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 1);
     assert.strictEqual(result.valid.findings[0].issue, 'ok');
     assert.strictEqual(result.warnings.length, 0);
   });
 
-  it('keeps file-wide finding (no line)', () => {
+  it('keeps file-wide finding (no line)', async () => {
     const review = { findings: [{ file: 'src/main.ts', severity: 'Suggestion' as const, issue: 'no tests', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'add tests' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 1);
     assert.strictEqual(result.warnings.length, 0);
   });
 
-  it('drops finding with line_end but no line_start', () => {
+  it('drops finding with line_end but no line_start', async () => {
     const review = { findings: [{ file: 'src/main.ts', severity: 'Warning' as const, issue: 'bad', line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.ok(result.warnings.some(w => w.includes('line_end but no line_start')));
   });
 
-  it('returns summary when all findings dropped', () => {
+  it('returns summary when all findings dropped', async () => {
     const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.ok(result.valid.summary);
     assert.ok(result.warnings.length > 0);
   });
 
-  it('returns empty valid finding for clean review with summary', () => {
+  it('returns empty valid finding for clean review with summary', async () => {
     const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }], summary: 'All good' };
-    const result = validateFindings(review, filesDiff, changedFiles);
+    const result = await validateFindings(review, filesDiff, changedFiles);
     assert.strictEqual(result.valid.findings.length, 0);
     assert.strictEqual(result.valid.summary, 'All good');
   });

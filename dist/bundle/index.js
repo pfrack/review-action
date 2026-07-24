@@ -25660,6 +25660,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:events"
 
 /***/ }),
 
+/***/ 3024:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+
+/***/ }),
+
 /***/ 7075:
 /***/ ((module) => {
 
@@ -27418,6 +27425,64 @@ module.exports = parseParams
 /******/ }
 /******/ 
 /************************************************************************/
+/******/ /* webpack/runtime/create fake namespace object */
+/******/ (() => {
+/******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
+/******/ 	var leafPrototypes;
+/******/ 	// create a fake namespace object
+/******/ 	// mode & 1: value is a module id, require it
+/******/ 	// mode & 2: merge all properties of value into the ns
+/******/ 	// mode & 4: return value when already ns object
+/******/ 	// mode & 16: return value when it's Promise-like
+/******/ 	// mode & 8|1: behave like require
+/******/ 	__nccwpck_require__.t = function(value, mode) {
+/******/ 		if(mode & 1) value = this(value);
+/******/ 		if(mode & 8) return value;
+/******/ 		if(typeof value === 'object' && value) {
+/******/ 			if((mode & 4) && value.__esModule) return value;
+/******/ 			if((mode & 16) && typeof value.then === 'function') return value;
+/******/ 		}
+/******/ 		var ns = Object.create(null);
+/******/ 		__nccwpck_require__.r(ns);
+/******/ 		var def = {};
+/******/ 		leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
+/******/ 		for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
+/******/ 			Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
+/******/ 		}
+/******/ 		def['default'] = () => (value);
+/******/ 		__nccwpck_require__.d(ns, def);
+/******/ 		return ns;
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__nccwpck_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/make namespace object */
+/******/ (() => {
+/******/ 	// define __esModule on exports
+/******/ 	__nccwpck_require__.r = (exports) => {
+/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 		}
+/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 	};
+/******/ })();
+/******/ 
 /******/ /* webpack/runtime/compat */
 /******/ 
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
@@ -27635,7 +27700,261 @@ class OpenAIClient {
     }
 }
 
+;// CONCATENATED MODULE: ./src/validation.ts
+
+function validateCodeContext(finding, diff) {
+    const issue = finding.issue;
+    const warnings = [];
+    function nameInDiff(name) {
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = 0;
+        while (true) {
+            idx = lowerDiff.indexOf(lowerName, idx);
+            if (idx === -1)
+                return false;
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx += 1;
+        }
+    }
+    // Check for backtick-wrapped identifiers (most reliable)
+    const backtickRefs = issue.match(/`(\w+)`/g);
+    if (backtickRefs) {
+        for (const ref of backtickRefs) {
+            const name = ref.slice(1, -1);
+            if (name.length > 2 && !nameInDiff(name)) {
+                warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
+            }
+        }
+    }
+    // Check for explicit references like "function X", "variable X", "class X"
+    const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
+    if (explicitRef) {
+        const name = explicitRef[1];
+        if (name.length > 2 && !nameInDiff(name)) {
+            warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
+        }
+    }
+    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
+}
+async function revalidateFindings(findings, diff, client, model) {
+    if (findings.length === 0)
+        return { valid: [], dropped: 0 };
+    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue}`).join('\n');
+    const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
+For each finding, determine if it is a REAL issue or a HALLUCINATION (not supported by the code).
+
+Findings:
+${findingsText}
+
+Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
+Example: [true, false, true]`;
+    const MAX_DIFF_LENGTH = 8000;
+    let truncatedDiff = diff;
+    if (diff.length > MAX_DIFF_LENGTH) {
+        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
+    }
+    try {
+        const result = await client.chat(model, [
+            { role: 'system', content: 'You are a validation assistant. Respond only with a JSON array of booleans.' },
+            { role: 'user', content: `${prompt}\n\nDiff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` },
+        ], {
+            temperature: 0,
+            maxTokens: 256,
+        });
+        let parsed;
+        try {
+            parsed = JSON.parse(result.content);
+        }
+        catch {
+            lib_core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+            return { valid: findings, dropped: 0 };
+        }
+        if (!Array.isArray(parsed))
+            return { valid: findings, dropped: 0 };
+        const valid = [];
+        let dropped = 0;
+        for (let i = 0; i < findings.length; i++) {
+            if (parsed[i] === true) {
+                valid.push(findings[i]);
+            }
+            else {
+                dropped++;
+            }
+        }
+        return { valid, dropped };
+    }
+    catch {
+        lib_core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+        return { valid: findings, dropped: 0 };
+    }
+}
+
+;// CONCATENATED MODULE: ./src/utils.ts
+function safeParseJson(content) {
+    const trimmed = content.trim();
+    if (!trimmed)
+        return undefined;
+    try {
+        return JSON.parse(trimmed);
+    }
+    catch {
+        return undefined;
+    }
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+}
+
+;// CONCATENATED MODULE: ./src/github-review.ts
+
+
+
+const GITHUB_API_TIMEOUT_MS = 30_000;
+const AI_REVIEW_MARKER = '### AI Code Review';
+const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
+function formatFindingComment(finding) {
+    const emoji = finding.severity === 'Critical' ? '🚨'
+        : finding.severity === 'Warning' ? '⚠️'
+            : '💡';
+    const parts = [`${emoji} **${finding.severity}**`];
+    parts.push(escapeMarkdown(finding.issue));
+    if (finding.suggestion) {
+        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
+    }
+    const action = finding.severity === 'Critical' ? finding.critical_action
+        : finding.severity === 'Warning' ? finding.warning_action
+            : finding.suggestion_action;
+    if (action && action !== 'not applicable') {
+        parts.push(`**Action:** ${escapeMarkdown(action)}`);
+    }
+    return parts.join('\n\n');
+}
+async function createReview(repo, prNumber, commitSha, findings, body, token) {
+    if (!token)
+        throw new Error('GITHUB_TOKEN required for review creation');
+    const comments = findings
+        .filter(f => f.line_start != null)
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
+    const payload = {
+        event: 'COMMENT',
+        comments,
+        commit_id: commitSha,
+    };
+    if (body)
+        payload.body = body;
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
+    const resp = await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+        }
+        return response;
+    });
+    const data = await resp.json();
+    return data.id;
+}
+async function findExistingReview(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
+    }
+    if (page > maxPages) {
+        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
+    }
+    return null;
+}
+async function deleteReview(repo, prNumber, reviewId, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
+}
+const INLINE_COMMENT_THRESHOLD = 50;
+function shouldUseInlineComments(findings) {
+    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
+
 ;// CONCATENATED MODULE: ./src/review.ts
+
+
+
 
 
 function splitCSV(s) {
@@ -27661,6 +27980,8 @@ function loadConfig() {
         excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: lib_core.getInput('nim_system_prompt'),
         promptMode,
+        customRules: lib_core.getInput('custom_rules') || '',
+        revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
     };
 }
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
@@ -27679,9 +28000,6 @@ function parseDiff(raw) {
         }
     }
     return files;
-}
-function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
 }
 const SEVERITY_META = {
     Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
@@ -27721,7 +28039,7 @@ function getFileHunks(filesDiff) {
     }
     return map;
 }
-function validateFindings(review, filesDiff, changedFiles) {
+async function validateFindings(review, filesDiff, changedFiles, client, model) {
     const warnings = [];
     const hunks = getFileHunks(filesDiff);
     const validFindings = [];
@@ -27751,12 +28069,25 @@ function validateFindings(review, filesDiff, changedFiles) {
                 continue;
             }
         }
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        if (codeContext.reason) {
+            warnings.push(`${codeContext.reason} in "${f.file}"`);
+        }
         validFindings.push(f);
     }
-    if (validFindings.length === 0 && !review.summary) {
-        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
+    // Step 5: Optional LLM re-validation to catch hallucinated findings
+    let dropped = 0;
+    if (client && model && validFindings.length > 0) {
+        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        validFindings.length = 0;
+        validFindings.push(...revalidated.valid);
+        dropped = revalidated.dropped;
     }
-    return { valid: { findings: validFindings, summary: review.summary }, warnings };
+    if (validFindings.length === 0 && !review.summary) {
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
+    }
+    return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
 }
 function renderReview(review) {
     if (review.findings.length === 0) {
@@ -27825,7 +28156,7 @@ async function fetchDiff(repo, prNumber, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3.diff',
             },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -27840,8 +28171,7 @@ async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
-const COMMENT_MARKER = '### AI Code Review';
-const GITHUB_API_TIMEOUT_MS = 30_000;
+const review_GITHUB_API_TIMEOUT_MS = 30_000;
 async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
@@ -27858,7 +28188,7 @@ async function deleteComment(repo, commentId, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github+json',
             },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -27880,7 +28210,7 @@ async function findExistingComment(repo, prNumber, token) {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/vnd.github+json',
                     },
-                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                    signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
                 });
                 if (!response.ok) {
                     const body = await response.text();
@@ -27897,7 +28227,7 @@ async function findExistingComment(repo, prNumber, token) {
         }
         const comments = await resp.json();
         for (const comment of comments) {
-            if (comment.body.startsWith(COMMENT_MARKER)) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
                 return comment.id;
             }
         }
@@ -27918,7 +28248,7 @@ async function createComment(repo, prNumber, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -27926,398 +28256,6 @@ async function createComment(repo, prNumber, token, body) {
         }
         return response;
     });
-}
-
-;// CONCATENATED MODULE: external "node:fs"
-const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-;// CONCATENATED MODULE: ./src/event.ts
-
-function loadEvent() {
-    const path = process.env.GITHUB_EVENT_PATH;
-    if (!path) {
-        throw new Error('GITHUB_EVENT_PATH not set');
-    }
-    const data = (0,external_node_fs_namespaceObject.readFileSync)(path, 'utf8');
-    const event = JSON.parse(data);
-    if (!event.pull_request?.number) {
-        throw new Error('No PR number in event payload');
-    }
-    return event;
-}
-
-;// CONCATENATED MODULE: ./src/bench-reorder.ts
-/**
- * bench-reorder.ts
- *
- * After a benchmark run, this script:
- * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
- * 2. Ranks models by SWE-bench score with latency penalty
- * 3. Updates nim_models in action.yml
- */
-
-
-/**
- * Parse SWE-bench API response into sorted entries.
- * Filters to score > 0.5, sorts by score descending, returns top 30.
- */
-function parseSweBenchResponse(data) {
-    return (data.results || [])
-        .filter(m => m.score > 0.5)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 30)
-        .map(m => ({
-        modelId: m.model_id,
-        score: m.score,
-        org: m.organization_id || '',
-    }));
-}
-// Module-level counter used to escalate the warning once consecutive
-// fetch failures pile up. This is intentionally process-local: bench-reorder
-// is invoked as a single CLI per workflow run, so there is no concurrency
-// to worry about. If this module is ever reused in a server context,
-// replace this with a per-request counter passed through fetchSweBenchScores.
-let sweBenchFetchFailures = 0;
-const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
-/**
- * Fetch SWE-bench Verified scores from the leaderboard API.
- * Returns top ~30 models by score, filtered to score > 0.5.
- */
-async function fetchSweBenchScores() {
-    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
-    try {
-        const resp = await withRetry(async () => {
-            const r = await fetch(url, {
-                signal: AbortSignal.timeout(30_000),
-            });
-            if (!r.ok)
-                throw new Error(`SWE-bench API returned ${r.status}`);
-            return r;
-        });
-        const data = await resp.json();
-        sweBenchFetchFailures = 0;
-        return parseSweBenchResponse(data);
-    }
-    catch (err) {
-        sweBenchFetchFailures++;
-        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
-            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
-        }
-        else {
-            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
-        }
-        return [];
-    }
-}
-/**
- * Parse the markdown table output from bench-entry.ts
- */
-function parseMarkdownTable(table) {
-    const lines = table.trim().split('\n');
-    const rows = [];
-    for (const line of lines) {
-        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
-            continue;
-        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
-        if (cells.length < 5)
-            continue;
-        const model = cells[0].replace(/`/g, '');
-        const ttftMs = parseDuration(cells[1]);
-        const latencyMs = parseDuration(cells[2]);
-        const tokensPerSec = parseFloat(cells[3]) || 0;
-        const errors = parseInt(cells[4], 10) || 0;
-        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
-    }
-    return rows;
-}
-function parseDuration(s) {
-    s = s.trim();
-    if (s === 'N/A')
-        return Infinity;
-    if (s.endsWith('μs'))
-        return parseFloat(s) / 1000;
-    if (s.endsWith('ms'))
-        return parseFloat(s);
-    if (s.endsWith('s'))
-        return parseFloat(s) * 1000;
-    return parseFloat(s) || Infinity;
-}
-/**
- * Known SWE-bench Verified scores for models available on NIM.
- * Source: https://llm-stats.com/benchmarks/swe-bench-verified
- */
-const SWE_BENCH_SCORES = {
-    'deepseek-ai/deepseek-v4-pro': 0.806,
-    'deepseek-ai/deepseek-v4-flash': 0.790,
-    'minimaxai/minimax-m3': 0.805,
-    'minimaxai/minimax-m2.7': 0.802,
-    'moonshotai/kimi-k2.6': 0.802,
-    'z-ai/glm-5.2': 0.778,
-    'mistralai/mistral-medium-3.5-128b': 0.776,
-    'qwen/qwen3.5-397b-a17b': 0.764,
-    'stepfun-ai/step-3.7-flash': 0.744,
-    'qwen/qwen3.5-122b-a10b': 0.734,
-    'bytedance/seed-oss-36b-instruct': 0.735,
-    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
-    'mistralai/mistral-nemotron': 0.720,
-    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
-    'openai/gpt-oss-120b': 0.720,
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
-    'mistralai/mistral-large': 0.700,
-    'mistralai/mistral-large-2-instruct': 0.700,
-    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
-    'nvidia/nemotron-3-super-120b-a12b': 0.680,
-    'mistralai/mistral-small-4-119b-2603': 0.680,
-    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
-    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
-    'nvidia/nemotron-4-340b-instruct': 0.650,
-    'openai/gpt-oss-20b': 0.650,
-    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
-    'thinkingmachines/inkling': 0.650,
-    'meta/llama-3.3-70b-instruct': 0.620,
-    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
-    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
-    'meta/llama-3.1-70b-instruct': 0.600,
-    'poolside/laguna-xs-2.1': 0.600,
-    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
-    'microsoft/phi-3.5-moe-instruct': 0.580,
-    'databricks/dbrx-instruct': 0.550,
-    'ai21labs/jamba-1.5-large-instruct': 0.550,
-    // Direct Mistral API model IDs
-    'mistral-medium-3.5': 0.776,
-    'mistral-medium-latest': 0.776,
-    'mistral-large-2512': 0.720,
-    'mistral-large-latest': 0.720,
-    'mistral-small-2603': 0.680,
-    'mistral-small-latest': 0.680,
-    'codestral-2508': 0.650,
-    'codestral-latest': 0.650,
-};
-/**
- * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
- * If fetchedScores is provided, checks it before the hardcoded table.
- */
-function getSweBenchScore(model, fetchedScores) {
-    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
-}
-/**
- * Effective score = SWE-bench score × latency multiplier.
- * - Under 60s: no penalty (1.0)
- * - 60-120s: linear penalty (1.0 → 0.7)
- * - Over 120s: heavy penalty (0.5)
- */
-const DEFAULT_MAX_LATENCY_MS = 60_000;
-function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
-    const swe = getSweBenchScore(model, fetchedScores);
-    if (!latencies || !(model in latencies))
-        return swe;
-    const lat = latencies[model];
-    if (lat <= maxLatencyMs)
-        return swe;
-    if (lat <= maxLatencyMs * 2) {
-        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
-        return swe * (1.0 - 0.3 * ratio);
-    }
-    return swe * 0.5;
-}
-/**
- * Rank models by effective score (SWE-bench + latency penalty).
- * Only includes models that worked today (tokensPerSec > 0).
- */
-function rankModels(rows, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
-    return alive
-        .map(r => r.model)
-        .sort((a, b) => {
-        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        if (effB !== effA)
-            return effB - effA;
-        // Tiebreaker: faster today wins
-        const latA = latencies?.[a] ?? Infinity;
-        const latB = latencies?.[b] ?? Infinity;
-        return latA - latB;
-    });
-}
-const TARGET_CONFIG = {
-    nim_models: {
-        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'nim_models',
-    },
-    mistral_models: {
-        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'mistral_models',
-    },
-};
-/**
- * Update action.yml with new model order for the given target.
- */
-function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
-    const content = (0,external_node_fs_namespaceObject.readFileSync)(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
-    const config = TARGET_CONFIG[target];
-    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
-    if (!config.pattern.test(content)) {
-        // Show context around the target key for debugging
-        const key = config.label + ':';
-        const idx = content.indexOf(key);
-        if (idx === -1) {
-            console.warn(`Warning: '${key}' not found in ${actionPath}`);
-        }
-        else {
-            const snippet = content.substring(idx, idx + 200);
-            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
-            console.warn(`Content around '${key}':\n${snippet}`);
-        }
-        return;
-    }
-    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
-    if (updated === content) {
-        console.log(`${config.label} models already in desired order, no changes needed`);
-        return;
-    }
-    (0,external_node_fs_namespaceObject.writeFileSync)(actionPath, updated, 'utf-8');
-}
-function updateActionYmlMistral(actionPath, orderedModels) {
-    updateActionYml(actionPath, orderedModels, 'mistral_models');
-}
-/**
- * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
- * Returns the parsed scores map (empty if neither source yields a value).
- * Exported for testability.
- */
-function readFetchedScores(rawInput, scoresFile) {
-    const fetchedScores = new Map();
-    if (scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile)) {
-        try {
-            const fileContent = (0,external_node_fs_namespaceObject.readFileSync)(scoresFile, 'utf-8').trim();
-            const scoresObj = JSON.parse(fileContent);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch (err) {
-            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
-        }
-        return fetchedScores;
-    }
-    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
-    // so we never accidentally match a fragment in the markdown table body.
-    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
-    if (scoresMatch) {
-        try {
-            const scoresObj = JSON.parse(scoresMatch[1]);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch {
-            console.warn('Warning: could not parse FETCHED_SCORES comment');
-        }
-    }
-    return fetchedScores;
-}
-/**
- * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
- * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
- */
-function stripFetchedScoresComment(rawInput, scoresFile) {
-    if (scoresFile)
-        return rawInput;
-    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
-}
-/**
- * Main entry point — reads table from stdin, ranks, updates action.yml.
- */
-async function main() {
-    const actionPath = process.env.ACTION_PATH || 'action.yml';
-    const target = (process.env.ACTION_TARGET || 'nim_models');
-    if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
-        process.exit(1);
-    }
-    // Read benchmark table from stdin
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-    }
-    const rawInput = Buffer.concat(chunks).toString('utf-8');
-    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
-    const scoresFile = process.env.BENCH_SCORES_FILE;
-    const fetchedScores = readFetchedScores(rawInput, scoresFile);
-    if (fetchedScores.size > 0) {
-        const source = scoresFile && (0,external_node_fs_namespaceObject.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
-        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
-    }
-    const table = stripFetchedScoresComment(rawInput, scoresFile);
-    if (!table.trim()) {
-        console.error('No benchmark output received on stdin');
-        process.exit(1);
-    }
-    const rows = parseMarkdownTable(table);
-    if (rows.length === 0) {
-        console.error('Could not parse any rows from benchmark output');
-        process.exit(1);
-    }
-    // Extract latencies
-    const latencies = {};
-    for (const row of rows) {
-        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
-            latencies[row.model] = row.latencyMs;
-        }
-    }
-    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
-    const ranked = rankModels(rows, latencies, fetchedScoresMap);
-    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-    for (const model of ranked) {
-        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
-        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
-        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
-    }
-    updateActionYml(actionPath, ranked, target);
-    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
-}
-// Only run when executed directly
-const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
-if (isMainModule) {
-    main().catch(err => {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
-    });
-}
-
-;// CONCATENATED MODULE: ./src/model-chain.ts
-
-/**
- * Build a combined fallback chain from NIM and Mistral model lists,
- * sorted by SWE-bench score descending. Only includes models whose
- * provider key is available.
- *
- * Stable sort — preserves original order within same score.
- */
-function buildCombinedChain(opts) {
-    const chain = [];
-    if (opts.hasNimKey) {
-        for (const id of opts.nimModels) {
-            chain.push({ id, provider: 'nim' });
-        }
-    }
-    if (opts.hasMistralKey) {
-        for (const id of opts.mistralModels) {
-            chain.push({ id, provider: 'mistral' });
-        }
-    }
-    // Stable sort by SWE-bench score descending
-    chain.sort((a, b) => {
-        const scoreA = getSweBenchScore(a.id);
-        const scoreB = getSweBenchScore(b.id);
-        return scoreB - scoreA;
-    });
-    // Prepend custom model — always tried first regardless of score
-    if (opts.customModel && opts.hasCustomConfig) {
-        chain.unshift({ id: opts.customModel, provider: 'custom' });
-    }
-    return chain;
 }
 
 ;// CONCATENATED MODULE: external "node:path"
@@ -36103,161 +36041,249 @@ const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```json\n'
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
 
+;// CONCATENATED MODULE: ./src/rules.ts
+function parseRules(input) {
+    if (!input || !input.trim())
+        return [];
+    const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    return lines.map(line => {
+        const severityMatch = line.match(/^\[(critical|warning|suggestion)\]\s*/i);
+        let severity = 'warning';
+        let description = line;
+        if (severityMatch) {
+            severity = severityMatch[1].toLowerCase();
+            description = line.slice(severityMatch[0].length);
+        }
+        const categoryMatch = description.match(/^([^:]+):\s*/);
+        let category = 'custom';
+        if (categoryMatch) {
+            category = categoryMatch[1].trim().toLowerCase();
+            description = description.slice(categoryMatch[0].length);
+        }
+        return { category, severity, description: description.trim() };
+    });
+}
+const INJECTION_PATTERNS = [
+    /ignore\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /disregard\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /forget\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /you\s+are\s+now\s+(?:a\s+)?(different|new)\s+(model|assistant|AI|reviewer|bot|tool)/i,
+    /you\s+are\s+now\s+(?:required|instructed|tasked|going)\s+to/i,
+    /new\s+instructions?\s*:\s*(?:follow|adopt|use|ignore|switch)/i,
+    /system\s*prompt\s*override/i,
+    /pretend\s+you\s+are\s+(?:not\s+)?(?:a\s+)?(different|new)?\s*(reviewer|assistant|AI|bot|tool)/i,
+    /act\s+as\s+(?:if|though)\s+you\s+(?:are|were)\s+(?:not|a\s+different)/i,
+    /override\s+(?:your|the)\s+(?:system|default|prior)\s+(?:prompt|instructions|behavior)/i,
+    /skip\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|checks|reviews)/i,
+];
+function validateRules(rules) {
+    const errors = [];
+    for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
+        if (rule.description.length > 500) {
+            errors.push(`Rule ${i + 1} exceeds 500 characters (${rule.description.length})`);
+        }
+        for (const pattern of INJECTION_PATTERNS) {
+            if (pattern.test(rule.description)) {
+                errors.push(`Rule ${i + 1} contains potential prompt injection`);
+            }
+        }
+    }
+    return { valid: errors.length === 0, errors };
+}
+function formatRulesForPrompt(rules) {
+    if (rules.length === 0)
+        return '';
+    const lines = ['## Custom Review Rules', 'Apply these additional rules during review:'];
+    for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
+        lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${r.description}`);
+    }
+    return lines.join('\n');
+}
+
 ;// CONCATENATED MODULE: ./src/prompts.ts
 
 
-const SEVERITY_GUIDANCE = `Severity guidance — match the issue text and the *_action field to each severity:
-- Critical findings: a bug, security hole, data-loss risk, or correctness failure
-  that BLOCKS release. Use direct action verbs in the issue text. Populate
-  critical_action with the concrete next step required to unblock release.
-- Warning findings: an investigative concern, likely bug, or maintainability or
-  performance issue that warrants attention but is not blocking. Populate
-  warning_action with the next step to investigate.
-- Suggestion findings: stylistic, readability, or nit-level improvement. Populate
-  suggestion_action with a short optional improvement.
 
-For the two action fields that do not match the severity, write a short placeholder
-string such as "not applicable" rather than omitting it — the schema requires all
-three on every finding.`;
-const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
+const SEVERITY_GUIDANCE = `## Severity Classification
 
-${SEVERITY_GUIDANCE}
+Assign exactly one severity to each finding. Use this decision tree:
 
-${JSON_SCHEMA_DEFINITION}`;
-const languagePrompts = {
-    go: `You are an expert senior software engineer performing a code review of Go code.
+**Critical** — Blocks release. Requires immediate action.
+- Security vulnerabilities (injection, auth bypass, data exposure)
+- Data loss or corruption risks
+- Race conditions causing incorrect behavior
+- Undefined behavior (C/C++: buffer overflow, use-after-free)
+- Logic bugs that break core functionality
 
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to Go.
+**Warning** — Should be fixed before merge. Needs investigation.
+- Likely bugs (wrong variable, off-by-one, missing null check)
+- Resource leaks (unclosed handles, goroutine leaks)
+- Error handling gaps (swallowed errors, bare returns)
+- Maintainability issues (complex conditionals, unclear control flow)
+- Performance issues (unnecessary allocations, N+1 queries)
 
-Go-specific focus areas:
-- Goroutine leaks and improper synchronization
-- Race conditions and missing mutex usage
-- Improper error handling (swallowed errors, bare returns)
-- Resource leaks (unclosed files, HTTP bodies, database connections)
-- Nil pointer dereferences and missing nil checks
-- Incorrect use of defer (especially in loops)
-- Concurrency patterns (channel misuse, deadlock potential)
-- Interface satisfaction and type assertions
-- Performance: unnecessary allocations, string concatenation in loops
-- Effective use of context for cancellation and timeouts
+**Suggestion** — Nice to have. Improve if convenient.
+- Style and readability (naming, formatting, organization)
+- Minor optimizations with negligible impact
+- Idiomatic alternatives (language-specific conventions)
+- Documentation improvements
 
-${SEVERITY_GUIDANCE}
+## Anti-Patterns (DO NOT flag these)
+- Import statements or dependency additions
+- Test files for style issues (only flag correctness bugs in tests)
+- Auto-generated code or lock files
+- Formatting-only changes in non-logic files
+- Files outside the diff (only review changed code)
 
-${JSON_SCHEMA_DEFINITION}`,
-    python: `You are an expert senior software engineer performing a code review of Python code.
-
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to Python.
-
-Python-specific focus areas:
-- Mutable default arguments in function signatures
-- Bare except clauses and overly broad exception handling
-- Global state and module-level side effects
-- Resource management (context managers vs manual close)
-- Security: injection vulnerabilities, unsafe eval/exec
-- Performance: unnecessary list comprehensions, string concatenation
-- Type hints and mypy compatibility issues
-- Proper use of __eq__ and __hash__
-- Import cycles and circular dependencies
-- Pythonic idioms vs anti-patterns
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`,
-    typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
-
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to TypeScript/JavaScript.
-
-TypeScript/JavaScript-specific focus areas:
-- Async/await misuse and unhandled promise rejections
-- Type safety: any usage, unsafe type assertions
-- Null/undefined handling and optional chaining
-- Memory leaks (event listener cleanup, timer management)
-- Security: XSS, prototype pollution, unsafe deserialization
-- Closures capturing stale references
-- Incorrect this binding in callbacks
-- Promise.all for parallel operations vs sequential loops
-- Module import/export patterns
-- React-specific: useEffect cleanup, memo usage, key props
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`,
-    java: `You are an expert senior software engineer performing a code review of Java code.
-
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to Java.
-
-Java-specific focus areas:
-- Resource management (try-with-resources, AutoCloseable)
-- Thread safety (volatile, synchronized, concurrent collections)
-- Null pointer risks and Optional usage
-- Exception handling (catching too broadly, swallowed exceptions)
-- Security: SQL injection, XSS, unsafe deserialization
-- Memory: object retention, String interning, collection sizing
-- Proper equals/hashCode/toString implementations
-- Generics usage and type erasure pitfalls
-- Stream API vs traditional loops performance
-- Dependency injection and lifecycle management
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`,
-    rust: `You are an expert senior software engineer performing a code review of Rust code.
-
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to Rust.
-
-Rust-specific focus areas:
-- Unsafe code blocks and their invariants
-- Lifetime issues and borrow checker violations
-- Unwrap/expect calls that could panic in production
-- Error handling (Result vs panic, thiserror vs anyhow)
-- Performance: unnecessary clones, allocations, bounds checks
-- Iterator vs loop efficiency
-- Send/Sync trait implications for concurrency
-- Deadlock potential in Mutex/RwLock usage
-- FFI safety and memory management
-- Clippy warnings and idiomatic Rust patterns
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`,
-    cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
-
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns specific to C/C++.
-
-C/C++-specific focus areas:
-- Memory safety: buffer overflows, use-after-free, double-free
-- Null pointer dereferences and missing null checks
-- Resource leaks (memory, file handles, sockets)
-- Undefined behavior (signed overflow, strict aliasing)
-- Smart pointer usage (unique_ptr vs shared_ptr vs raw)
-- Thread safety and data races
-- Security: format string vulnerabilities, integer overflows
-- RAII patterns and exception safety
-- Template metaprogramming pitfalls
-- C-style casts vs C++ casts, const correctness
-
-${SEVERITY_GUIDANCE}
-
-${JSON_SCHEMA_DEFINITION}`,
+## Action Fields
+For the two action fields that do not match the severity, write "not applicable".
+The schema requires all three on every finding.`;
+const languagePromptData = {
+    go: {
+        role: 'You are an expert Go engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Goroutine leaks and channel misuse',
+            'Race conditions (missing sync primitives)',
+            'Swallowed errors and bare returns',
+            'Resource leaks (unclosed files, HTTP bodies, DB connections)',
+            'Nil pointer dereferences and missing checks',
+        ],
+        antiPatterns: [
+            'defer in loops (defer runs at function exit, not iteration)',
+            'String concatenation in loops (use strings.Builder)',
+            'Unnecessary interface conversions',
+            'fmt.Sprintf in hot paths',
+        ],
+        severityCalibration: [
+            'Goroutine leak without context cancellation → Critical',
+            'Missing error check on non-nil return → Warning',
+            'Using fmt.Errorf instead of errors.Join → Suggestion',
+        ],
+    },
+    python: {
+        role: 'You are an expert Python engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Mutable default arguments in function signatures',
+            'Bare except clauses and broad exception handling',
+            'Resource management (context managers vs manual close)',
+            'Type safety and mypy compatibility',
+            'Security: injection, unsafe eval/exec',
+        ],
+        antiPatterns: [
+            'Flagging missing type hints on third-party library code',
+            'Style issues in auto-generated or vendored files',
+            'Unused imports in test fixtures',
+        ],
+        severityCalibration: [
+            'SQL injection via string formatting → Critical',
+            'Mutable default argument that mutates → Warning',
+            'Missing type hints on new function → Suggestion',
+        ],
+    },
+    typescript: {
+        role: 'You are an expert TypeScript/JavaScript engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Async/await misuse and unhandled promise rejections',
+            'Type safety: any usage, unsafe assertions',
+            'Null/undefined handling and optional chaining',
+            'Memory leaks (event listeners, timers, subscriptions)',
+            'Security: XSS, prototype pollution',
+        ],
+        antiPatterns: [
+            'Flagging React imports or JSX patterns',
+            'Style issues in generated type declarations',
+            'Linting rules the project already enforces',
+        ],
+        severityCalibration: [
+            'Unhandled promise rejection in critical path → Critical',
+            'Missing cleanup in useEffect → Warning',
+            'Using enum instead of const object → Suggestion',
+        ],
+    },
+    java: {
+        role: 'You are an expert Java engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Resource management (try-with-resources, AutoCloseable)',
+            'Thread safety (volatile, synchronized, concurrent collections)',
+            'Null pointer risks and Optional usage',
+            'Exception handling (catching too broadly, swallowed exceptions)',
+            'Security: SQL injection, deserialization',
+        ],
+        antiPatterns: [
+            'Flagging Lombok annotations or boilerplate',
+            'Style issues in generated code',
+            'Import ordering conventions',
+        ],
+        severityCalibration: [
+            'SQL injection via string concatenation → Critical',
+            'Resource leak without try-with-resources → Warning',
+            'Using raw type instead of generic → Suggestion',
+        ],
+    },
+    rust: {
+        role: 'You are an expert Rust engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Unsafe code blocks and their invariants',
+            'Unwrap/expect calls that could panic in production',
+            'Lifetime issues and borrow checker violations',
+            'Error handling (Result vs panic, thiserror vs anyhow)',
+            'Performance: unnecessary clones and allocations',
+        ],
+        antiPatterns: [
+            'Flagging #[allow(unused)] in test modules',
+            'Style issues in macro-generated code',
+            'Naming conventions in third-party bindings',
+        ],
+        severityCalibration: [
+            'unwrap() on user input or network response → Critical',
+            'clone() where borrow would suffice → Warning',
+            'Using format! in logging macros → Suggestion',
+        ],
+    },
+    cpp: {
+        role: 'You are an expert C/C++ engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Memory safety: buffer overflows, use-after-free, double-free',
+            'Null pointer dereferences and missing null checks',
+            'Resource leaks (memory, file handles, sockets)',
+            'Undefined behavior (signed overflow, strict aliasing)',
+            'Thread safety and data races',
+        ],
+        antiPatterns: [
+            'Flagging include order in system headers',
+            'Style issues in auto-generated bindings',
+            'Naming in external API wrappers',
+        ],
+        severityCalibration: [
+            'Buffer overflow via unchecked index → Critical',
+            'Raw pointer without RAII wrapper → Warning',
+            'C-style cast instead of static_cast → Suggestion',
+        ],
+    },
 };
-function buildSystemMessage(promptMode, systemPrompt) {
-    if (promptMode === 'replace') {
-        return systemPrompt || BASE_SYSTEM_PROMPT;
-    }
-    if (systemPrompt) {
-        return `${BASE_SYSTEM_PROMPT}\n\n${systemPrompt}`;
-    }
-    return BASE_SYSTEM_PROMPT;
+const languagePrompts = {};
+for (const [lang, data] of Object.entries(languagePromptData)) {
+    languagePrompts[lang] = [
+        data.role,
+        '',
+        'Focus areas (prioritize these):',
+        ...data.focusAreas.map(a => `- ${a}`),
+        '',
+        'Anti-patterns (do NOT flag these):',
+        ...data.antiPatterns.map(a => `- ${a}`),
+        '',
+        'Severity calibration:',
+        ...data.severityCalibration.map(s => `- ${s}`),
+        '',
+        SEVERITY_GUIDANCE,
+        '',
+        JSON_SCHEMA_DEFINITION,
+    ].join('\n');
 }
 function languageForFile(filePath) {
-    const ext = extname(filePath).toLowerCase();
+    const ext = (0,external_node_path_namespaceObject.extname)(filePath).toLowerCase();
     switch (ext) {
         case '.go': return 'go';
         case '.py': return 'python';
@@ -36274,18 +36300,526 @@ function languageForFile(filePath) {
         default: return 'generic';
     }
 }
+const GENERIC_PROMPT = [
+    'You are an expert senior software engineer performing a code review.',
+    'Analyse the diff for bugs, security issues, performance problems, and style/readability concerns.',
+    '',
+    SEVERITY_GUIDANCE,
+    '',
+    JSON_SCHEMA_DEFINITION,
+].join('\n');
+const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (GENERIC_PROMPT));
+function buildSystemMessage(promptMode, systemPrompt, language, rules) {
+    const base = buildSystemPrompt(language, rules);
+    if (promptMode === 'replace') {
+        return systemPrompt || base;
+    }
+    return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
+}
+function buildSystemPrompt(language, rules) {
+    const base = (language && languagePrompts[language]) ? languagePrompts[language] : GENERIC_PROMPT;
+    const rulesSection = formatRulesForPrompt(rules || []);
+    return rulesSection ? `${base}\n\n${rulesSection}` : base;
+}
 
-;// CONCATENATED MODULE: ./src/utils.ts
-function safeParseJson(content) {
-    const trimmed = content.trim();
-    if (!trimmed)
-        return undefined;
+// EXTERNAL MODULE: external "node:fs"
+var external_node_fs_ = __nccwpck_require__(3024);
+;// CONCATENATED MODULE: ./src/event.ts
+
+function loadEvent() {
+    const path = process.env.GITHUB_EVENT_PATH;
+    if (!path) {
+        throw new Error('GITHUB_EVENT_PATH not set');
+    }
+    const data = (0,external_node_fs_.readFileSync)(path, 'utf8');
+    let event;
     try {
-        return JSON.parse(trimmed);
+        event = JSON.parse(data);
     }
-    catch {
-        return undefined;
+    catch (err) {
+        throw new Error(`Failed to parse GitHub event payload at ${path}: ${err instanceof Error ? err.message : String(err)}`);
     }
+    if (!event.pull_request?.number || !event.pull_request?.head?.sha) {
+        throw new Error('No PR number or head SHA in event payload');
+    }
+    return event;
+}
+
+;// CONCATENATED MODULE: ./src/bench-reorder.ts
+/**
+ * bench-reorder.ts
+ *
+ * After a benchmark run, this script:
+ * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
+ * 2. Ranks models by SWE-bench score with latency penalty
+ * 3. Updates nim_models in action.yml
+ */
+
+
+/**
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
+ */
+function parseSweBenchResponse(data) {
+    return (data.results || [])
+        .filter(m => m.score > 0.5)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30)
+        .map(m => ({
+        modelId: m.model_id,
+        score: m.score,
+        org: m.organization_id || '',
+    }));
+}
+// Module-level counter used to escalate the warning once consecutive
+// fetch failures pile up. This is intentionally process-local: bench-reorder
+// is invoked as a single CLI per workflow run, so there is no concurrency
+// to worry about. If this module is ever reused in a server context,
+// replace this with a per-request counter passed through fetchSweBenchScores.
+let sweBenchFetchFailures = 0;
+const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+async function fetchSweBenchScores() {
+    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
+    try {
+        const resp = await withRetry(async () => {
+            const r = await fetch(url, {
+                signal: AbortSignal.timeout(30_000),
+            });
+            if (!r.ok)
+                throw new Error(`SWE-bench API returned ${r.status}`);
+            return r;
+        });
+        const data = await resp.json();
+        sweBenchFetchFailures = 0;
+        return parseSweBenchResponse(data);
+    }
+    catch (err) {
+        sweBenchFetchFailures++;
+        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
+            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
+        }
+        else {
+            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
+        }
+        return [];
+    }
+}
+/**
+ * Parse the markdown table output from bench-entry.ts
+ */
+function parseMarkdownTable(table) {
+    const lines = table.trim().split('\n');
+    const rows = [];
+    for (const line of lines) {
+        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
+            continue;
+        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+        if (cells.length < 5)
+            continue;
+        const model = cells[0].replace(/`/g, '');
+        const ttftMs = parseDuration(cells[1]);
+        const latencyMs = parseDuration(cells[2]);
+        const tokensPerSec = parseFloat(cells[3]) || 0;
+        const errors = parseInt(cells[4], 10) || 0;
+        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
+    }
+    return rows;
+}
+function parseDuration(s) {
+    s = s.trim();
+    if (s === 'N/A')
+        return Infinity;
+    if (s.endsWith('μs'))
+        return parseFloat(s) / 1000;
+    if (s.endsWith('ms'))
+        return parseFloat(s);
+    if (s.endsWith('s'))
+        return parseFloat(s) * 1000;
+    return parseFloat(s) || Infinity;
+}
+/**
+ * Known SWE-bench Verified scores for models available on NIM.
+ * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ */
+const SWE_BENCH_SCORES = {
+    'deepseek-ai/deepseek-v4-pro': 0.806,
+    'deepseek-ai/deepseek-v4-flash': 0.790,
+    'minimaxai/minimax-m3': 0.805,
+    'minimaxai/minimax-m2.7': 0.802,
+    'moonshotai/kimi-k2.6': 0.802,
+    'z-ai/glm-5.2': 0.778,
+    'mistralai/mistral-medium-3.5-128b': 0.776,
+    'qwen/qwen3.5-397b-a17b': 0.764,
+    'stepfun-ai/step-3.7-flash': 0.744,
+    'qwen/qwen3.5-122b-a10b': 0.734,
+    'bytedance/seed-oss-36b-instruct': 0.735,
+    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
+    'mistralai/mistral-nemotron': 0.720,
+    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
+    'openai/gpt-oss-120b': 0.720,
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
+    'mistralai/mistral-large': 0.700,
+    'mistralai/mistral-large-2-instruct': 0.700,
+    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
+    'nvidia/nemotron-3-super-120b-a12b': 0.680,
+    'mistralai/mistral-small-4-119b-2603': 0.680,
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
+    'nvidia/nemotron-4-340b-instruct': 0.650,
+    'openai/gpt-oss-20b': 0.650,
+    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
+    'thinkingmachines/inkling': 0.650,
+    'meta/llama-3.3-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
+    'meta/llama-3.1-70b-instruct': 0.600,
+    'poolside/laguna-xs-2.1': 0.600,
+    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
+    'microsoft/phi-3.5-moe-instruct': 0.580,
+    'databricks/dbrx-instruct': 0.550,
+    'ai21labs/jamba-1.5-large-instruct': 0.550,
+    // Direct Mistral API model IDs
+    'mistral-medium-3.5': 0.776,
+    'mistral-medium-latest': 0.776,
+    'mistral-large-2512': 0.720,
+    'mistral-large-latest': 0.720,
+    'mistral-small-2603': 0.680,
+    'mistral-small-latest': 0.680,
+    'codestral-2508': 0.650,
+    'codestral-latest': 0.650,
+};
+/**
+ * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
+ */
+function getSweBenchScore(model, fetchedScores) {
+    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
+}
+/**
+ * Effective score = SWE-bench score × latency multiplier.
+ * - Under 60s: no penalty (1.0)
+ * - 60-120s: linear penalty (1.0 → 0.7)
+ * - Over 120s: heavy penalty (0.5)
+ */
+const DEFAULT_MAX_LATENCY_MS = 60_000;
+function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
+    const swe = getSweBenchScore(model, fetchedScores);
+    if (!latencies || !(model in latencies))
+        return swe;
+    const lat = latencies[model];
+    if (lat <= maxLatencyMs)
+        return swe;
+    if (lat <= maxLatencyMs * 2) {
+        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
+}
+/**
+ * Rank models by effective score (SWE-bench + latency penalty).
+ * Only includes models that worked today (tokensPerSec > 0).
+ */
+function rankModels(rows, latencies, fetchedScores) {
+    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    return alive
+        .map(r => r.model)
+        .sort((a, b) => {
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        if (effB !== effA)
+            return effB - effA;
+        // Tiebreaker: faster today wins
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+}
+const TARGET_CONFIG = {
+    nim_models: {
+        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'nim_models',
+    },
+    mistral_models: {
+        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
+        label: 'mistral_models',
+    },
+};
+/**
+ * Update action.yml with new model order for the given target.
+ */
+function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
+    const content = (0,external_node_fs_.readFileSync)(actionPath, 'utf-8');
+    const modelString = orderedModels.join(',');
+    const config = TARGET_CONFIG[target];
+    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
+    if (!config.pattern.test(content)) {
+        // Show context around the target key for debugging
+        const key = config.label + ':';
+        const idx = content.indexOf(key);
+        if (idx === -1) {
+            console.warn(`Warning: '${key}' not found in ${actionPath}`);
+        }
+        else {
+            const snippet = content.substring(idx, idx + 200);
+            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
+            console.warn(`Content around '${key}':\n${snippet}`);
+        }
+        return;
+    }
+    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
+    if (updated === content) {
+        console.log(`${config.label} models already in desired order, no changes needed`);
+        return;
+    }
+    (0,external_node_fs_.writeFileSync)(actionPath, updated, 'utf-8');
+}
+function updateActionYmlMistral(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'mistral_models');
+}
+/**
+ * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
+ * Returns the parsed scores map (empty if neither source yields a value).
+ * Exported for testability.
+ */
+function readFetchedScores(rawInput, scoresFile) {
+    const fetchedScores = new Map();
+    if (scoresFile && (0,external_node_fs_.existsSync)(scoresFile)) {
+        try {
+            const fileContent = (0,external_node_fs_.readFileSync)(scoresFile, 'utf-8').trim();
+            const scoresObj = JSON.parse(fileContent);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch (err) {
+            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
+        }
+        return fetchedScores;
+    }
+    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
+    // so we never accidentally match a fragment in the markdown table body.
+    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
+    if (scoresMatch) {
+        try {
+            const scoresObj = JSON.parse(scoresMatch[1]);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch {
+            console.warn('Warning: could not parse FETCHED_SCORES comment');
+        }
+    }
+    return fetchedScores;
+}
+/**
+ * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
+ * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
+ */
+function stripFetchedScoresComment(rawInput, scoresFile) {
+    if (scoresFile)
+        return rawInput;
+    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
+}
+/**
+ * Main entry point — reads table from stdin, ranks, updates action.yml.
+ */
+async function main() {
+    const actionPath = process.env.ACTION_PATH || 'action.yml';
+    const target = (process.env.ACTION_TARGET || 'nim_models');
+    if (!(target in TARGET_CONFIG)) {
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+        process.exit(1);
+    }
+    // Read benchmark table from stdin
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    const rawInput = Buffer.concat(chunks).toString('utf-8');
+    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
+    const scoresFile = process.env.BENCH_SCORES_FILE;
+    const fetchedScores = readFetchedScores(rawInput, scoresFile);
+    if (fetchedScores.size > 0) {
+        const source = scoresFile && (0,external_node_fs_.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
+        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
+    }
+    const table = stripFetchedScoresComment(rawInput, scoresFile);
+    if (!table.trim()) {
+        console.error('No benchmark output received on stdin');
+        process.exit(1);
+    }
+    const rows = parseMarkdownTable(table);
+    if (rows.length === 0) {
+        console.error('Could not parse any rows from benchmark output');
+        process.exit(1);
+    }
+    // Extract latencies
+    const latencies = {};
+    for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+            latencies[row.model] = row.latencyMs;
+        }
+    }
+    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+    const ranked = rankModels(rows, latencies, fetchedScoresMap);
+    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+    for (const model of ranked) {
+        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
+        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
+        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+    }
+    updateActionYml(actionPath, ranked, target);
+    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
+}
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
+if (isMainModule) {
+    main().catch(err => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+    });
+}
+
+;// CONCATENATED MODULE: ./src/model-chain.ts
+
+/**
+ * Build a combined fallback chain from NIM and Mistral model lists,
+ * sorted by SWE-bench score descending. Only includes models whose
+ * provider key is available.
+ *
+ * Stable sort — preserves original order within same score.
+ */
+function buildCombinedChain(opts) {
+    const chain = [];
+    if (opts.hasNimKey) {
+        for (const id of opts.nimModels) {
+            chain.push({ id, provider: 'nim' });
+        }
+    }
+    if (opts.hasMistralKey) {
+        for (const id of opts.mistralModels) {
+            chain.push({ id, provider: 'mistral' });
+        }
+    }
+    // Stable sort by SWE-bench score descending
+    chain.sort((a, b) => {
+        const scoreA = getSweBenchScore(a.id);
+        const scoreB = getSweBenchScore(b.id);
+        return scoreB - scoreA;
+    });
+    // Prepend custom model — always tried first regardless of score
+    if (opts.customModel && opts.hasCustomConfig) {
+        chain.unshift({ id: opts.customModel, provider: 'custom' });
+    }
+    return chain;
+}
+const PROBE_TIMEOUT_MS = 10_000;
+async function probeModels(chain, clients) {
+    const probes = chain.map(async (tagged) => {
+        const client = clients[tagged.provider];
+        if (!client)
+            return null;
+        try {
+            const start = Date.now();
+            const ok = await Promise.race([
+                client.probeModel(tagged.id),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)),
+            ]);
+            if (ok)
+                return { model: tagged, latency: Date.now() - start };
+            return null;
+        }
+        catch {
+            return null;
+        }
+    });
+    const results = await Promise.all(probes);
+    const available = results.filter((r) => r !== null);
+    if (available.length === 0)
+        return null;
+    available.sort((a, b) => a.latency - b.latency);
+    return available[0].model;
+}
+
+;// CONCATENATED MODULE: ./src/metrics.ts
+function formatMetrics(metrics) {
+    const duration = metrics.review_duration_ms > 0
+        ? `${(metrics.review_duration_ms / 1000).toFixed(1)}s`
+        : 'N/A';
+    const totalFindings = metrics.findings_count.critical
+        + metrics.findings_count.warning
+        + metrics.findings_count.suggestion;
+    const lines = [
+        '## Review Metrics',
+        '',
+        '| Metric | Value |',
+        '|--------|-------|',
+        `| Model | \`${metrics.model_used}\` |`,
+        `| Files reviewed | ${metrics.files_reviewed} |`,
+        `| Duration | ${duration} |`,
+        `| Total findings | ${totalFindings} |`,
+        '',
+        '### Severity Breakdown',
+        '',
+        '| Severity | Count |',
+        '|----------|-------|',
+        `| 🚨 Critical | ${metrics.findings_count.critical} |`,
+        `| ⚠️ Warning | ${metrics.findings_count.warning} |`,
+        `| 💡 Suggestion | ${metrics.findings_count.suggestion} |`,
+    ];
+    if (metrics.validation_dropped > 0) {
+        lines.push('');
+        lines.push(`**Validation:** ${metrics.validation_dropped} finding(s) dropped by validation`);
+    }
+    if (metrics.batch_count > 1) {
+        lines.push('');
+        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.round(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
+    }
+    return lines.join('\n');
+}
+
+;// CONCATENATED MODULE: ./src/batching.ts
+function batchFiles(filesDiff, batchSize = 50) {
+    if (batchSize <= 0) {
+        throw new Error('batchSize must be a positive integer');
+    }
+    const sortedFiles = Object.keys(filesDiff).sort();
+    const batches = [];
+    for (let i = 0; i < sortedFiles.length; i += batchSize) {
+        const batchFiles = sortedFiles.slice(i, i + batchSize);
+        const batchDiffs = {};
+        for (const file of batchFiles) {
+            batchDiffs[file] = filesDiff[file];
+        }
+        batches.push({ files: batchFiles, diffs: batchDiffs });
+    }
+    return batches;
+}
+function mergeFindings(batchResults) {
+    const seen = new Set();
+    const merged = [];
+    const summaries = [];
+    for (const result of batchResults) {
+        if (result.summary) {
+            summaries.push(result.summary);
+        }
+        for (const finding of result.findings) {
+            const key = finding.line_start != null
+                ? `${finding.file}:${finding.line_start}:${finding.line_end ?? 'none'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`
+                : `${finding.file}:file:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                merged.push(finding);
+            }
+        }
+    }
+    return { findings: merged, summary: summaries.length > 0 ? summaries.join('\n\n') : null };
 }
 
 ;// CONCATENATED MODULE: ./src/index.ts
@@ -36297,6 +36831,21 @@ function safeParseJson(content) {
 
 
 
+
+
+
+
+
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    const existingReviewId = await findExistingReview(repo, prNumber, token);
+    if (existingReviewId) {
+        await deleteReview(repo, prNumber, existingReviewId, token);
+    }
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    if (existingCommentId) {
+        await deleteComment(repo, existingCommentId, token);
+    }
+}
 async function run() {
     const config = loadConfig();
     const hasCustom = !!(config.customApiUrl && config.customModel);
@@ -36338,6 +36887,7 @@ async function run() {
     });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
+    const commitSha = event.pull_request.head.sha;
     const repo = process.env.GITHUB_REPOSITORY;
     if (!repo) {
         throw new Error('GITHUB_REPOSITORY not set');
@@ -36348,6 +36898,17 @@ async function run() {
     }
     lib_core.info(`Reviewing PR #${prNumber} in ${repo}`);
     lib_core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
+    // Parse and validate custom rules
+    const rules = parseRules(config.customRules);
+    const rulesValidation = validateRules(rules);
+    if (!rulesValidation.valid) {
+        for (const err of rulesValidation.errors)
+            lib_core.warning(err);
+    }
+    if (rules.length > 0) {
+        lib_core.info(`Loaded ${rules.length} custom rule(s)`);
+    }
+    const reviewStartTime = Date.now();
     let filesDiff;
     try {
         filesDiff = await fetchDiff(repo, prNumber, token);
@@ -36387,128 +36948,235 @@ async function run() {
     const filesToReview = reviewableFiles.slice(0, config.maxFiles);
     const truncated = reviewableFiles.length > config.maxFiles;
     lib_core.info(`Reviewing ${filesToReview.length} files...`);
-    // Build combined diff
-    let diffToSend = '';
+    // Detect most common language for prompt selection
+    const langCounts = {};
     for (const filePath of filesToReview) {
-        diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
+        const lang = languageForFile(filePath);
+        langCounts[lang] = (langCounts[lang] || 0) + 1;
     }
-    const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
+    const detectedLanguage = Object.entries(langCounts)
+        .filter(([lang]) => lang !== 'generic')
+        .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
+    if (detectedLanguage) {
+        lib_core.info(`Detected language: ${detectedLanguage}`);
+    }
+    // Probe models in parallel to find the fastest, move it to front of chain
+    try {
+        const fastest = await probeModels(chain, clients);
+        if (fastest) {
+            const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
+            if (fastestIndex > 0) {
+                const [fastestModel] = chain.splice(fastestIndex, 1);
+                chain.unshift(fastestModel);
+                lib_core.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
+            }
+        }
+    }
+    catch (probeErr) {
+        lib_core.warning(`Model probing failed, using original chain order: ${probeErr}`);
+    }
     function providerToFormat(provider) {
         if (provider === 'mistral')
             return 'tools';
         return 'json_schema';
     }
-    // Try models from combined chain in order, stop at first success
-    let review = null;
-    let usedModel = '';
-    let lastRawContent = '';
-    for (const tagged of chain) {
-        const client = clients[tagged.provider];
-        if (!client)
-            continue;
-        try {
-            lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
-            const result = await client.chat(tagged.id, [
-                {
-                    role: 'system',
-                    content: buildSystemMessage(config.promptMode, config.systemPrompt),
-                },
-                { role: 'user', content: userMsg },
-            ], {
-                temperature: 0.2,
-                maxTokens: 4096,
-                schema: ReviewJsonSchema,
-                format: providerToFormat(tagged.provider),
-            });
-            if (result.finishReason === 'length') {
-                lib_core.info(`${tagged.id} response truncated, trying next...`);
+    const BATCH_SIZE = 50;
+    if (filesToReview.length === 0) {
+        lib_core.info('No files to review');
+        return;
+    }
+    // Build diff map and split into batches if needed
+    const filesDiffMap = {};
+    for (const f of filesToReview) {
+        filesDiffMap[f] = filesDiff[f] || '';
+    }
+    const batches = filesToReview.length > BATCH_SIZE
+        ? batchFiles(filesDiffMap, BATCH_SIZE)
+        : [];
+    const useBatching = batches.length > 1;
+    lib_core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
+    async function runModelChainForBatch(batchFileList, batchDiffMap) {
+        const combinedDiff = batchFileList.map(f => `\n--- ${f} ---\n${batchDiffMap[f]}\n`).join('');
+        const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
+        let batchReview = null;
+        let batchUsedModel = '';
+        let batchLastRawContent = '';
+        let batchDropped = 0;
+        for (const tagged of chain) {
+            const client = clients[tagged.provider];
+            if (!client)
                 continue;
-            }
-            if (!result.content || !result.content.trim()) {
-                lib_core.info(`${tagged.id} returned empty, trying next...`);
-                continue;
-            }
-            // Try parsing as structured JSON
-            let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
-            if (!parsed.success) {
-                // Retry once with validation error appended, truncating the previous
-                // response to avoid exceeding token limits on large outputs.
-                lib_core.info(`${tagged.id} schema validation failed, retrying...`);
-                const truncated = result.content.length > 500
-                    ? '...' + result.content.slice(-500)
-                    : result.content;
-                const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
-                const retryResult = await client.chat(tagged.id, [
+            try {
+                lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+                const result = await client.chat(tagged.id, [
                     {
                         role: 'system',
-                        content: buildSystemMessage(config.promptMode, config.systemPrompt),
+                        content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
                     },
                     { role: 'user', content: userMsg },
-                    { role: 'assistant', content: truncated },
-                    { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
                 ], {
                     temperature: 0.2,
                     maxTokens: 4096,
                     schema: ReviewJsonSchema,
                     format: providerToFormat(tagged.provider),
                 });
-                if (retryResult.finishReason === 'length') {
-                    lib_core.info(`${tagged.id} retry truncated, trying next...`);
+                if (result.finishReason === 'length') {
+                    lib_core.info(`${tagged.id} response truncated, trying next...`);
                     continue;
                 }
-                parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
+                if (!result.content || !result.content.trim()) {
+                    lib_core.info(`${tagged.id} returned empty, trying next...`);
+                    continue;
+                }
+                // Try parsing as structured JSON
+                let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
                 if (!parsed.success) {
-                    lastRawContent = retryResult.content;
-                    lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                    continue;
+                    // Retry once with validation error appended
+                    lib_core.info(`${tagged.id} schema validation failed, retrying...`);
+                    const truncatedContent = result.content.length > 500
+                        ? '...' + result.content.slice(-500)
+                        : result.content;
+                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
+                    const retryResult = await client.chat(tagged.id, [
+                        {
+                            role: 'system',
+                            content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
+                        },
+                        { role: 'user', content: userMsg },
+                        { role: 'assistant', content: truncatedContent },
+                        { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
+                    ], {
+                        temperature: 0.2,
+                        maxTokens: 4096,
+                        schema: ReviewJsonSchema,
+                        format: providerToFormat(tagged.provider),
+                    });
+                    if (retryResult.finishReason === 'length') {
+                        lib_core.info(`${tagged.id} retry truncated, trying next...`);
+                        continue;
+                    }
+                    parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
+                    if (!parsed.success) {
+                        batchLastRawContent = retryResult.content;
+                        lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+                        continue;
+                    }
                 }
+                // Both first-attempt and retry success paths converge here
+                batchReview = parsed.data;
+                const changedFiles = new Set(batchFileList);
+                const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
+                for (const w of validated.warnings)
+                    lib_core.warning(w);
+                batchReview = validated.valid;
+                batchDropped = validated.dropped;
+                batchUsedModel = tagged.id;
+                lib_core.info(`Done with ${tagged.id} (${tagged.provider})`);
+                break;
             }
-            // Both first-attempt and retry success paths converge here
-            review = parsed.data;
-            const changedFiles = new Set(reviewableFiles);
-            const validated = validateFindings(review, filesDiff, changedFiles);
-            for (const w of validated.warnings)
-                lib_core.warning(w);
-            review = validated.valid;
-            usedModel = tagged.id;
-            lib_core.info(`Done with ${tagged.id} (${tagged.provider})`);
-            break;
+            catch (err) {
+                lib_core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+            }
         }
-        catch (err) {
-            lib_core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+        return {
+            findings: batchReview?.findings ?? [],
+            summary: batchReview?.summary ?? '',
+            usedModel: batchUsedModel,
+            lastRawContent: batchLastRawContent,
+            dropped: batchDropped,
+        };
+    }
+    let review = null;
+    let usedModel = '';
+    let lastRawContent = '';
+    let validationDropped = 0;
+    if (useBatching) {
+        const batchResults = [];
+        for (const batch of batches) {
+            lib_core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
+            const result = await runModelChainForBatch(batch.files, batch.diffs);
+            batchResults.push(result);
         }
+        const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings, summary: r.summary })));
+        review = { findings: merged.findings, summary: merged.summary };
+        usedModel = batchResults.find(r => r.usedModel)?.usedModel || '';
+        lastRawContent = batchResults.find(r => r.lastRawContent)?.lastRawContent || '';
+        validationDropped = batchResults.reduce((sum, r) => sum + r.dropped, 0);
+    }
+    else {
+        const singleResult = await runModelChainForBatch(filesToReview, filesDiffMap);
+        review = { findings: singleResult.findings, summary: singleResult.summary };
+        usedModel = singleResult.usedModel;
+        lastRawContent = singleResult.lastRawContent;
+        validationDropped = singleResult.dropped;
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    // No issues found — delete existing comment and stop
+    const reviewDuration = Date.now() - reviewStartTime;
+    // No issues found — clean up any existing review/comment and stop
     if (review && review.findings.length === 0) {
-        if (existingCommentId) {
-            await deleteComment(repo, existingCommentId, token);
-            lib_core.info('Deleted previous review comment (no issues found)');
-        }
+        await cleanupPreviousOutput(repo, prNumber, token);
+        lib_core.info('Deleted previous review (no issues found)');
         return;
     }
-    const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
-    if (review) {
-        const { critical, warning, suggestion } = severityTally(review);
-        const tally = [
-            critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
-            warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
-            suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
-        ].filter(Boolean).join(' · ');
-        sections.push(`\n${tally}\n`);
-        sections.push(`\n${renderReview(review)}`);
+    const { critical, warning, suggestion } = review ? severityTally(review) : { critical: 0, warning: 0, suggestion: 0 };
+    const tally = [
+        critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
+        warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
+        suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
+    ].filter(Boolean).join(' · ');
+    const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+    if (review && review.findings.length > 0) {
+        if (shouldUseInlineComments(review.findings)) {
+            // Post findings as inline review comments
+            await cleanupPreviousOutput(repo, prNumber, token);
+            let body = `${summaryBody}\n${renderReview(review)}\n`;
+            if (truncated) {
+                body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
+            }
+            const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
+            lib_core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+        }
+        else {
+            // Too many findings for inline comments — post summary comment instead
+            await cleanupPreviousOutput(repo, prNumber, token);
+            const sections = [summaryBody];
+            sections.push(`\n${renderReview(review)}\n`);
+            if (truncated) {
+                sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+            }
+            await postComment(repo, prNumber, token, sections.join('\n'));
+            lib_core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
+        }
     }
     else if (!usedModel) {
-        sections.push(`\nNo review content returned from any model.`);
+        await cleanupPreviousOutput(repo, prNumber, token);
+        await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
-        sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+        await cleanupPreviousOutput(repo, prNumber, token);
+        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
     }
-    if (truncated) {
-        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+    // Collect and output metrics
+    const metrics = {
+        pr_number: prNumber,
+        model_used: modelShort,
+        findings_count: { critical, warning, suggestion },
+        files_reviewed: filesToReview.length,
+        review_duration_ms: reviewDuration,
+        validation_dropped: validationDropped,
+        batch_count: useBatching ? batches.length : 1,
+    };
+    const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+    if (stepSummary) {
+        try {
+            const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
+            fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
+            lib_core.info('Metrics written to step summary');
+        }
+        catch (err) {
+            lib_core.warning(`Failed to write metrics to step summary: ${err}`);
+        }
     }
-    await postComment(repo, prNumber, token, sections.join('\n'));
 }
 const inTest = process.argv.includes('--test');
 if (!inTest) {

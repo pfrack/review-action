@@ -9,3 +9,6 @@ export function safeParseJson(content) {
         return undefined;
     }
 }
+export function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
+}
