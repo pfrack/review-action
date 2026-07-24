@@ -154,3 +154,76 @@ jobs:
               git push origin "$LATEST_TAG" --force
             fi
           fi
+
+
+  benchmark-groq:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run Groq benchmark
+        env:
+          NIM_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NIM_BASE_URL: 'https://api.groq.com/openai/v1'
+          NIM_MODELS: 'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'
+          NIM_BENCH_ITERATIONS: '1'
+          REMOVED_MODELS_PATH: 'removed-groq-models.txt'
+        run: node dist/src/bench-entry.js > benchmark-output.txt
+
+      - name: Show results
+        if: always()
+        run: cat benchmark-output.txt
+
+      - name: Reorder Groq models
+        env:
+          ACTION_PATH: action.yml
+          ACTION_TARGET: groq_models
+        run: |
+          grep '^|' benchmark-output.txt > table.txt || true
+          if [ -s table.txt ]; then
+            node dist/src/bench-reorder.js < table.txt
+          else
+            echo "No benchmark table found, skipping reorder"
+          fi
+
+      - name: Commit updated Groq model order
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+          if [ -f removed-groq-models.txt ]; then git add removed-groq-models.txt; fi
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            LAST_MSG=$(git log -1 --format=%s)
+            if echo "$LAST_MSG" | grep -q "chore: update groq model order from daily benchmark"; then
+              git commit --amend --no-edit --date="$(date -R)"
+              git checkout -- .
+              git clean -fd
+              git pull --rebase origin main
+              git push --force
+            else
+              git commit -m "chore: update groq model order from daily benchmark [skip ci]"
+              git checkout -- .
+              git clean -fd
+              git pull --rebase origin main
+              git push
+            fi
+            LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Moving tag $LATEST_TAG to current commit"
+              git tag -f "$LATEST_TAG"
+              git push origin "$LATEST_TAG" --force
+            fi
+          fi

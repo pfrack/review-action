@@ -6,7 +6,7 @@
  * 2. Ranks models by SWE-bench score with latency penalty
  * 3. Updates nim_models in action.yml
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
 import { withRetry } from './retry.js';
 /**
  * Parse SWE-bench API response into sorted entries.
@@ -94,8 +94,13 @@ function parseDuration(s) {
     return parseFloat(s) || Infinity;
 }
 /**
- * Known SWE-bench Verified scores for models available on NIM.
+ * Known SWE-bench Verified scores for models available on NIM and Groq.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Model identifiers are provider-specific — Groq uses different IDs than
+ * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
+ * moonshotai/kimi-k2.6). If provider catalogs change, entries may drift;
+ * configured models without a score entry return 0.5 and rank lower.
  */
 export const SWE_BENCH_SCORES = {
     'deepseek-ai/deepseek-v4-pro': 0.806,
@@ -113,6 +118,7 @@ export const SWE_BENCH_SCORES = {
     'mistralai/mistral-nemotron': 0.720,
     'qwen/qwen3-next-80b-a3b-instruct': 0.720,
     'openai/gpt-oss-120b': 0.720,
+    'moonshotai/kimi-k2-instruct': 0.802,
     'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
     'mistralai/mistral-large': 0.700,
     'mistralai/mistral-large-2-instruct': 0.700,
@@ -126,6 +132,7 @@ export const SWE_BENCH_SCORES = {
     'meta/llama-4-maverick-17b-128e-instruct': 0.650,
     'thinkingmachines/inkling': 0.650,
     'meta/llama-3.3-70b-instruct': 0.620,
+    'llama-3.3-70b-versatile': 0.620,
     'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
     'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
     'meta/llama-3.1-70b-instruct': 0.600,
@@ -190,15 +197,13 @@ export function rankModels(rows, latencies, fetchedScores) {
         return latA - latB;
     });
 }
+function buildTargetPattern(targetKey) {
+    return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
+}
 const TARGET_CONFIG = {
-    nim_models: {
-        pattern: /(nim_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'nim_models',
-    },
-    mistral_models: {
-        pattern: /(mistral_models:\n\s+description:[^\n]*\n\s+default:\s*')([^']*)(')/,
-        label: 'mistral_models',
-    },
+    nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
+    mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
+    groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -284,7 +289,7 @@ async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
     const target = (process.env.ACTION_TARGET || 'nim_models');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models' or 'mistral_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin
@@ -320,11 +325,26 @@ async function main() {
     const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
     const ranked = rankModels(rows, latencies, fetchedScoresMap);
     console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-    for (const model of ranked) {
+    const summaryLines = [
+        `\n## Model Ranking (${target})\n`,
+        '| # | Model | SWE | Effective | Latency |',
+        '|---|-------|-----|-----------|---------|',
+    ];
+    ranked.forEach((model, index) => {
         const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
         const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
         const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
         console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+        summaryLines.push(`| ${index + 1} | \`${model}\` | ${swe} | ${eff} | ${lat} |`);
+    });
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+        try {
+            appendFileSync(summaryPath, summaryLines.join('\n') + '\n');
+        }
+        catch (err) {
+            console.warn(`Warning: could not write to GITHUB_STEP_SUMMARY: ${err}`);
+        }
     }
     updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);

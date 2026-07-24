@@ -1,6 +1,6 @@
 import { getSweBenchScore } from './bench-reorder.js';
 /**
- * Build a combined fallback chain from NIM and Mistral model lists,
+ * Build a combined fallback chain from NIM, Mistral, and Groq model lists,
  * sorted by SWE-bench score descending. Only includes models whose
  * provider key is available.
  *
@@ -8,6 +8,7 @@ import { getSweBenchScore } from './bench-reorder.js';
  */
 export function buildCombinedChain(opts) {
     const chain = [];
+    const { groqModels = [], hasGroqKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             chain.push({ id, provider: 'nim' });
@@ -16,6 +17,11 @@ export function buildCombinedChain(opts) {
     if (opts.hasMistralKey) {
         for (const id of opts.mistralModels) {
             chain.push({ id, provider: 'mistral' });
+        }
+    }
+    if (hasGroqKey) {
+        for (const id of groqModels) {
+            chain.push({ id, provider: 'groq' });
         }
     }
     // Stable sort by SWE-bench score descending

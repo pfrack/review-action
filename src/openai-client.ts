@@ -67,10 +67,16 @@ interface ChatResponse {
 export class OpenAIClient {
   private baseURL: string;
   private apiKey: string;
+  private providerLabel: string;
 
-  constructor(baseURL: string, apiKey: string) {
+  constructor(baseURL: string, apiKey: string, providerLabel?: string) {
     this.baseURL = baseURL.replace(/\/+$/, '');
     this.apiKey = apiKey;
+    this.providerLabel = providerLabel ||
+      (baseURL.includes('nvidia.com') ? 'NIM' :
+       baseURL.includes('mistral') ? 'Mistral' :
+       baseURL.includes('groq') ? 'Groq' :
+       baseURL.split('/')[2] || 'API');
   }
 
   async chat(model: string, messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
@@ -122,10 +128,7 @@ export class OpenAIClient {
 
       if (!response.ok) {
         const body = await response.text();
-        const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
-                         this.baseURL.includes('mistral') ? 'Mistral' :
-                         this.baseURL.split('/')[2] || 'API';
-        throw new RetryableError(`${provider} returned ${response.status}: ${body}`, response.status);
+throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
       }
       return response;
     });
@@ -178,7 +181,7 @@ export class OpenAIClient {
       });
       if (!r.ok) {
         const body = await r.text();
-        throw new RetryableError(`${r.status}: ${body}`, r.status);
+        throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
       }
       return r;
     });

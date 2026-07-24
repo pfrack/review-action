@@ -3,7 +3,28 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYmlMistral, readFetchedScores, stripFetchedScoresComment } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, readFetchedScores, stripFetchedScoresComment } from './bench-reorder.js';
+describe('updateActionYml groq target', () => {
+    it('correctly replaces groq_models default', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+        const actionPath = join(tmpDir, 'action.yml');
+        const content = `name: 'NIM Code Review'
+inputs:
+  groq_models:
+    description: 'Comma-separated Groq model fallback chain'
+    default: 'openai/gpt-oss-120b,llama-3.3-70b-versatile'
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'mistral-medium-3.5'
+`;
+        writeFileSync(actionPath, content, 'utf-8');
+        updateActionYml(actionPath, ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'], 'groq_models');
+        const result = readFileSync(actionPath, 'utf-8');
+        assert.ok(result.includes("default: 'llama-3.3-70b-versatile,openai/gpt-oss-120b'"));
+        assert.ok(result.includes("default: 'mistral-medium-3.5'"));
+        rmSync(tmpDir, { recursive: true, force: true });
+    });
+});
 describe('parseMarkdownTable', () => {
     it('parses a well-formed benchmark table', () => {
         const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
@@ -145,6 +166,7 @@ inputs:
         assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
         // nim_models should be unchanged
         assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+        rmSync(tmpDir, { recursive: true, force: true });
     });
     it('does not modify file when mistral_models block not found', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
@@ -159,6 +181,7 @@ inputs:
         updateActionYmlMistral(actionPath, ['codestral-2508']);
         const result = readFileSync(actionPath, 'utf-8');
         assert.strictEqual(result, content); // unchanged
+        rmSync(tmpDir, { recursive: true, force: true });
     });
 });
 describe('getSweBenchScore with fetched scores', () => {
