@@ -7,6 +7,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
       mistralModels: ['mistral-medium-3.5', 'codestral-2508'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: false,
     });
@@ -21,6 +23,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: false,
       hasMistralKey: true,
     });
@@ -37,6 +41,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro', 'meta/llama-3.3-70b-instruct'],
       mistralModels: ['mistralai/mistral-medium-3.5-128b', 'mistralai/mistral-small-4-119b-2603'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: true,
     });
@@ -53,10 +59,30 @@ describe('buildCombinedChain', () => {
     assert.strictEqual(chain[3].provider, 'nim');
   });
 
+  it('includes Groq models in the shared score-sorted chain', () => {
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: ['mistralai/mistral-medium-3.5-128b'],
+      groqModels: ['moonshotai/kimi-k2-instruct', 'llama-3.3-70b-versatile'],
+      hasNimKey: true,
+      hasMistralKey: true,
+      hasGroqKey: true,
+    });
+
+    assert.deepStrictEqual(chain.map(m => `${m.provider}:${m.id}`), [
+      'nim:deepseek-ai/deepseek-v4-pro',
+      'groq:moonshotai/kimi-k2-instruct',
+      'mistral:mistralai/mistral-medium-3.5-128b',
+      'groq:llama-3.3-70b-versatile',
+    ]);
+  });
+
   it('empty: returns empty array when neither key is available', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: ['mistral-medium-3.5'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: false,
       hasMistralKey: false,
     });
@@ -65,7 +91,7 @@ describe('buildCombinedChain', () => {
   });
 
   it('empty models: returns empty when model lists are empty', () => {
-    const chain = buildCombinedChain({ nimModels: [], mistralModels: [], hasNimKey: true, hasMistralKey: true });
+    const chain = buildCombinedChain({ nimModels: [], mistralModels: [], groqModels: [], hasNimKey: true, hasMistralKey: true, hasGroqKey: true });
     assert.strictEqual(chain.length, 0);
   });
 
@@ -73,6 +99,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['unknown/model-a'],
       mistralModels: ['unknown-mistral-model'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: true,
     });
@@ -89,6 +117,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['mistralai/mistral-nemotron'],
       mistralModels: ['mistralai/mistral-large-3-675b-instruct-2512'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: true,
     });
@@ -104,6 +134,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: ['mistralai/mistral-medium-3.5-128b'],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: true,
       customModel: 'my-custom/model',
@@ -122,6 +154,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: [],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: false,
     });
@@ -135,6 +169,8 @@ describe('buildCombinedChain', () => {
     const chain = buildCombinedChain({
       nimModels: ['deepseek-ai/deepseek-v4-pro'],
       mistralModels: [],
+      groqModels: [],
+      hasGroqKey: false,
       hasNimKey: true,
       hasMistralKey: false,
       customModel: 'my-custom/model',

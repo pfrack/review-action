@@ -14,6 +14,8 @@ export interface Config {
   mistralApiKey: string;
   mistralBaseUrl: string;
   mistralModels: string[];
+  groqApiKey: string;
+  groqModels: string[];
   customApiUrl: string;
   customModel: string;
   customApiKey: string;
@@ -42,6 +44,9 @@ export function loadConfig(): Config {
     mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
     mistralModels: splitCSV(core.getInput('mistral_models') ||
       'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+    groqApiKey: core.getInput('groq_api_key') || '',
+    groqModels: splitCSV(core.getInput('groq_models') ||
+      'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
     customApiUrl: core.getInput('custom_api_url') || '',
     customModel: core.getInput('custom_model') || '',
     customApiKey: core.getInput('custom_api_key') || '',

@@ -1,7 +1,7 @@
 import { getSweBenchScore } from './bench-reorder.js';
 import type { OpenAIClient } from './openai-client.js';
 
-export type Provider = 'nim' | 'mistral' | 'custom';
+export type Provider = 'nim' | 'mistral' | 'groq' | 'custom';
 
 export interface TaggedModel {
   id: string;
@@ -11,14 +11,16 @@ export interface TaggedModel {
 export interface ChainOptions {
   nimModels: string[];
   mistralModels: string[];
+  groqModels: string[];
   hasNimKey: boolean;
   hasMistralKey: boolean;
+  hasGroqKey: boolean;
   customModel?: string;
   hasCustomConfig?: boolean;
 }
 
 /**
- * Build a combined fallback chain from NIM and Mistral model lists,
+ * Build a combined fallback chain from NIM, Mistral, and Groq model lists,
  * sorted by SWE-bench score descending. Only includes models whose
  * provider key is available.
  *
@@ -36,6 +38,12 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   if (opts.hasMistralKey) {
     for (const id of opts.mistralModels) {
       chain.push({ id, provider: 'mistral' });
+    }
+  }
+
+  if (opts.hasGroqKey) {
+    for (const id of opts.groqModels) {
+      chain.push({ id, provider: 'groq' });
     }
   }
 
