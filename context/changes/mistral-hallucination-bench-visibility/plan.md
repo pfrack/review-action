@@ -214,8 +214,8 @@ Add a daily benchmark job for Groq and write the ranked model list to GITHUB_STE
 
 #### Automated
 
-- [x] 2.1 TypeScript compiles: `npm run build`
-- [x] 2.2 Tests pass: `npm test`
+- [x] 2.1 TypeScript compiles: `npm run build` — ed393dd
+- [x] 2.2 Tests pass: `npm test` — ed393dd
 
 #### Manual
 
