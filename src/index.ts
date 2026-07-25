@@ -299,7 +299,12 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     } catch (err) {
       core.warning(`Failed to clean up previous review output: ${err}`);
     }
-    core.info('Deleted previous review (no issues found)');
+    try {
+      await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
+      core.info('Posted LGTM comment (no issues found)');
+    } catch (err) {
+      core.warning(`Failed to post LGTM comment: ${err}`);
+    }
     return { critical, warning, suggestion };
   }
 
