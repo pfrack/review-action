@@ -4,7 +4,8 @@ import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
 import { validateFindings } from './review.js';
 import { severityTally } from './render.js';
-import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT } from './prompts.js';
+import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
+import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
 
 describe('buildSystemMessage', () => {
@@ -20,7 +21,7 @@ describe('buildSystemMessage', () => {
 
   it('replaces base with custom prompt in replace mode', () => {
     const msg = buildSystemMessage('replace', 'override text');
-    assert.strictEqual(msg, 'override text');
+    assert.strictEqual(msg, `override text\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`);
   });
 
   it('falls back to BASE_SYSTEM_PROMPT in replace mode with empty custom prompt', () => {

@@ -3,7 +3,7 @@ import { OpenAIClient, type ResponseFormat } from './openai-client.js';
 import { loadConfig, type Config } from './config.js';
 import { fetchDiff, shouldExclude, validateFindings, DiffTooLargeError } from './review.js';
 import { renderReview, severityTally } from './render.js';
-import { postComment, findExistingComment, deleteComment } from './github-review.js';
+import { postComment, findExistingComment, deleteComment, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
 import { buildSystemPrompt, buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider, type TaggedModel } from './model-chain.js';
@@ -11,7 +11,6 @@ import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { safeParseJson, validateProviderUrl } from './utils.js';
 import { parseRules, validateRules, type Rule } from './rules.js';
-import { createReview, shouldUseInlineComments, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
 
@@ -273,7 +272,6 @@ async function executeReview(
 interface DispatchContext {
   repo: string;
   prNumber: number;
-  commitSha: string;
   token: string;
   config: Config;
   review: ReviewType;
@@ -285,7 +283,7 @@ interface DispatchContext {
 }
 
 async function dispatchOutput(context: DispatchContext): Promise<{ critical: number; warning: number; suggestion: number }> {
-  const { repo, prNumber, commitSha, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
+  const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
   const modelShort = usedModel.split('/').pop() || usedModel;
   const { critical, warning, suggestion } = severityTally(review);
   const tally = [
@@ -305,31 +303,17 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     return { critical, warning, suggestion };
   }
 
-  if (shouldUseInlineComments(review.findings)) {
-    try {
-      await cleanupPreviousOutput(repo, prNumber, token);
-    } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
-    }
-    let body = `${summaryBody}\n${renderReview(review)}\n`;
-    if (truncated) {
-      body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
-    }
-    const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
-    core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
-  } else {
-    try {
-      await cleanupPreviousOutput(repo, prNumber, token);
-    } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
-    }
-    const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
-    if (truncated) {
-      sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-    }
-    await postComment(repo, prNumber, token, sections.join('\n'));
-    core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
+  try {
+    await cleanupPreviousOutput(repo, prNumber, token);
+  } catch (err) {
+    core.warning(`Failed to clean up previous review output: ${err}`);
   }
+  const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
+  if (truncated) {
+    sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+  }
+  await postComment(repo, prNumber, token, sections.join('\n'));
+  core.info(`Posted summary comment with ${review.findings.length} findings`);
 
   if (!usedModel) {
     try {
@@ -370,7 +354,6 @@ async function run(): Promise<void> {
   const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
   const event = loadEvent();
   const prNumber = event.pull_request.number;
-  const commitSha = event.pull_request.head.sha;
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) throw new Error('GITHUB_REPOSITORY not set');
   const token = process.env.GITHUB_TOKEN;
@@ -411,7 +394,7 @@ async function run(): Promise<void> {
   core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
   const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules);
   const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
-  const counts = await dispatchOutput({ repo, prNumber, commitSha, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
+  const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
   await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }
 

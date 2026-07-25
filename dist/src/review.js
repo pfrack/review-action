@@ -120,7 +120,7 @@ export async function fetchDiff(repo, prNumber, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
         return response;
     });
