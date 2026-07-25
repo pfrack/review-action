@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, BOT_LOGIN } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, BOT_LOGIN } from './github-review.js';
 function makeFinding(overrides = {}) {
     return {
         file: 'src/main.ts',
@@ -179,6 +179,44 @@ describe('findExistingReview', () => {
         try {
             const reviewId = await findExistingReview('owner/repo', 42, 'token');
             assert.strictEqual(reviewId, null);
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('postComment', () => {
+    const originalFetch = globalThis.fetch;
+    it('posts LGTM comment with correct body', async () => {
+        let capturedUrl = '';
+        let capturedBody;
+        globalThis.fetch = (async (url, init) => {
+            capturedUrl = url;
+            capturedBody = JSON.parse(init?.body || '{}');
+            return { ok: true };
+        });
+        try {
+            const summaryBody = '### AI Code Review\n\n<sub>Model: test-model</sub>\n\nNo findings\n';
+            await postComment('owner/repo', 42, 'test-token', `${summaryBody}\nNo issues found. LGTM!`);
+            assert.ok(capturedUrl.includes('/issues/42/comments'));
+            assert.ok(capturedBody.body.includes('### AI Code Review'));
+            assert.ok(capturedBody.body.includes('<sub>Model: test-model</sub>'));
+            assert.ok(capturedBody.body.includes('No issues found. LGTM!'));
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('posts comment with correct auth headers', async () => {
+        let capturedHeaders;
+        globalThis.fetch = (async (_url, init) => {
+            capturedHeaders = init?.headers;
+            return { ok: true };
+        });
+        try {
+            await postComment('owner/repo', 42, 'my-token', 'test body');
+            assert.strictEqual(capturedHeaders['Authorization'], 'Bearer my-token');
+            assert.strictEqual(capturedHeaders['Content-Type'], 'application/json');
         }
         finally {
             globalThis.fetch = originalFetch;
