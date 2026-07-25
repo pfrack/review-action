@@ -442,9 +442,9 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [x] 2.1 OpenAIClient providerLabel for OR/Kilo domains
-- [x] 2.2 buildClients() + validateConfig() for OR/Kilo
-- [x] 2.3 Chain building + prioritizeChain covers new providers
+- [x] 2.1 OpenAIClient providerLabel for OR/Kilo domains — 111fc89
+- [x] 2.2 buildClients() + validateConfig() for OR/Kilo — 111fc89
+- [x] 2.3 Chain building + prioritizeChain covers new providers — 111fc89
 
 #### Manual
 
@@ -455,11 +455,11 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [ ] 3.1 SWE_BENCH_SCORES entries for free models (estimated)
-- [ ] 3.2 ActionTarget + TARGET_CONFIG for openrouter_models + kilocode_models
-- [ ] 3.3 updateActionYml helpers for OR/Kilo
-- [ ] 3.4 Free-model ordering rule in buildCombinedChain
-- [ ] 3.5 custom_models CSV fully wired
+- [x] 3.1 SWE_BENCH_SCORES entries for free models (estimated)
+- [x] 3.2 ActionTarget + TARGET_CONFIG for openrouter_models + kilocode_models
+- [x] 3.3 updateActionYml helpers for OR/Kilo
+- [x] 3.4 Free-model ordering rule in buildCombinedChain
+- [x] 3.5 custom_models CSV fully wired
 
 #### Manual
 
