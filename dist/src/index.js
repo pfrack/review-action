@@ -244,8 +244,13 @@ async function dispatchOutput(context) {
         catch (err) {
             core.warning(`Failed to clean up previous review output: ${err}`);
         }
-        await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
-        core.info('Posted LGTM comment (no issues found)');
+        try {
+            await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
+            core.info('Posted LGTM comment (no issues found)');
+        }
+        catch (err) {
+            core.warning(`Failed to post LGTM comment: ${err}`);
+        }
         return { critical, warning, suggestion };
     }
     try {
