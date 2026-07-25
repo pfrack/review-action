@@ -1,7 +1,7 @@
 ---
 id: openrouter-provider
 title: Add OpenRouter and Kilo as first-class providers with free-model support
-status: implementing
+status: implemented
   created: 2026-07-25
   updated: 2026-07-25
 ---

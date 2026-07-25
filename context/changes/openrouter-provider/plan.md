@@ -488,9 +488,9 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [x] 5.1 Full build + test suite passes
-- [x] 5.2 Chain ordering sanity test passes
-- [x] 5.3 README renders without formatting issues
+- [x] 5.1 Full build + test suite passes — 6504300
+- [x] 5.2 Chain ordering sanity test passes — 6504300
+- [x] 5.3 README renders without formatting issues — 6504300
 
 #### Manual
 
