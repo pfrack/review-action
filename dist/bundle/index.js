@@ -27500,7 +27500,7 @@ __nccwpck_require__.d(__webpack_exports__, {
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var lib_core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: ./src/retry.ts
-class RetryableError extends Error {
+class retry_RetryableError extends Error {
     status;
     retryAfterMs;
     constructor(message, status, retryAfterMs) {
@@ -27512,7 +27512,7 @@ class RetryableError extends Error {
 }
 function getRetryDelay(error, attempt, delayMs) {
     const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
-    const retryAfterMs = error instanceof RetryableError ? error.retryAfterMs ?? 0 : 0;
+    const retryAfterMs = error instanceof retry_RetryableError ? error.retryAfterMs ?? 0 : 0;
     return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
 }
 async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
@@ -27523,7 +27523,7 @@ async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
         }
         catch (error) {
             lastError = error;
-            const status = error instanceof RetryableError ? error.status : 0;
+            const status = error instanceof retry_RetryableError ? error.status : 0;
             const isFetchNetworkError = error instanceof TypeError &&
                 /fetch|network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(error.message);
             if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
@@ -27610,7 +27610,7 @@ class OpenAIClient {
             if (!response.ok) {
                 const body = await response.text();
                 const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status, retryAfterMs);
+                throw new retry_RetryableError(`${this.providerLabel} returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -27620,7 +27620,7 @@ class OpenAIClient {
         }
         catch (err) {
             if (err instanceof SyntaxError) {
-                throw new RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
+                throw new retry_RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
             }
             throw err;
         }
@@ -27669,7 +27669,7 @@ class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status, retryAfterMs);
+                throw new retry_RetryableError(`${this.providerLabel}: ${r.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, r.status, retryAfterMs);
             }
             return r;
         });
@@ -27677,38 +27677,43 @@ class OpenAIClient {
         const decoder = new TextDecoder();
         let buffer = '';
         let firstTokenAt = null;
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done)
-                break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-            for (const line of lines) {
-                if (!line.startsWith('data: '))
-                    continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') {
-                    yield { delta: '', done: true, firstTokenAt: null };
-                    return;
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() ?? '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: '))
+                        continue;
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') {
+                        yield { delta: '', done: true, firstTokenAt: null };
+                        return;
+                    }
+                    let chunk;
+                    try {
+                        chunk = JSON.parse(data);
+                    }
+                    catch {
+                        continue;
+                    }
+                    if (!chunk.choices || chunk.choices.length === 0)
+                        continue;
+                    const delta = chunk.choices[0].delta?.content ?? '';
+                    if (!delta)
+                        continue;
+                    if (firstTokenAt === null) {
+                        firstTokenAt = Date.now();
+                    }
+                    yield { delta, done: false, firstTokenAt };
                 }
-                let chunk;
-                try {
-                    chunk = JSON.parse(data);
-                }
-                catch {
-                    continue;
-                }
-                if (!chunk.choices || chunk.choices.length === 0)
-                    continue;
-                const delta = chunk.choices[0].delta?.content ?? '';
-                if (!delta)
-                    continue;
-                if (firstTokenAt === null) {
-                    firstTokenAt = Date.now();
-                }
-                yield { delta, done: false, firstTokenAt };
             }
+        }
+        finally {
+            reader.releaseLock();
         }
     }
     async probeModel(model) {
@@ -28005,7 +28010,7 @@ async function fetchDiff(repo, prNumber, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
         return response;
     });
@@ -28030,7 +28035,7 @@ function safeParseJson(content) {
         return undefined;
     }
 }
-function escapeMarkdown(text) {
+function utils_escapeMarkdown(text) {
     return text.replace(/[\\*_{}\[\]()#`>+~|!<&]/g, '\\$&');
 }
 function validateProviderUrl(url, label) {
@@ -28045,12 +28050,20 @@ function validateProviderUrl(url, label) {
     if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
         throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
     }
-    // Block IPv6 link-local (fe80::/10)
-    if (hostname.startsWith('fe80:') || hostname.startsWith('[fe80:')) {
+    // Block IPv6 link-local (fe80::/10 — covers fe80:: through febf::)
+    if (/^fe[89ab][0-9a-f]*:/i.test(hostname)) {
         throw new Error(`${label} blocked: ${hostname} is an IPv6 link-local address`);
     }
+    // Block IPv4-mapped IPv6 link-local (::ffff:169.254.x.x)
+    if (hostname.startsWith('::ffff:')) {
+        const mappedIpv4 = hostname.slice(7);
+        const ipv4Match = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+        if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+            throw new Error(`${label} blocked: ${hostname} is an IPv4-mapped link-local address (cloud metadata endpoint)`);
+        }
+    }
     // Block AWS IPv6 metadata endpoint (fd00:ec2::254)
-    if (hostname === 'fd00:ec2::254' || hostname === '[fd00:ec2::254]') {
+    if (hostname === 'fd00:ec2::254') {
         throw new Error(`${label} blocked: ${hostname} is an AWS metadata endpoint`);
     }
 }
@@ -28098,18 +28111,18 @@ function renderReview(review) {
                 const lineInfo = f.line_start != null
                     ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
                     : '';
-                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${utils_escapeMarkdown(f.suggestion)}` : '';
                 const matchAction = f[meta.actionKey];
                 const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
+                    ? `\n  - **${meta.tag}:** ${utils_escapeMarkdown(matchAction)}`
                     : '';
-                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${utils_escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
             }
             lines.push('');
         }
     }
     if (review.summary) {
-        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
+        lines.push(`**Summary:** ${utils_escapeMarkdown(review.summary)}`);
     }
     return lines.join('\n');
 }
@@ -28168,7 +28181,7 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
     if (body)
         payload.body = body;
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
-    const resp = await retry_withRetry(async () => {
+    const resp = await withRetry(async () => {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -28181,7 +28194,7 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
         });
         if (!response.ok) {
             const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody.length > 200 ? '...' + errBody.slice(-200) : errBody}`, response.status);
         }
         return response;
     });
@@ -28206,13 +28219,13 @@ async function findExistingReview(repo, prNumber, token) {
                 });
                 if (!response.ok) {
                     const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                    throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
                 }
                 return response;
             });
         }
         catch (err) {
-            if (err instanceof RetryableError && err.status === 404)
+            if (err instanceof retry_RetryableError && err.status === 404)
                 return null;
             throw err;
         }
@@ -28244,7 +28257,7 @@ async function deleteReview(repo, prNumber, reviewId, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
     });
 }
@@ -28272,7 +28285,7 @@ async function deleteComment(repo, commentId, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
     });
 }
@@ -28294,14 +28307,14 @@ async function findExistingComment(repo, prNumber, token) {
                 });
                 if (!response.ok) {
                     const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                    throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
                 }
                 return response;
             });
         }
         catch (err) {
             // 404 means PR doesn't exist or token lacks access — skip comment update
-            if (err instanceof RetryableError && err.status === 404)
+            if (err instanceof retry_RetryableError && err.status === 404)
                 return null;
             throw err;
         }
@@ -28332,7 +28345,7 @@ async function createComment(repo, prNumber, token, body) {
         });
         if (!response.ok) {
             const responseBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody}`, response.status);
+            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
         }
     });
 }
@@ -36391,7 +36404,9 @@ const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (GENER
 function buildSystemMessage(promptMode, systemPrompt, language, rules) {
     const base = buildSystemPrompt(language, rules);
     if (promptMode === 'replace') {
-        return systemPrompt || base;
+        return systemPrompt
+            ? `${systemPrompt}\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`
+            : base;
     }
     return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
 }
@@ -36945,7 +36960,6 @@ function mergeFindings(batchResults) {
 
 
 
-
 const CHAIN_TIMEOUT_MS = 120_000;
 async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
     let timer;
@@ -37161,7 +37175,7 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
     };
 }
 async function dispatchOutput(context) {
-    const { repo, prNumber, commitSha, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
+    const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
     const modelShort = usedModel.split('/').pop() || usedModel;
     const { critical, warning, suggestion } = severityTally(review);
     const tally = [
@@ -37180,34 +37194,18 @@ async function dispatchOutput(context) {
         lib_core.info('Deleted previous review (no issues found)');
         return { critical, warning, suggestion };
     }
-    if (shouldUseInlineComments(review.findings)) {
-        try {
-            await cleanupPreviousOutput(repo, prNumber, token);
-        }
-        catch (err) {
-            lib_core.warning(`Failed to clean up previous review output: ${err}`);
-        }
-        let body = `${summaryBody}\n${renderReview(review)}\n`;
-        if (truncated) {
-            body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
-        }
-        const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
-        lib_core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+    try {
+        await cleanupPreviousOutput(repo, prNumber, token);
     }
-    else {
-        try {
-            await cleanupPreviousOutput(repo, prNumber, token);
-        }
-        catch (err) {
-            lib_core.warning(`Failed to clean up previous review output: ${err}`);
-        }
-        const sections = [summaryBody, `\n${renderReview(review)}\n`];
-        if (truncated) {
-            sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-        }
-        await postComment(repo, prNumber, token, sections.join('\n'));
-        lib_core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
+    catch (err) {
+        lib_core.warning(`Failed to clean up previous review output: ${err}`);
     }
+    const sections = [summaryBody, `\n${renderReview(review)}\n`];
+    if (truncated) {
+        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+    }
+    await postComment(repo, prNumber, token, sections.join('\n'));
+    lib_core.info(`Posted summary comment with ${review.findings.length} findings`);
     if (!usedModel) {
         try {
             await cleanupPreviousOutput(repo, prNumber, token);
@@ -37224,7 +37222,7 @@ async function dispatchOutput(context) {
         catch (err) {
             lib_core.warning(`Failed to clean up previous review output: ${err}`);
         }
-        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     }
     return { critical, warning, suggestion };
 }
@@ -37249,7 +37247,6 @@ async function run() {
     const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
-    const commitSha = event.pull_request.head.sha;
     const repo = process.env.GITHUB_REPOSITORY;
     if (!repo)
         throw new Error('GITHUB_REPOSITORY not set');
@@ -37302,7 +37299,7 @@ async function run() {
     lib_core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
     const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules);
     const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
-    const counts = await dispatchOutput({ repo, prNumber, commitSha, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
+    const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
     await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }
 const inTest = process.argv.includes('--test') || !!process.env.NODE_TEST_CONTEXT;

@@ -70,7 +70,7 @@ export class OpenAIClient {
             if (!response.ok) {
                 const body = await response.text();
                 const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status, retryAfterMs);
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -129,7 +129,7 @@ export class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status, retryAfterMs);
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, r.status, retryAfterMs);
             }
             return r;
         });
@@ -137,38 +137,43 @@ export class OpenAIClient {
         const decoder = new TextDecoder();
         let buffer = '';
         let firstTokenAt = null;
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done)
-                break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-            for (const line of lines) {
-                if (!line.startsWith('data: '))
-                    continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') {
-                    yield { delta: '', done: true, firstTokenAt: null };
-                    return;
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() ?? '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: '))
+                        continue;
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') {
+                        yield { delta: '', done: true, firstTokenAt: null };
+                        return;
+                    }
+                    let chunk;
+                    try {
+                        chunk = JSON.parse(data);
+                    }
+                    catch {
+                        continue;
+                    }
+                    if (!chunk.choices || chunk.choices.length === 0)
+                        continue;
+                    const delta = chunk.choices[0].delta?.content ?? '';
+                    if (!delta)
+                        continue;
+                    if (firstTokenAt === null) {
+                        firstTokenAt = Date.now();
+                    }
+                    yield { delta, done: false, firstTokenAt };
                 }
-                let chunk;
-                try {
-                    chunk = JSON.parse(data);
-                }
-                catch {
-                    continue;
-                }
-                if (!chunk.choices || chunk.choices.length === 0)
-                    continue;
-                const delta = chunk.choices[0].delta?.content ?? '';
-                if (!delta)
-                    continue;
-                if (firstTokenAt === null) {
-                    firstTokenAt = Date.now();
-                }
-                yield { delta, done: false, firstTokenAt };
             }
+        }
+        finally {
+            reader.releaseLock();
         }
     }
     async probeModel(model) {

@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer } from 'node:http';
 import { validateCodeContext, revalidateFindings } from './validation.js';
 import { OpenAIClient } from './openai-client.js';
+import { startMockServer } from './test-utils.js';
 function makeFinding(overrides = {}) {
     return {
         file: 'src/main.ts',
@@ -79,17 +79,6 @@ describe('validateCodeContext', () => {
         assert.strictEqual(result.valid, true);
     });
 });
-function startMockServer(handler) {
-    return new Promise((resolve) => {
-        const server = createServer(handler);
-        server.unref();
-        server.listen(0, () => {
-            const addr = server.address();
-            const port = typeof addr === 'string' ? 0 : addr.port;
-            resolve({ url: `http://localhost:${port}`, close: () => server.close() });
-        });
-    });
-}
 describe('revalidateFindings', () => {
     const diff = 'diff --git a/src/main.ts b/src/main.ts\n@@ -10,3 +10,5 @@\n old\n+new1\n+new2\n old2\n';
     const findings = [

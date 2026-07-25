@@ -207,7 +207,9 @@ export const BASE_SYSTEM_PROMPT = GENERIC_PROMPT;
 export function buildSystemMessage(promptMode, systemPrompt, language, rules) {
     const base = buildSystemPrompt(language, rules);
     if (promptMode === 'replace') {
-        return systemPrompt || base;
+        return systemPrompt
+            ? `${systemPrompt}\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`
+            : base;
     }
     return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
 }

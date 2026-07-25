@@ -1,22 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
 import { validateFindings } from './review.js';
 import { severityTally } from './render.js';
-import { buildSystemMessage, BASE_SYSTEM_PROMPT } from './prompts.js';
-function startMockServer(handler) {
-    return new Promise((resolve) => {
-        const server = createServer(handler);
-        server.unref();
-        server.listen(0, () => {
-            const addr = server.address();
-            const port = typeof addr === 'string' ? 0 : addr.port;
-            resolve({ url: `http://localhost:${port}`, close: () => server.close() });
-        });
-    });
-}
+import { buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
+import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
+import { startMockServer } from './test-utils.js';
 describe('buildSystemMessage', () => {
     it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
         const msg = buildSystemMessage('append', '');
@@ -28,7 +18,7 @@ describe('buildSystemMessage', () => {
     });
     it('replaces base with custom prompt in replace mode', () => {
         const msg = buildSystemMessage('replace', 'override text');
-        assert.strictEqual(msg, 'override text');
+        assert.strictEqual(msg, `override text\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`);
     });
     it('falls back to BASE_SYSTEM_PROMPT in replace mode with empty custom prompt', () => {
         const msg = buildSystemMessage('replace', '');

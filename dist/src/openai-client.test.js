@@ -1,18 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
 import { RetryableError } from './retry.js';
-function startMockServer(handler) {
-    return new Promise((resolve) => {
-        const server = createServer(handler);
-        server.listen(0, () => {
-            const addr = server.address();
-            const port = typeof addr === 'string' ? 0 : addr.port;
-            resolve({ url: `http://localhost:${port}`, close: () => server.close() });
-        });
-    });
-}
+import { startMockServer } from './test-utils.js';
 describe('OpenAIClient', () => {
     it('Chat sends correct request and returns response', async () => {
         const mock = await startMockServer((req, res) => {

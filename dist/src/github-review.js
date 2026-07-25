@@ -64,7 +64,7 @@ export async function createReview(repo, prNumber, commitSha, findings, body, to
         });
         if (!response.ok) {
             const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody.length > 200 ? '...' + errBody.slice(-200) : errBody}`, response.status);
         }
         return response;
     });
@@ -89,7 +89,7 @@ export async function findExistingReview(repo, prNumber, token) {
                 });
                 if (!response.ok) {
                     const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
                 }
                 return response;
             });
@@ -127,7 +127,7 @@ export async function deleteReview(repo, prNumber, reviewId, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
     });
 }
@@ -155,7 +155,7 @@ export async function deleteComment(repo, commentId, token) {
         });
         if (!response.ok) {
             const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
         }
     });
 }
@@ -177,7 +177,7 @@ export async function findExistingComment(repo, prNumber, token) {
                 });
                 if (!response.ok) {
                     const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
                 }
                 return response;
             });
@@ -215,7 +215,7 @@ async function createComment(repo, prNumber, token, body) {
         });
         if (!response.ok) {
             const responseBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody}`, response.status);
+            throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
         }
     });
 }
