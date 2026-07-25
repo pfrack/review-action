@@ -347,3 +347,42 @@ describe('custom_models CSV', () => {
     assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
   });
 });
+
+describe('6-provider combined chain ordering', () => {
+  it('custom models first, then provider models sorted by score with free models last', () => {
+    const chain = buildCombinedChain({
+      nimModels: ['meta/llama-3.3-70b-instruct'],
+      hasNimKey: true,
+      mistralModels: ['mistralai/mistral-large-3-675b-instruct-2512'],
+      hasMistralKey: true,
+      groqModels: ['llama-3.3-70b-versatile'],
+      hasGroqKey: true,
+      openrouterModels: ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick:free'],
+      hasOpenRouterKey: true,
+      kiloModels: ['kilo-auto/frontier:free'],
+      hasKiloKey: true,
+      customModels: ['local-model-a'],
+      customModel: 'local-model-b',
+      hasCustomModels: true,
+      hasCustomConfig: true,
+    });
+
+    const customModels = chain.filter(m => m.provider === 'custom');
+    assert.strictEqual(customModels.length, 2);
+    assert.strictEqual(customModels[0].id, 'local-model-a');
+    assert.strictEqual(customModels[1].id, 'local-model-b');
+
+    const providerModels = chain.filter(m => m.provider !== 'custom');
+    const freeModels = providerModels.filter(m => m.id.endsWith(':free'));
+    const nonFreeModels = providerModels.filter(m => !m.id.endsWith(':free'));
+
+    assert.strictEqual(nonFreeModels[0].id, 'mistralai/mistral-large-3-675b-instruct-2512');
+    assert.ok(nonFreeModels.some(m => m.id === 'meta/llama-3.3-70b-instruct'));
+    assert.ok(nonFreeModels.some(m => m.id === 'llama-3.3-70b-versatile'));
+
+    assert.strictEqual(freeModels.length, 3);
+    assert.strictEqual(freeModels[0].id, 'deepseek/deepseek-r1:free');
+    assert.strictEqual(freeModels[1].id, 'kilo-auto/frontier:free');
+    assert.strictEqual(freeModels[2].id, 'meta-llama/llama-4-maverick:free');
+  });
+});

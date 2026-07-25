@@ -470,13 +470,13 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [ ] 4.1 model-chain tests (OR/Kilo chain ordering, free-last, custom_models)
-- [ ] 4.2 openai-client tests (provider label detection)
-- [ ] 4.3 bench-reorder tests (updateActionYml OR/Kilo)
-- [ ] 4.4 config tests (OR/Kilo/custom_models field parsing)
-- [ ] 4.5 review tests (Record<Provider> fixtures include OR/Kilo)
-- [ ] 4.6 README docs (Inputs table + OR section + Kilo section + custom_models section)
-- [ ] 4.7 Workflow jobs (benchmark-openrouter + benchmark-kilocode)
+- [x] 4.1 model-chain tests (OR/Kilo chain ordering, free-last, custom_models) — ca85ac8
+- [x] 4.2 openai-client tests (provider label detection) — ca85ac8
+- [x] 4.3 bench-reorder tests (updateActionYml OR/Kilo) — ca85ac8
+- [x] 4.4 config tests (OR/Kilo/custom_models field parsing) — ca85ac8
+- [x] 4.5 review tests (Record<Provider> fixtures include OR/Kilo) — ca85ac8
+- [x] 4.6 README docs (Inputs table + OR section + Kilo section + custom_models section) — ca85ac8
+- [x] 4.7 Workflow jobs (benchmark-openrouter + benchmark-kilocode) — ca85ac8
 
 #### Manual
 
@@ -488,9 +488,9 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [ ] 5.1 Full build + test suite passes
-- [ ] 5.2 Chain ordering sanity test passes
-- [ ] 5.3 README renders without formatting issues
+- [x] 5.1 Full build + test suite passes
+- [x] 5.2 Chain ordering sanity test passes
+- [x] 5.3 README renders without formatting issues
 
 #### Manual
 
