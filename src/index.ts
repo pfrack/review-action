@@ -161,10 +161,13 @@ export async function runModelChainForBatch(
 
 function validateConfig(config: Config): void {
   const hasCustom = !!(config.customApiUrl && config.customModel);
+  const hasCustomModels = !!(config.customApiUrl && config.customModels.length > 0);
 
   if (config.apiKey) core.setSecret(config.apiKey);
   if (config.mistralApiKey) core.setSecret(config.mistralApiKey);
   if (config.groqApiKey) core.setSecret(config.groqApiKey);
+  if (config.openRouterApiKey) core.setSecret(config.openRouterApiKey);
+  if (config.kiloApiKey) core.setSecret(config.kiloApiKey);
   if (config.customApiKey) core.setSecret(config.customApiKey);
 
   if (config.customApiUrl) {
@@ -178,14 +181,19 @@ function validateConfig(config: Config): void {
     }
     validateProviderUrl(config.customApiUrl, 'custom_api_url');
   }
+  if (config.openRouterBaseUrl) validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
+  if (config.kiloBaseUrl) validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
   if (config.baseURL) validateProviderUrl(config.baseURL, 'nim_base_url');
   if (config.mistralBaseUrl) validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
   if (config.groqBaseUrl) validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
 
-  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
-    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
+  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
+    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
   }
-  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
+  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    core.info('Running with only custom API configured — no fallback chain available if custom model fails');
+  }
+  if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
 }
@@ -196,6 +204,8 @@ function buildClients(config: Config): Record<Provider, OpenAIClient | null> {
     nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
     mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
     groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
+    openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
+    kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
     custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
   };
 }
@@ -356,7 +366,22 @@ async function run(): Promise<void> {
   validateConfig(config);
   const clients = buildClients(config);
   const hasCustom = !!(config.customApiUrl && config.customModel);
-  const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
+  const chain = buildCombinedChain({
+    nimModels: config.models,
+    mistralModels: config.mistralModels,
+    groqModels: config.groqModels,
+    hasNimKey: !!config.apiKey,
+    hasMistralKey: !!config.mistralApiKey,
+    hasGroqKey: !!config.groqApiKey,
+    openrouterModels: config.openRouterModels,
+    hasOpenRouterKey: !!config.openRouterApiKey,
+    kiloModels: config.kiloModels,
+    hasKiloKey: !!config.kiloApiKey,
+    customModel: config.customModel,
+    hasCustomConfig: hasCustom,
+    customModels: config.customModels,
+    hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+  });
   const event = loadEvent();
   const prNumber = event.pull_request.number;
   const repo = process.env.GITHUB_REPOSITORY;

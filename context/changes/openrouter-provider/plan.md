@@ -429,10 +429,10 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [x] 1.1 action.yml inputs for OpenRouter + Kilo + custom_models
-- [x] 1.2 Config interface + loadConfig() for OR/Kilo/custom_models fields
-- [x] 1.3 Provider type + ChainOptions + buildCombinedChain (free-last rule)
-- [x] 1.4 custom_models CSV wiring in ChainOptions + chain logic
+- [x] 1.1 action.yml inputs for OpenRouter + Kilo + custom_models — 2c531d2
+- [x] 1.2 Config interface + loadConfig() for OR/Kilo/custom_models fields — 2c531d2
+- [x] 1.3 Provider type + ChainOptions + buildCombinedChain (free-last rule) — 2c531d2
+- [x] 1.4 custom_models CSV wiring in ChainOptions + chain logic — 2c531d2
 
 #### Manual
 
@@ -442,9 +442,9 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [ ] 2.1 OpenAIClient providerLabel for OR/Kilo domains
-- [ ] 2.2 buildClients() + validateConfig() for OR/Kilo
-- [ ] 2.3 Chain building + prioritizeChain covers new providers
+- [x] 2.1 OpenAIClient providerLabel for OR/Kilo domains
+- [x] 2.2 buildClients() + validateConfig() for OR/Kilo
+- [x] 2.3 Chain building + prioritizeChain covers new providers
 
 #### Manual
 

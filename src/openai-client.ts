@@ -85,6 +85,8 @@ export class OpenAIClient {
       (baseURL.includes('nvidia.com') ? 'NIM' :
        baseURL.includes('mistral') ? 'Mistral' :
        baseURL.includes('groq') ? 'Groq' :
+       baseURL.includes('openrouter') ? 'OpenRouter' :
+       baseURL.includes('kilo.ai') ? 'Kilo' :
        baseURL.split('/')[2] || 'API');
   }
 
