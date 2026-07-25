@@ -212,9 +212,12 @@ describe('postComment', () => {
     let capturedUrl = '';
     let capturedBody: any;
     globalThis.fetch = (async (url: string, init?: any) => {
-      capturedUrl = url;
-      capturedBody = JSON.parse(init?.body || '{}');
-      return { ok: true } as any;
+      if (init?.method === 'POST') {
+        capturedUrl = url;
+        capturedBody = JSON.parse(init?.body || '{}');
+        return { ok: true } as any;
+      }
+      return { ok: true, json: async () => [] } as any;
     }) as any;
     try {
       const summaryBody = '### AI Code Review\n\n<sub>Model: test-model</sub>\n\nNo findings\n';
@@ -231,8 +234,11 @@ describe('postComment', () => {
   it('posts comment with correct auth headers', async () => {
     let capturedHeaders: any;
     globalThis.fetch = (async (_url: string, init?: any) => {
-      capturedHeaders = init?.headers;
-      return { ok: true } as any;
+      if (init?.method === 'POST') {
+        capturedHeaders = init?.headers;
+        return { ok: true } as any;
+      }
+      return { ok: true, json: async () => [] } as any;
     }) as any;
     try {
       await postComment('owner/repo', 42, 'my-token', 'test body');
