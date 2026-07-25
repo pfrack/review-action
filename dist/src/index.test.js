@@ -3,7 +3,8 @@ import assert from 'node:assert';
 import { createServer } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
-import { severityTally, validateFindings } from './review.js';
+import { validateFindings } from './review.js';
+import { severityTally } from './render.js';
 import { buildSystemMessage, BASE_SYSTEM_PROMPT } from './prompts.js';
 function startMockServer(handler) {
     return new Promise((resolve) => {

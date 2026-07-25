@@ -1,6 +1,15 @@
 import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 
+export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const timestamp = Date.parse(trimmed);
+  if (Number.isNaN(timestamp)) return undefined;
+  return Math.max(0, timestamp - now);
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -128,7 +137,8 @@ export class OpenAIClient {
 
       if (!response.ok) {
         const body = await response.text();
-throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
+        const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+        throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status, retryAfterMs);
       }
       return response;
     });
@@ -136,8 +146,11 @@ throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${b
     let data: ChatResponse;
     try {
       data = await resp.json() as ChatResponse;
-    } catch {
-      throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
+      }
+      throw err;
     }
     if (!data.choices || data.choices.length === 0) {
       throw new Error('API returned no choices');
@@ -186,7 +199,8 @@ throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${b
       });
       if (!r.ok) {
         const body = await r.text();
-        throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
+        const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
+        throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, r.status, retryAfterMs);
       }
       return r;
     });
@@ -196,40 +210,45 @@ throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${b
     let buffer = '';
     let firstTokenAt: number | null = null;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
 
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
 
-        if (data === '[DONE]') {
-          yield { delta: '', done: true, firstTokenAt: null };
-          return;
+          if (data === '[DONE]') {
+            yield { delta: '', done: true, firstTokenAt: null };
+            return;
+          }
+
+          let chunk: ChatResponse;
+          try {
+            chunk = JSON.parse(data);
+          } catch {
+            continue;
+          }
+
+          if (!chunk.choices || chunk.choices.length === 0) continue;
+          const delta = chunk.choices[0].delta?.content ?? '';
+          if (!delta) continue;
+
+          if (firstTokenAt === null) {
+            firstTokenAt = Date.now();
+          }
+
+          yield { delta, done: false, firstTokenAt };
         }
-
-        let chunk: ChatResponse;
-        try {
-          chunk = JSON.parse(data);
-        } catch {
-          continue;
-        }
-
-        if (!chunk.choices || chunk.choices.length === 0) continue;
-        const delta = chunk.choices[0].delta?.content ?? '';
-        if (!delta) continue;
-
-        if (firstTokenAt === null) {
-          firstTokenAt = Date.now();
-        }
-
-        yield { delta, done: false, firstTokenAt };
       }
+    }
+    finally {
+      reader.releaseLock();
     }
   }
 

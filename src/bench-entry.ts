@@ -3,13 +3,10 @@ import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench.js';
 import { SWE_BENCH_SCORES, fetchSweBenchScores, type SweBenchEntry } from './bench-reorder.js';
 import { readRemovedModels, writeRemovedModels } from './removed-models.js';
+import { splitCSV } from './config.js';
 
 function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
-}
-
-function splitCSV(s: string): string[] {
-  return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 
 const SYNTHETIC_REVIEW_PROMPT = `You are reviewing a code change. Analyze the following diff for bugs, security issues, and performance problems. Respond in concise markdown with findings.

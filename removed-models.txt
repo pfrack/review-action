@@ -1,2 +1,2 @@
 qwen/qwen3.5-397b-a17b
-deepseek-ai/deepseek-v4-pro
+minimaxai/minimax-m2.7

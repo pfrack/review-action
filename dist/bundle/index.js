@@ -27490,18 +27490,30 @@ module.exports = parseParams
 /************************************************************************/
 var __webpack_exports__ = {};
 
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  od: () => (/* binding */ detectLanguage),
+  pW: () => (/* binding */ runModelChainForBatch),
+  ni: () => (/* binding */ withAggregateTimeout)
+});
+
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var lib_core = __nccwpck_require__(7484);
-;// CONCATENATED MODULE: external "node:dns/promises"
-const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:dns/promises");
 ;// CONCATENATED MODULE: ./src/retry.ts
 class RetryableError extends Error {
     status;
-    constructor(message, status) {
+    retryAfterMs;
+    constructor(message, status, retryAfterMs) {
         super(message);
         this.name = 'RetryableError';
         this.status = status;
+        this.retryAfterMs = retryAfterMs;
     }
+}
+function getRetryDelay(error, attempt, delayMs) {
+    const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
+    const retryAfterMs = error instanceof RetryableError ? error.retryAfterMs ?? 0 : 0;
+    return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
 }
 async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
     let lastError;
@@ -27515,7 +27527,7 @@ async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
             const isFetchNetworkError = error instanceof TypeError &&
                 /fetch|network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(error.message);
             if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
-                const delay = Math.min(delayMs * Math.pow(2, i), 30_000);
+                const delay = getRetryDelay(error, i, delayMs);
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
@@ -27527,6 +27539,17 @@ async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
 
 ;// CONCATENATED MODULE: ./src/openai-client.ts
 
+function parseRetryAfter(value, now = Date.now()) {
+    if (!value)
+        return undefined;
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed))
+        return Number(trimmed) * 1000;
+    const timestamp = Date.parse(trimmed);
+    if (Number.isNaN(timestamp))
+        return undefined;
+    return Math.max(0, timestamp - now);
+}
 class OpenAIClient {
     baseURL;
     apiKey;
@@ -27586,7 +27609,8 @@ class OpenAIClient {
             });
             if (!response.ok) {
                 const body = await response.text();
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
+                const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -27594,8 +27618,11 @@ class OpenAIClient {
         try {
             data = await resp.json();
         }
-        catch {
-            throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+        catch (err) {
+            if (err instanceof SyntaxError) {
+                throw new RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
+            }
+            throw err;
         }
         if (!data.choices || data.choices.length === 0) {
             throw new Error('API returned no choices');
@@ -27641,7 +27668,8 @@ class OpenAIClient {
             });
             if (!r.ok) {
                 const body = await r.text();
-                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
+                const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status, retryAfterMs);
             }
             return r;
         });
@@ -27711,6 +27739,49 @@ class OpenAIClient {
     }
 }
 
+;// CONCATENATED MODULE: ./src/config.ts
+
+function splitCSV(s) {
+    return s.split(',').map(item => item.trim()).filter(item => item !== '');
+}
+function loadConfig() {
+    const rawPromptMode = lib_core.getInput('nim_prompt_mode') || 'append';
+    if (rawPromptMode !== 'append' && rawPromptMode !== 'replace') {
+        lib_core.warning(`Invalid nim_prompt_mode "${rawPromptMode}", defaulting to "append"`);
+    }
+    const promptMode = rawPromptMode === 'replace' ? 'replace' : 'append';
+    return {
+        baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
+        apiKey: lib_core.getInput('nim_api_key'),
+        models: splitCSV(lib_core.getInput('nim_models')),
+        mistralApiKey: lib_core.getInput('mistral_api_key') || '',
+        mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
+        mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
+            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        groqApiKey: lib_core.getInput('groq_api_key') || '',
+        groqModels: splitCSV(lib_core.getInput('groq_models') ||
+            'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
+        groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
+        customApiUrl: lib_core.getInput('custom_api_url') || '',
+        customModel: lib_core.getInput('custom_model') || '',
+        customApiKey: lib_core.getInput('custom_api_key') || '',
+        maxFiles: (() => {
+            const raw = lib_core.getInput('max_files') || '100';
+            const parsed = Number.parseInt(raw, 10);
+            if (!/^[+]?\d+$/.test(raw.trim()) || !Number.isInteger(parsed) || parsed <= 0 || parsed > 500) {
+                lib_core.warning(`Invalid max_files "${raw}", must be 1-500. Defaulting to 100.`);
+                return 100;
+            }
+            return parsed;
+        })(),
+        excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
+        systemPrompt: lib_core.getInput('nim_system_prompt'),
+        promptMode,
+        customRules: lib_core.getInput('custom_rules') || '',
+        revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
+    };
+}
+
 ;// CONCATENATED MODULE: ./src/validation.ts
 
 function validateCodeContext(finding, diff) {
@@ -27733,7 +27804,8 @@ function validateCodeContext(finding, diff) {
             idx += 1;
         }
     }
-    const backtickRefs = issue.match(/(?<!\\)`(\w+)`/g) ?? issue.match(/`(\w+)`/g);
+    // Check for backtick-wrapped identifiers (most reliable)
+    const backtickRefs = issue.match(/`(\w+)`/g);
     if (backtickRefs) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
@@ -27742,6 +27814,7 @@ function validateCodeContext(finding, diff) {
             }
         }
     }
+    // Check for explicit references like "function X", "variable X", "class X"
     const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
     if (explicitRef) {
         const name = explicitRef[1];
@@ -27751,27 +27824,10 @@ function validateCodeContext(finding, diff) {
     }
     return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
-function parseHunkRanges(diffLines) {
-    const ranges = [];
-    const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-    for (const line of diffLines) {
-        const m = line.match(re);
-        if (m) {
-            const start = parseInt(m[1], 10);
-            const count = m[2] ? parseInt(m[2], 10) : 1;
-            ranges.push({ start, end: start + count - 1 });
-        }
-    }
-    return ranges;
-}
-function strictOverlapsHunks(lineStart, lineEnd, hunks) {
-    const end = lineEnd ?? lineStart;
-    return hunks.some(h => lineStart <= h.end && end >= h.start);
-}
-async function revalidateFindings(findings, filesDiff, client, model) {
+async function revalidateFindings(findings, diff, client, model) {
     if (findings.length === 0)
         return { valid: [], dropped: 0 };
-    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue}`).join('\n');
+    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`).join('\n');
     const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
 For each finding, determine if it is a REAL issue or a HALLUCINATION (not supported by the code).
 
@@ -27781,34 +27837,10 @@ ${findingsText}
 Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
 Example: [true, false, true]`;
     const MAX_DIFF_LENGTH = 8000;
-    let allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-    let truncatedDiff = allDiff;
-    if (allDiff.length > MAX_DIFF_LENGTH) {
-        const lastNewline = allDiff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
-        truncatedDiff = allDiff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
-    }
-    const fileHunksCache = new Map();
-    function getFileHunks(file) {
-        if (!fileHunksCache.has(file)) {
-            const fileDiff = filesDiff[file] || '';
-            fileHunksCache.set(file, parseHunkRanges(fileDiff.split('\n')));
-        }
-        return fileHunksCache.get(file);
-    }
-    function strictMechanicalFilter() {
-        const valid = [];
-        let dropped = 0;
-        for (const f of findings) {
-            if (f.line_start != null) {
-                const hunks = getFileHunks(f.file);
-                if (!strictOverlapsHunks(f.line_start, f.line_end ?? null, hunks)) {
-                    dropped++;
-                    continue;
-                }
-            }
-            valid.push(f);
-        }
-        return { valid, dropped };
+    let truncatedDiff = diff;
+    if (diff.length > MAX_DIFF_LENGTH) {
+        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
     }
     try {
         const result = await client.chat(model, [
@@ -27823,17 +27855,19 @@ Example: [true, false, true]`;
             parsed = JSON.parse(result.content);
         }
         catch {
-            lib_core.warning('LLM revalidation failed: could not parse model response. Applying strict mechanical filter.');
-            return strictMechanicalFilter();
+            lib_core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+            return { valid: findings, dropped: 0 };
         }
-        if (!Array.isArray(parsed)) {
-            lib_core.warning('LLM revalidation returned non-array. Applying strict mechanical filter.');
-            return strictMechanicalFilter();
+        if (!Array.isArray(parsed))
+            return { valid: findings, dropped: 0 };
+        if (parsed.length < findings.length) {
+            lib_core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
         }
         const valid = [];
         let dropped = 0;
         for (let i = 0; i < findings.length; i++) {
-            if (parsed[i] === true) {
+            const decision = i >= parsed.length ? true : parsed[i];
+            if (decision === true) {
                 valid.push(findings[i]);
             }
             else {
@@ -27843,75 +27877,14 @@ Example: [true, false, true]`;
         return { valid, dropped };
     }
     catch {
-        lib_core.warning('LLM revalidation failed: model call threw an error. Applying strict mechanical filter.');
-        return strictMechanicalFilter();
+        lib_core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+        return { valid: findings, dropped: 0 };
     }
-}
-
-;// CONCATENATED MODULE: ./src/utils.ts
-function safeParseJson(content) {
-    const trimmed = content.trim();
-    if (!trimmed)
-        return undefined;
-    try {
-        return JSON.parse(trimmed);
-    }
-    catch {
-        return undefined;
-    }
-}
-function escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`<>&+~|!]/g, '\\$&');
 }
 
 ;// CONCATENATED MODULE: ./src/review.ts
 
 
-
-
-const AI_REVIEW_MARKER = '### AI Code Review';
-const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
-const GITHUB_API_TIMEOUT_MS = 30_000;
-function splitCSV(s) {
-    return s.split(',').map(item => item.trim()).filter(item => item !== '');
-}
-function loadConfig() {
-    const promptModeRaw = lib_core.getInput('nim_prompt_mode');
-    const promptMode = (promptModeRaw === 'replace') ? 'replace' : 'append';
-    if (promptModeRaw && promptModeRaw !== 'append' && promptModeRaw !== 'replace') {
-        lib_core.warning(`Invalid nim_prompt_mode "${promptModeRaw}", defaulting to "append"`);
-    }
-    return {
-        baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
-        apiKey: lib_core.getInput('nim_api_key'),
-        models: splitCSV(lib_core.getInput('nim_models')),
-        mistralApiKey: lib_core.getInput('mistral_api_key') || '',
-        mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-        mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
-            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
-        groqApiKey: lib_core.getInput('groq_api_key') || '',
-        groqModels: splitCSV(lib_core.getInput('groq_models') ||
-            'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
-        groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
-        customApiUrl: lib_core.getInput('custom_api_url') || '',
-        customModel: lib_core.getInput('custom_model') || '',
-        customApiKey: lib_core.getInput('custom_api_key') || '',
-        maxFiles: (() => {
-            const raw = lib_core.getInput('max_files') || '100';
-            const n = Number.parseInt(raw, 10);
-            if (!Number.isInteger(n) || n < 0) {
-                lib_core.warning(`Invalid max_files "${raw}", defaulting to 100`);
-                return 100;
-            }
-            return Math.min(n, 500);
-        })(),
-        excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
-        systemPrompt: lib_core.getInput('nim_system_prompt'),
-        promptMode,
-        customRules: lib_core.getInput('custom_rules') || '',
-        revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
-    };
-}
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
 function parseDiff(raw) {
     const files = {};
@@ -27928,24 +27901,6 @@ function parseDiff(raw) {
         }
     }
     return files;
-}
-const SEVERITY_META = {
-    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
-    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
-    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
-};
-const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
-function severityTally(review) {
-    const counts = { critical: 0, warning: 0, suggestion: 0 };
-    for (const f of review.findings) {
-        if (f.severity === 'Critical')
-            counts.critical++;
-        else if (f.severity === 'Warning')
-            counts.warning++;
-        else if (f.severity === 'Suggestion')
-            counts.suggestion++;
-    }
-    return counts;
 }
 const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 function parseDiffHunks(diffText) {
@@ -28006,7 +27961,8 @@ async function validateFindings(review, filesDiff, changedFiles, client, model) 
     // Step 5: Optional LLM re-validation to catch hallucinated findings
     let dropped = 0;
     if (client && model && validFindings.length > 0) {
-        const revalidated = await revalidateFindings(validFindings, filesDiff, client, model);
+        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
         validFindings.length = 0;
         validFindings.push(...revalidated.valid);
         dropped = revalidated.dropped;
@@ -28015,44 +27971,6 @@ async function validateFindings(review, filesDiff, changedFiles, client, model) 
         return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
     }
     return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
-}
-function renderReview(review) {
-    if (review.findings.length === 0) {
-        return review.summary || 'No issues found.';
-    }
-    const lines = [];
-    for (const severity of SEVERITY_ORDER) {
-        const meta = SEVERITY_META[severity];
-        const bucket = review.findings.filter(f => f.severity === severity);
-        if (bucket.length === 0)
-            continue;
-        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
-        const byFile = new Map();
-        for (const f of bucket) {
-            const list = byFile.get(f.file) || [];
-            list.push(f);
-            byFile.set(f.file, list);
-        }
-        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-            lines.push(`**File:** \`${file}\``);
-            for (const f of findings) {
-                const lineInfo = f.line_start != null
-                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                    : '';
-                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
-                const matchAction = f[meta.actionKey];
-                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
-                    : '';
-                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
-            }
-            lines.push('');
-        }
-    }
-    if (review.summary) {
-        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
-    }
-    return lines.join('\n');
 }
 function globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
@@ -28098,6 +28016,242 @@ async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
+const GITHUB_API_TIMEOUT_MS = 30_000;
+
+;// CONCATENATED MODULE: ./src/utils.ts
+function safeParseJson(content) {
+    const trimmed = content.trim();
+    if (!trimmed)
+        return undefined;
+    try {
+        return JSON.parse(trimmed);
+    }
+    catch {
+        return undefined;
+    }
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!<&]/g, '\\$&');
+}
+function validateProviderUrl(url, label) {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    // Block known metadata hostnames
+    if (hostname === 'metadata.google.internal') {
+        throw new Error(`${label} blocked: metadata.google.internal is a cloud metadata endpoint`);
+    }
+    // Block IPv4 link-local (169.254.0.0/16 — covers AWS/Azure metadata at 169.254.169.254)
+    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+        throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+    }
+    // Block IPv6 link-local (fe80::/10)
+    if (hostname.startsWith('fe80:') || hostname.startsWith('[fe80:')) {
+        throw new Error(`${label} blocked: ${hostname} is an IPv6 link-local address`);
+    }
+    // Block AWS IPv6 metadata endpoint (fd00:ec2::254)
+    if (hostname === 'fd00:ec2::254' || hostname === '[fd00:ec2::254]') {
+        throw new Error(`${label} blocked: ${hostname} is an AWS metadata endpoint`);
+    }
+}
+
+;// CONCATENATED MODULE: ./src/render.ts
+
+const SEVERITY_META = {
+    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
+    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
+    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
+};
+const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
+function severityTally(review) {
+    const counts = { critical: 0, warning: 0, suggestion: 0 };
+    for (const f of review.findings) {
+        if (f.severity === 'Critical')
+            counts.critical++;
+        else if (f.severity === 'Warning')
+            counts.warning++;
+        else if (f.severity === 'Suggestion')
+            counts.suggestion++;
+    }
+    return counts;
+}
+function renderReview(review) {
+    if (review.findings.length === 0) {
+        return review.summary || 'No issues found.';
+    }
+    const lines = [];
+    for (const severity of SEVERITY_ORDER) {
+        const meta = SEVERITY_META[severity];
+        const bucket = review.findings.filter(f => f.severity === severity);
+        if (bucket.length === 0)
+            continue;
+        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
+        const byFile = new Map();
+        for (const f of bucket) {
+            const list = byFile.get(f.file) || [];
+            list.push(f);
+            byFile.set(f.file, list);
+        }
+        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            lines.push(`**File:** \`${file}\``);
+            for (const f of findings) {
+                const lineInfo = f.line_start != null
+                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
+                    : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
+                const matchAction = f[meta.actionKey];
+                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
+                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
+                    : '';
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+            }
+            lines.push('');
+        }
+    }
+    if (review.summary) {
+        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
+    }
+    return lines.join('\n');
+}
+
+;// CONCATENATED MODULE: ./src/github-review.ts
+
+
+
+const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
+const AI_REVIEW_MARKER = '### AI Code Review';
+const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
+function formatFindingComment(finding) {
+    const emoji = finding.severity === 'Critical' ? '🚨'
+        : finding.severity === 'Warning' ? '⚠️'
+            : '💡';
+    const parts = [`${emoji} **${finding.severity}**`];
+    parts.push(escapeMarkdown(finding.issue));
+    if (finding.suggestion) {
+        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
+    }
+    const action = finding.severity === 'Critical' ? finding.critical_action
+        : finding.severity === 'Warning' ? finding.warning_action
+            : finding.suggestion_action;
+    if (action && action !== 'not applicable') {
+        parts.push(`**Action:** ${escapeMarkdown(action)}`);
+    }
+    return parts.join('\n\n');
+}
+async function createReview(repo, prNumber, commitSha, findings, body, token) {
+    if (!token)
+        throw new Error('GITHUB_TOKEN required for review creation');
+    const comments = findings
+        .filter(f => f.line_start != null)
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
+    const payload = {
+        event: 'COMMENT',
+        comments,
+        commit_id: commitSha,
+    };
+    if (body)
+        payload.body = body;
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
+    const resp = await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+        }
+        return response;
+    });
+    const data = await resp.json();
+    return data.id;
+}
+async function findExistingReview(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
+    }
+    if (page > maxPages) {
+        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
+    }
+    return null;
+}
+async function deleteReview(repo, prNumber, reviewId, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
+}
+const INLINE_COMMENT_THRESHOLD = 50;
+function shouldUseInlineComments(findings) {
+    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
 async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
@@ -28114,7 +28268,7 @@ async function deleteComment(repo, commentId, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github+json',
             },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -28136,7 +28290,7 @@ async function findExistingComment(repo, prNumber, token) {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/vnd.github+json',
                     },
-                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
                 });
                 if (!response.ok) {
                     const body = await response.text();
@@ -28165,7 +28319,7 @@ async function findExistingComment(repo, prNumber, token) {
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    const resp = await retry_withRetry(async () => {
+    await retry_withRetry(async () => {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -28174,13 +28328,12 @@ async function createComment(repo, prNumber, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+            const responseBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody}`, response.status);
         }
-        return response;
     });
 }
 
@@ -36790,163 +36943,179 @@ function mergeFindings(batchResults) {
 
 
 
-const METADATA_HOSTNAMES = new Set([
-    '169.254.169.254',
-    'metadata.google.internal',
-    '100.100.100.200',
-    'metadata.internal',
-]);
-function isPrivateIp(ip) {
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0')
-        return false;
-    if (/^169\.254\./.test(ip))
-        return true;
-    if (/^10\./.test(ip))
-        return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip))
-        return true;
-    if (/^192\.168\./.test(ip))
-        return true;
-    if (/^fd[0-9a-f]{2}:/i.test(ip))
-        return true;
-    return false;
-}
-async function validateUrlForSSRF(urlString, label) {
-    const url = new URL(urlString);
-    const isLoopback = url.hostname === 'localhost'
-        || url.hostname === '127.0.0.1'
-        || url.hostname === '::1'
-        || url.hostname === '0.0.0.0';
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
-        throw new Error(`${label} must use https:// (or http:// for localhost only)`);
-    }
-    if (METADATA_HOSTNAMES.has(url.hostname.toLowerCase())) {
-        throw new Error(`${label} points to a blocked host (${url.hostname})`);
-    }
-    if (isPrivateIp(url.hostname)) {
-        throw new Error(`${label} points to a blocked IP range (${url.hostname})`);
-    }
+
+
+
+const CHAIN_TIMEOUT_MS = 120_000;
+async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
+    let timer;
     try {
-        const result = await (0,promises_namespaceObject.lookup)(url.hostname, { all: true });
-        for (const entry of result) {
-            if (isPrivateIp(entry.address)) {
-                throw new Error(`${label} resolves to a private IP (${entry.address})`);
-            }
-        }
+        return await Promise.race([
+            operation(),
+            new Promise(resolve => {
+                timer = setTimeout(() => {
+                    lib_core.warning(`Model chain timed out after ${timeoutMs}ms`);
+                    resolve(null);
+                }, timeoutMs);
+            }),
+        ]);
     }
-    catch (err) {
-        if (err instanceof Error && !err.message.includes('resolves to a private IP')) {
-            // DNS lookup failed — connection will fail naturally
-        }
-        else {
-            throw err;
-        }
+    finally {
+        if (timer)
+            clearTimeout(timer);
     }
 }
-async function run() {
-    const config = loadConfig();
-    const hasCustom = !!(config.customApiUrl && config.customModel);
-    if (config.customApiUrl) {
-        await validateUrlForSSRF(config.customApiUrl, 'custom_api_url');
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    const existingReviewId = await findExistingReview(repo, prNumber, token);
+    if (existingReviewId) {
+        await deleteReview(repo, prNumber, existingReviewId, token);
     }
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    if (existingCommentId) {
+        await deleteComment(repo, existingCommentId, token);
+    }
+}
+function providerToFormat(provider, responseFormat) {
+    return provider === 'mistral' ? 'tools' : responseFormat;
+}
+async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config) {
+    const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
+    const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
+    let batchReview = null;
+    let batchUsedModel = '';
+    let batchLastRawContent = '';
+    let batchDropped = 0;
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
+        try {
+            lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const result = await client.chat(tagged.id, [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: userMsg },
+            ], {
+                temperature: 0.2,
+                maxTokens: 4096,
+                schema: ReviewJsonSchema,
+                format: providerToFormat(tagged.provider, responseFormat),
+            });
+            if (result.finishReason === 'length') {
+                lib_core.info(`${tagged.id} response truncated, trying next...`);
+                continue;
+            }
+            if (!result.content || !result.content.trim()) {
+                lib_core.info(`${tagged.id} returned empty, trying next...`);
+                continue;
+            }
+            let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
+            if (!parsed.success) {
+                lib_core.info(`${tagged.id} schema validation failed, retrying...`);
+                const truncatedContent = result.content.length > 500
+                    ? '...' + result.content.slice(-500)
+                    : result.content;
+                const errorSummary = parsed.error.issues.slice(0, 3)
+                    .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
+                    .join('\n');
+                const retryResult = await client.chat(tagged.id, [
+                    { role: 'system', content: systemMessage },
+                    { role: 'user', content: userMsg },
+                    { role: 'assistant', content: truncatedContent },
+                    { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
+                ], {
+                    temperature: 0.2,
+                    maxTokens: 4096,
+                    schema: ReviewJsonSchema,
+                    format: providerToFormat(tagged.provider, responseFormat),
+                });
+                if (retryResult.finishReason === 'length') {
+                    lib_core.info(`${tagged.id} retry truncated, trying next...`);
+                    continue;
+                }
+                parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
+                if (!parsed.success) {
+                    batchLastRawContent = retryResult.content;
+                    lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+                    continue;
+                }
+            }
+            batchReview = parsed.data;
+            const changedFiles = new Set(batch.files);
+            const validated = await validateFindings(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
+            for (const warning of validated.warnings)
+                lib_core.warning(warning);
+            batchReview = validated.valid;
+            batchDropped = validated.dropped;
+            batchUsedModel = tagged.id;
+            lib_core.info(`Done with ${tagged.id} (${tagged.provider})`);
+            break;
+        }
+        catch (err) {
+            lib_core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+        }
+    }
+    return {
+        findings: batchReview?.findings ?? [],
+        summary: batchReview?.summary ?? '',
+        usedModel: batchUsedModel,
+        lastRawContent: batchLastRawContent,
+        dropped: batchDropped,
+    };
+}
+function validateConfig(config) {
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    if (config.apiKey)
+        lib_core.setSecret(config.apiKey);
+    if (config.mistralApiKey)
+        lib_core.setSecret(config.mistralApiKey);
+    if (config.groqApiKey)
+        lib_core.setSecret(config.groqApiKey);
+    if (config.customApiKey)
+        lib_core.setSecret(config.customApiKey);
+    if (config.customApiUrl) {
+        const url = new URL(config.customApiUrl);
+        const isLoopback = url.hostname === 'localhost'
+            || url.hostname === '127.0.0.1'
+            || url.hostname === '::1'
+            || url.hostname === '0.0.0.0';
+        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
+        }
+        validateProviderUrl(config.customApiUrl, 'custom_api_url');
+    }
+    if (config.baseURL)
+        validateProviderUrl(config.baseURL, 'nim_base_url');
+    if (config.mistralBaseUrl)
+        validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
+    if (config.groqBaseUrl)
+        validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
     if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
         throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
     }
     if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
         lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    const nimClient = config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null;
-    const mistralClient = config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null;
-    const groqClient = config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null;
-    const customClient = hasCustom
-        ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom')
-        : null;
-    const clients = {
-        nim: nimClient,
-        mistral: mistralClient,
-        groq: groqClient,
-        custom: customClient,
+}
+function buildClients(config) {
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    return {
+        nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
+        mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
+        groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
+        custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
     };
-    const chain = buildCombinedChain({
-        nimModels: config.models,
-        mistralModels: config.mistralModels,
-        groqModels: config.groqModels,
-        hasNimKey: !!config.apiKey,
-        hasMistralKey: !!config.mistralApiKey,
-        hasGroqKey: !!config.groqApiKey,
-        customModel: config.customModel,
-        hasCustomConfig: hasCustom,
-    });
-    const event = loadEvent();
-    const prNumber = event.pull_request.number;
-    const repo = process.env.GITHUB_REPOSITORY;
-    if (!repo) {
-        throw new Error('GITHUB_REPOSITORY not set');
-    }
-    const token = process.env.GITHUB_TOKEN;
-    if (!token) {
-        throw new Error('GITHUB_TOKEN not set');
-    }
-    lib_core.info(`Reviewing PR #${prNumber} in ${repo}`);
-    lib_core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
-    const rules = parseRules(config.customRules);
-    const rulesValidation = validateRules(rules);
-    if (!rulesValidation.valid) {
-        for (const err of rulesValidation.errors)
-            lib_core.warning(err);
-    }
-    if (rules.length > 0) {
-        lib_core.info(`Loaded ${rules.length} custom rule(s)`);
-    }
-    const reviewStartTime = Date.now();
-    let filesDiff;
-    try {
-        filesDiff = await fetchDiff(repo, prNumber, token);
-    }
-    catch (err) {
-        if (err instanceof DiffTooLargeError) {
-            const msg = `### AI Code Review\n\n${err.message}`;
-            try {
-                await postComment(repo, prNumber, token, msg);
-            }
-            catch (postErr) {
-                lib_core.warning(`Failed to post diff-too-large comment: ${postErr}`);
-            }
-            return;
-        }
-        throw err;
-    }
-    if (Object.keys(filesDiff).length === 0) {
-        const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
-        await postComment(repo, prNumber, token, msg);
-        return;
-    }
-    const filenames = Object.keys(filesDiff).sort();
-    const reviewableFiles = [];
-    for (const filePath of filenames) {
-        if (!shouldExclude(filePath, config.excludePatterns)) {
-            reviewableFiles.push(filePath);
-        }
-    }
-    if (reviewableFiles.length === 0) {
-        const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
-        await postComment(repo, prNumber, token, msg);
-        return;
-    }
-    const filesToReview = reviewableFiles.slice(0, config.maxFiles);
-    const truncated = reviewableFiles.length > config.maxFiles;
-    lib_core.info(`Reviewing ${filesToReview.length} files...`);
+}
+function detectLanguage(files) {
     const langCounts = {};
-    for (const filePath of filesToReview) {
-        const lang = languageForFile(filePath);
-        langCounts[lang] = (langCounts[lang] || 0) + 1;
+    for (const filePath of files) {
+        const language = languageForFile(filePath);
+        langCounts[language] = (langCounts[language] || 0) + 1;
     }
-    const detectedLanguage = Object.entries(langCounts)
-        .filter(([lang]) => lang !== 'generic')
+    return Object.entries(langCounts)
+        .filter(([language]) => language !== 'generic')
         .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
-    if (detectedLanguage) {
-        lib_core.info(`Detected language: ${detectedLanguage}`);
-    }
+}
+async function prioritizeChain(chain, clients) {
     try {
         const fastest = await probeModels(chain, clients);
         if (fastest) {
@@ -36961,195 +37130,189 @@ async function run() {
     catch (probeErr) {
         lib_core.warning(`Model probing failed, using original chain order: ${probeErr}`);
     }
-    function providerToFormat(provider) {
-        if (provider === 'mistral')
-            return 'tools';
-        return 'json_schema';
-    }
-    const BATCH_SIZE = 50;
-    if (filesToReview.length === 0) {
-        lib_core.info('No files to review');
-        return;
-    }
-    const filesDiffMap = {};
-    for (const f of filesToReview) {
-        filesDiffMap[f] = filesDiff[f] || '';
-    }
-    const batches = filesToReview.length > BATCH_SIZE
-        ? batchFiles(filesDiffMap, BATCH_SIZE)
-        : [];
-    const useBatching = batches.length > 1;
-    lib_core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
-    async function runModelChainForBatch(batchFileList, batchDiffMap) {
-        const combinedDiff = batchFileList.map(f => `\n--- ${f} ---\n${batchDiffMap[f]}\n`).join('');
-        const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
-        let batchReview = null;
-        let batchUsedModel = '';
-        let batchLastRawContent = '';
-        let batchDropped = 0;
-        for (const tagged of chain) {
-            const client = clients[tagged.provider];
-            if (!client)
-                continue;
-            try {
-                lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
-                const result = await client.chat(tagged.id, [
-                    {
-                        role: 'system',
-                        content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
-                    },
-                    { role: 'user', content: userMsg },
-                ], {
-                    temperature: 0.2,
-                    maxTokens: 4096,
-                    schema: ReviewJsonSchema,
-                    format: providerToFormat(tagged.provider),
-                });
-                if (result.finishReason === 'length') {
-                    lib_core.info(`${tagged.id} response truncated, trying next...`);
-                    continue;
-                }
-                if (!result.content || !result.content.trim()) {
-                    lib_core.info(`${tagged.id} returned empty, trying next...`);
-                    continue;
-                }
-                let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
-                if (!parsed.success) {
-                    lib_core.info(`${tagged.id} schema validation failed, retrying...`);
-                    const truncatedContent = result.content.length > 500
-                        ? '...' + result.content.slice(-500)
-                        : result.content;
-                    const errorSummary = parsed.error.issues.slice(0, 3).map(i => {
-                        const msg = i.message.replace(/, received '.*'/s, '').replace(/Received: .*/s, '');
-                        return `- ${i.path.join('.')}: ${msg}`;
-                    }).join('\n');
-                    const retryResult = await client.chat(tagged.id, [
-                        {
-                            role: 'system',
-                            content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
-                        },
-                        { role: 'user', content: userMsg },
-                        { role: 'assistant', content: truncatedContent },
-                        { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
-                    ], {
-                        temperature: 0.2,
-                        maxTokens: 4096,
-                        schema: ReviewJsonSchema,
-                        format: providerToFormat(tagged.provider),
-                    });
-                    if (retryResult.finishReason === 'length') {
-                        lib_core.info(`${tagged.id} retry truncated, trying next...`);
-                        continue;
-                    }
-                    parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
-                    if (!parsed.success) {
-                        batchLastRawContent = retryResult.content;
-                        lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                        continue;
-                    }
-                }
-                batchReview = parsed.data;
-                const changedFiles = new Set(batchFileList);
-                const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
-                for (const w of validated.warnings)
-                    lib_core.warning(w);
-                batchReview = validated.valid;
-                batchDropped = validated.dropped;
-                batchUsedModel = tagged.id;
-                lib_core.info(`Done with ${tagged.id} (${tagged.provider})`);
-                break;
-            }
-            catch (err) {
-                lib_core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
-            }
+}
+async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
+    const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
+    const batchResults = [];
+    for (const batch of work) {
+        if (batches.length > 1) {
+            lib_core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
+        const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
+        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
+    }
+    if (batches.length > 1) {
+        const merged = mergeFindings(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
         return {
-            findings: batchReview?.findings ?? [],
-            summary: batchReview?.summary ?? '',
-            usedModel: batchUsedModel,
-            lastRawContent: batchLastRawContent,
-            dropped: batchDropped,
+            review: { findings: merged.findings, summary: merged.summary },
+            usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
+            lastRawContent: batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
+            validationDropped: batchResults.reduce((sum, result) => sum + result.dropped, 0),
+            batchCount: batches.length,
         };
     }
-    let review = null;
-    let usedModel = '';
-    let lastRawContent = '';
-    let validationDropped = 0;
-    if (useBatching) {
-        const batchResults = [];
-        for (const batch of batches) {
-            lib_core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
-            const result = await runModelChainForBatch(batch.files, batch.diffs);
-            batchResults.push(result);
-        }
-        const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings, summary: r.summary })));
-        review = { findings: merged.findings, summary: merged.summary };
-        usedModel = batchResults.find(r => r.usedModel)?.usedModel || '';
-        lastRawContent = batchResults.find(r => r.lastRawContent)?.lastRawContent || '';
-        validationDropped = batchResults.reduce((sum, r) => sum + r.dropped, 0);
-    }
-    else {
-        const singleResult = await runModelChainForBatch(filesToReview, filesDiffMap);
-        review = { findings: singleResult.findings, summary: singleResult.summary };
-        usedModel = singleResult.usedModel;
-        lastRawContent = singleResult.lastRawContent;
-        validationDropped = singleResult.dropped;
-    }
+    const result = batchResults[0];
+    return {
+        review: { findings: result.findings, summary: result.summary },
+        usedModel: result.usedModel,
+        lastRawContent: result.lastRawContent,
+        validationDropped: result.dropped,
+        batchCount: 1,
+    };
+}
+async function dispatchOutput(context) {
+    const { repo, prNumber, commitSha, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
     const modelShort = usedModel.split('/').pop() || usedModel;
-    const reviewDuration = Date.now() - reviewStartTime;
-    // No findings — replace any existing comment with a clean "no issues" summary
-    if (review && review.findings.length === 0) {
-        await postComment(repo, prNumber, token, `${AI_REVIEW_MARKER}\n\nNo issues found.`);
-        lib_core.info('No findings — posted clean summary comment');
-        return;
-    }
-    const { critical, warning, suggestion } = review ? severityTally(review) : { critical: 0, warning: 0, suggestion: 0 };
+    const { critical, warning, suggestion } = severityTally(review);
     const tally = [
         critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
         warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
         suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
     const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
-    if (review && review.findings.length > 0) {
-        const sections = [summaryBody];
-        sections.push(`\n${renderReview(review)}\n`);
+    if (review.findings.length === 0) {
+        try {
+            await cleanupPreviousOutput(repo, prNumber, token);
+        }
+        catch (err) {
+            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+        }
+        lib_core.info('Deleted previous review (no issues found)');
+        return { critical, warning, suggestion };
+    }
+    if (shouldUseInlineComments(review.findings)) {
+        try {
+            await cleanupPreviousOutput(repo, prNumber, token);
+        }
+        catch (err) {
+            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+        }
+        let body = `${summaryBody}\n${renderReview(review)}\n`;
+        if (truncated) {
+            body += `\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`;
+        }
+        const reviewId = await createReview(repo, prNumber, commitSha, review.findings, body, token);
+        lib_core.info(`Created review #${reviewId} with ${review.findings.length} inline comments`);
+    }
+    else {
+        try {
+            await cleanupPreviousOutput(repo, prNumber, token);
+        }
+        catch (err) {
+            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+        }
+        const sections = [summaryBody, `\n${renderReview(review)}\n`];
         if (truncated) {
             sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
         }
         await postComment(repo, prNumber, token, sections.join('\n'));
-        lib_core.info(`Posted comment with ${review.findings.length} findings`);
+        lib_core.info(`Posted summary comment with ${review.findings.length} findings (exceeds inline threshold)`);
     }
-    else if (!usedModel) {
+    if (!usedModel) {
+        try {
+            await cleanupPreviousOutput(repo, prNumber, token);
+        }
+        catch (err) {
+            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+        }
         await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
-        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
-    }
-    const metrics = {
-        pr_number: prNumber,
-        model_used: modelShort,
-        findings_count: { critical, warning, suggestion },
-        files_reviewed: filesToReview.length,
-        review_duration_ms: reviewDuration,
-        validation_dropped: validationDropped,
-        batch_count: useBatching ? batches.length : 1,
-    };
-    const stepSummary = process.env.GITHUB_STEP_SUMMARY;
-    if (stepSummary) {
         try {
-            const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
-            fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
-            lib_core.info('Metrics written to step summary');
+            await cleanupPreviousOutput(repo, prNumber, token);
         }
         catch (err) {
-            lib_core.warning(`Failed to write metrics to step summary: ${err}`);
+            lib_core.warning(`Failed to clean up previous review output: ${err}`);
         }
+        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
+    }
+    return { critical, warning, suggestion };
+}
+async function writeMetrics(metrics) {
+    const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+    if (!stepSummary)
+        return;
+    try {
+        const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
+        fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
+        lib_core.info('Metrics written to step summary');
+    }
+    catch (err) {
+        lib_core.warning(`Failed to write metrics to step summary: ${err}`);
     }
 }
-const inTest = process.argv.includes('--test');
+async function run() {
+    const config = loadConfig();
+    validateConfig(config);
+    const clients = buildClients(config);
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
+    const event = loadEvent();
+    const prNumber = event.pull_request.number;
+    const commitSha = event.pull_request.head.sha;
+    const repo = process.env.GITHUB_REPOSITORY;
+    if (!repo)
+        throw new Error('GITHUB_REPOSITORY not set');
+    const token = process.env.GITHUB_TOKEN;
+    if (!token)
+        throw new Error('GITHUB_TOKEN not set');
+    lib_core.info(`Reviewing PR #${prNumber} in ${repo}`);
+    lib_core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
+    const rules = parseRules(config.customRules);
+    const rulesValidation = validateRules(rules);
+    if (!rulesValidation.valid)
+        for (const err of rulesValidation.errors)
+            lib_core.warning(err);
+    if (rules.length > 0)
+        lib_core.info(`Loaded ${rules.length} custom rule(s)`);
+    const reviewStartTime = Date.now();
+    let filesDiff;
+    try {
+        filesDiff = await fetchDiff(repo, prNumber, token);
+    }
+    catch (err) {
+        if (err instanceof DiffTooLargeError) {
+            try {
+                await postComment(repo, prNumber, token, `### AI Code Review\n\n${err.message}`);
+            }
+            catch (postErr) {
+                lib_core.warning(`Failed to post diff-too-large comment: ${postErr}`);
+            }
+            return;
+        }
+        throw err;
+    }
+    const reviewableFiles = Object.keys(filesDiff).sort().filter(file => !shouldExclude(file, config.excludePatterns));
+    if (reviewableFiles.length === 0) {
+        await postComment(repo, prNumber, token, '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).');
+        return;
+    }
+    const filesToReview = reviewableFiles.slice(0, config.maxFiles);
+    const truncated = reviewableFiles.length > config.maxFiles;
+    lib_core.info(`Reviewing ${filesToReview.length} files...`);
+    const detectedLanguage = detectLanguage(filesToReview);
+    if (detectedLanguage)
+        lib_core.info(`Detected language: ${detectedLanguage}`);
+    await prioritizeChain(chain, clients);
+    const filesDiffMap = {};
+    for (const file of filesToReview)
+        filesDiffMap[file] = filesDiff[file] || '';
+    const batches = filesToReview.length > 50 ? batchFiles(filesDiffMap, 50) : [];
+    const useBatching = batches.length > 1;
+    lib_core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
+    const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules);
+    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
+    const counts = await dispatchOutput({ repo, prNumber, commitSha, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
+    await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
+}
+const inTest = process.argv.includes('--test') || !!process.env.NODE_TEST_CONTEXT;
 if (!inTest) {
     run().catch(err => {
         lib_core.setFailed(err instanceof Error ? err.message : String(err));
     });
 }
 
+var __webpack_exports__detectLanguage = __webpack_exports__.od;
+var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
+var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
+export { __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };

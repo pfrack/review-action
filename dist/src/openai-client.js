@@ -1,4 +1,15 @@
 import { withRetry, RetryableError } from './retry.js';
+export function parseRetryAfter(value, now = Date.now()) {
+    if (!value)
+        return undefined;
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed))
+        return Number(trimmed) * 1000;
+    const timestamp = Date.parse(trimmed);
+    if (Number.isNaN(timestamp))
+        return undefined;
+    return Math.max(0, timestamp - now);
+}
 export class OpenAIClient {
     baseURL;
     apiKey;
@@ -58,7 +69,8 @@ export class OpenAIClient {
             });
             if (!response.ok) {
                 const body = await response.text();
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status);
+                const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -66,8 +78,11 @@ export class OpenAIClient {
         try {
             data = await resp.json();
         }
-        catch {
-            throw new RetryableError(`${this.providerLabel} returned non-JSON response (HTTP ${resp.status})`, resp.status);
+        catch (err) {
+            if (err instanceof SyntaxError) {
+                throw new RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
+            }
+            throw err;
         }
         if (!data.choices || data.choices.length === 0) {
             throw new Error('API returned no choices');
@@ -113,7 +128,8 @@ export class OpenAIClient {
             });
             if (!r.ok) {
                 const body = await r.text();
-                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status);
+                const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body}`, r.status, retryAfterMs);
             }
             return r;
         });

@@ -27,7 +27,8 @@ export function validateCodeContext(finding: ReviewFinding, diff: string): CodeC
     }
   }
 
-  const backtickRefs = issue.match(/(?<!\\)`(\w+)`/g) ?? issue.match(/`(\w+)`/g);
+  // Check for backtick-wrapped identifiers (most reliable)
+  const backtickRefs = issue.match(/`(\w+)`/g);
   if (backtickRefs) {
     for (const ref of backtickRefs) {
       const name = ref.slice(1, -1);
@@ -37,6 +38,7 @@ export function validateCodeContext(finding: ReviewFinding, diff: string): CodeC
     }
   }
 
+  // Check for explicit references like "function X", "variable X", "class X"
   const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
   if (explicitRef) {
     const name = explicitRef[1];
@@ -48,39 +50,16 @@ export function validateCodeContext(finding: ReviewFinding, diff: string): CodeC
   return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
 
-function parseHunkRanges(diffLines: string[]): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = [];
-  const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-  for (const line of diffLines) {
-    const m = line.match(re);
-    if (m) {
-      const start = parseInt(m[1], 10);
-      const count = m[2] ? parseInt(m[2], 10) : 1;
-      ranges.push({ start, end: start + count - 1 });
-    }
-  }
-  return ranges;
-}
-
-function strictOverlapsHunks(
-  lineStart: number,
-  lineEnd: number | null,
-  hunks: Array<{ start: number; end: number }>,
-): boolean {
-  const end = lineEnd ?? lineStart;
-  return hunks.some(h => lineStart <= h.end && end >= h.start);
-}
-
 export async function revalidateFindings(
   findings: ReviewFinding[],
-  filesDiff: Record<string, string>,
+  diff: string,
   client: OpenAIClient,
   model: string,
 ): Promise<{ valid: ReviewFinding[]; dropped: number }> {
   if (findings.length === 0) return { valid: [], dropped: 0 };
 
   const findingsText = findings.map((f, i) =>
-    `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue}`
+    `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`
   ).join('\n');
 
   const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
@@ -93,36 +72,10 @@ Respond with ONLY a JSON array of booleans, one per finding, where true = valid,
 Example: [true, false, true]`;
 
   const MAX_DIFF_LENGTH = 8000;
-  let allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-  let truncatedDiff = allDiff;
-  if (allDiff.length > MAX_DIFF_LENGTH) {
-    const lastNewline = allDiff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
-    truncatedDiff = allDiff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
-  }
-
-  const fileHunksCache = new Map<string, Array<{ start: number; end: number }>>();
-  function getFileHunks(file: string): Array<{ start: number; end: number }> {
-    if (!fileHunksCache.has(file)) {
-      const fileDiff = filesDiff[file] || '';
-      fileHunksCache.set(file, parseHunkRanges(fileDiff.split('\n')));
-    }
-    return fileHunksCache.get(file)!;
-  }
-
-  function strictMechanicalFilter(): { valid: ReviewFinding[]; dropped: number } {
-    const valid: ReviewFinding[] = [];
-    let dropped = 0;
-    for (const f of findings) {
-      if (f.line_start != null) {
-        const hunks = getFileHunks(f.file);
-        if (!strictOverlapsHunks(f.line_start!, f.line_end ?? null, hunks)) {
-          dropped++;
-          continue;
-        }
-      }
-      valid.push(f);
-    }
-    return { valid, dropped };
+  let truncatedDiff = diff;
+  if (diff.length > MAX_DIFF_LENGTH) {
+    const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+    truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
   }
 
   try {
@@ -138,19 +91,21 @@ Example: [true, false, true]`;
     try {
       parsed = JSON.parse(result.content);
     } catch {
-      core.warning('LLM revalidation failed: could not parse model response. Applying strict mechanical filter.');
-      return strictMechanicalFilter();
+      core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+      return { valid: findings, dropped: 0 };
     }
 
-    if (!Array.isArray(parsed)) {
-      core.warning('LLM revalidation returned non-array. Applying strict mechanical filter.');
-      return strictMechanicalFilter();
+    if (!Array.isArray(parsed)) return { valid: findings, dropped: 0 };
+
+    if (parsed.length < findings.length) {
+      core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
     }
 
     const valid: ReviewFinding[] = [];
     let dropped = 0;
     for (let i = 0; i < findings.length; i++) {
-      if (parsed[i] === true) {
+      const decision = i >= parsed.length ? true : parsed[i];
+      if (decision === true) {
         valid.push(findings[i]);
       } else {
         dropped++;
@@ -158,7 +113,7 @@ Example: [true, false, true]`;
     }
     return { valid, dropped };
   } catch {
-    core.warning('LLM revalidation failed: model call threw an error. Applying strict mechanical filter.');
-    return strictMechanicalFilter();
+    core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+    return { valid: findings, dropped: 0 };
   }
 }

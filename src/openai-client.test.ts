@@ -1,18 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { OpenAIClient, type ChatMessage } from './openai-client.js';
-
-function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ url: string; close: () => void }> {
-  return new Promise((resolve) => {
-    const server = createServer(handler);
-    server.listen(0, () => {
-      const addr = server.address()!;
-      const port = typeof addr === 'string' ? 0 : addr.port;
-      resolve({ url: `http://localhost:${port}`, close: () => server.close() });
-    });
-  });
-}
+import { RetryableError } from './retry.js';
+import { startMockServer } from './test-utils.js';
 
 describe('OpenAIClient', () => {
   it('Chat sends correct request and returns response', async () => {
@@ -155,6 +145,31 @@ describe('OpenAIClient', () => {
     try {
       const client = new OpenAIClient(mock.url, 'key');
       assert.strictEqual(await client.probeModel('model'), false);
+    } finally {
+      mock.close();
+    }
+  });
+});
+
+describe('OpenAIClient response validation', () => {
+  it('throws a sanitized RetryableError for non-JSON success responses', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('provider secret response fragment');
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key', 'TestProvider');
+      await assert.rejects(
+        () => client.chat('model', [{ role: 'user', content: 'hi' }]),
+        (err: unknown) => {
+          assert.ok(err instanceof RetryableError);
+          assert.strictEqual(err.status, 502);
+          assert.strictEqual(err.message, 'TestProvider returned non-JSON response');
+          assert.ok(!err.message.includes('provider secret'));
+          return true;
+        },
+      );
     } finally {
       mock.close();
     }

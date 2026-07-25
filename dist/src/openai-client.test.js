@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createServer } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
+import { RetryableError } from './retry.js';
 function startMockServer(handler) {
     return new Promise((resolve) => {
         const server = createServer(handler);
@@ -136,6 +137,27 @@ describe('OpenAIClient', () => {
         try {
             const client = new OpenAIClient(mock.url, 'key');
             assert.strictEqual(await client.probeModel('model'), false);
+        }
+        finally {
+            mock.close();
+        }
+    });
+});
+describe('OpenAIClient response validation', () => {
+    it('throws a sanitized RetryableError for non-JSON success responses', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('provider secret response fragment');
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key', 'TestProvider');
+            await assert.rejects(() => client.chat('model', [{ role: 'user', content: 'hi' }]), (err) => {
+                assert.ok(err instanceof RetryableError);
+                assert.strictEqual(err.status, 502);
+                assert.strictEqual(err.message, 'TestProvider returned non-JSON response');
+                assert.ok(!err.message.includes('provider secret'));
+                return true;
+            });
         }
         finally {
             mock.close();

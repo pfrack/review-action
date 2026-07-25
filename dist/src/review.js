@@ -1,50 +1,5 @@
-import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 import { validateCodeContext, revalidateFindings } from './validation.js';
-import { escapeMarkdown } from './utils.js';
-export const AI_REVIEW_MARKER = '### AI Code Review';
-export const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
-export const GITHUB_API_TIMEOUT_MS = 30_000;
-function splitCSV(s) {
-    return s.split(',').map(item => item.trim()).filter(item => item !== '');
-}
-export function loadConfig() {
-    const promptModeRaw = core.getInput('nim_prompt_mode');
-    const promptMode = (promptModeRaw === 'replace') ? 'replace' : 'append';
-    if (promptModeRaw && promptModeRaw !== 'append' && promptModeRaw !== 'replace') {
-        core.warning(`Invalid nim_prompt_mode "${promptModeRaw}", defaulting to "append"`);
-    }
-    return {
-        baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
-        apiKey: core.getInput('nim_api_key'),
-        models: splitCSV(core.getInput('nim_models')),
-        mistralApiKey: core.getInput('mistral_api_key') || '',
-        mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-        mistralModels: splitCSV(core.getInput('mistral_models') ||
-            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
-        groqApiKey: core.getInput('groq_api_key') || '',
-        groqModels: splitCSV(core.getInput('groq_models') ||
-            'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
-        groqBaseUrl: core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
-        customApiUrl: core.getInput('custom_api_url') || '',
-        customModel: core.getInput('custom_model') || '',
-        customApiKey: core.getInput('custom_api_key') || '',
-        maxFiles: (() => {
-            const raw = core.getInput('max_files') || '100';
-            const n = Number.parseInt(raw, 10);
-            if (!Number.isInteger(n) || n < 0) {
-                core.warning(`Invalid max_files "${raw}", defaulting to 100`);
-                return 100;
-            }
-            return Math.min(n, 500);
-        })(),
-        excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
-        systemPrompt: core.getInput('nim_system_prompt'),
-        promptMode,
-        customRules: core.getInput('custom_rules') || '',
-        revalidateFindings: core.getInput('revalidate_findings') === 'true',
-    };
-}
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
 export function parseDiff(raw) {
     const files = {};
@@ -61,24 +16,6 @@ export function parseDiff(raw) {
         }
     }
     return files;
-}
-const SEVERITY_META = {
-    Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
-    Warning: { emoji: '⚠️', label: 'Warning', actionKey: 'warning_action', tag: 'Investigate' },
-    Suggestion: { emoji: '💡', label: 'Suggestion', actionKey: 'suggestion_action', tag: 'Nit' },
-};
-const SEVERITY_ORDER = ['Critical', 'Warning', 'Suggestion'];
-export function severityTally(review) {
-    const counts = { critical: 0, warning: 0, suggestion: 0 };
-    for (const f of review.findings) {
-        if (f.severity === 'Critical')
-            counts.critical++;
-        else if (f.severity === 'Warning')
-            counts.warning++;
-        else if (f.severity === 'Suggestion')
-            counts.suggestion++;
-    }
-    return counts;
 }
 const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 export function parseDiffHunks(diffText) {
@@ -139,7 +76,8 @@ export async function validateFindings(review, filesDiff, changedFiles, client, 
     // Step 5: Optional LLM re-validation to catch hallucinated findings
     let dropped = 0;
     if (client && model && validFindings.length > 0) {
-        const revalidated = await revalidateFindings(validFindings, filesDiff, client, model);
+        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
         validFindings.length = 0;
         validFindings.push(...revalidated.valid);
         dropped = revalidated.dropped;
@@ -149,45 +87,7 @@ export async function validateFindings(review, filesDiff, changedFiles, client, 
     }
     return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
 }
-export function renderReview(review) {
-    if (review.findings.length === 0) {
-        return review.summary || 'No issues found.';
-    }
-    const lines = [];
-    for (const severity of SEVERITY_ORDER) {
-        const meta = SEVERITY_META[severity];
-        const bucket = review.findings.filter(f => f.severity === severity);
-        if (bucket.length === 0)
-            continue;
-        lines.push(`### ${meta.emoji} ${meta.label} (${bucket.length})`);
-        const byFile = new Map();
-        for (const f of bucket) {
-            const list = byFile.get(f.file) || [];
-            list.push(f);
-            byFile.set(f.file, list);
-        }
-        for (const [file, findings] of [...byFile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-            lines.push(`**File:** \`${file}\``);
-            for (const f of findings) {
-                const lineInfo = f.line_start != null
-                    ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
-                    : '';
-                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${escapeMarkdown(f.suggestion)}` : '';
-                const matchAction = f[meta.actionKey];
-                const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-                    ? `\n  - **${meta.tag}:** ${escapeMarkdown(matchAction)}`
-                    : '';
-                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
-            }
-            lines.push('');
-        }
-    }
-    if (review.summary) {
-        lines.push(`**Summary:** ${escapeMarkdown(review.summary)}`);
-    }
-    return lines.join('\n');
-}
-function globMatch(str, pattern) {
+export function globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
 }
@@ -231,88 +131,4 @@ export async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
-export async function postComment(repo, prNumber, token, body) {
-    const existingId = await findExistingComment(repo, prNumber, token);
-    if (existingId) {
-        await deleteComment(repo, existingId, token);
-    }
-    await createComment(repo, prNumber, token, body);
-}
-export async function deleteComment(repo, commentId, token) {
-    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    await withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-    });
-}
-export async function findExistingComment(repo, prNumber, token) {
-    let page = 1;
-    const perPage = 100;
-    const maxPages = 50;
-    while (page <= maxPages) {
-        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-        let resp;
-        try {
-            resp = await withRetry(async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/vnd.github+json',
-                    },
-                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-                });
-                if (!response.ok) {
-                    const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-                }
-                return response;
-            });
-        }
-        catch (err) {
-            // 404 means PR doesn't exist or token lacks access — skip comment update
-            if (err instanceof RetryableError && err.status === 404)
-                return null;
-            throw err;
-        }
-        const comments = await resp.json();
-        for (const comment of comments) {
-            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
-                return comment.id;
-            }
-        }
-        if (comments.length < perPage)
-            break;
-        page++;
-    }
-    return null;
-}
-async function createComment(repo, prNumber, token, body) {
-    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    const resp = await withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-        return response;
-    });
-}
+const GITHUB_API_TIMEOUT_MS = 30_000;

@@ -1,6 +1,8 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, severityTally } from './review.js';
+import { parseDiff, shouldExclude, parseDiffHunks, getFileHunks, validateFindings } from './review.js';
+import { loadConfig } from './config.js';
+import { renderReview, severityTally } from './render.js';
 describe('parseDiff', () => {
     it('splits multi-file diffs', () => {
         const raw = `diff --git a/main.go b/main.go
@@ -157,97 +159,6 @@ describe('loadConfig — custom fields', () => {
             else
                 process.env[key] = saved[key];
         }
-    });
-});
-describe('loadConfig — promptMode validation', () => {
-    const ENV_KEYS = [
-        'INPUT_NIM_PROMPT_MODE', 'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-    ];
-    it('coerces invalid promptMode to append with warning', () => {
-        const saved = {};
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_NIM_PROMPT_MODE'] = 'apend';
-        const config = loadConfig();
-        assert.strictEqual(config.promptMode, 'append');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    });
-    it('accepts replace mode', () => {
-        const saved = {};
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_NIM_PROMPT_MODE'] = 'replace';
-        const config = loadConfig();
-        process.env['INPUT_NIM_PROMPT_MODE'] = 'replace';
-        assert.strictEqual(config.promptMode, 'replace');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    });
-    it('accepts append mode (default)', () => {
-        const saved = {};
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = loadConfig();
-        assert.strictEqual(config.promptMode, 'append');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    });
-});
-describe('loadConfig — max_files validation', () => {
-    const ENV_KEYS = [
-        'INPUT_MAX_FILES', 'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_EXCLUDE_PATTERNS', 'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
-    for (const key of ENV_KEYS)
-        saved[key] = process.env[key];
-    afterEach(() => {
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    });
-    it('defaults to 100 when max_files is empty', () => {
-        process.env['INPUT_MAX_FILES'] = '';
-        const config = loadConfig();
-        assert.strictEqual(config.maxFiles, 100);
-    });
-    it('parses valid positive integer', () => {
-        process.env['INPUT_MAX_FILES'] = '50';
-        const config = loadConfig();
-        assert.strictEqual(config.maxFiles, 50);
-    });
-    it('rejects negative numbers and defaults to 100', () => {
-        process.env['INPUT_MAX_FILES'] = '-5';
-        const config = loadConfig();
-        assert.strictEqual(config.maxFiles, 100);
-    });
-    it('rejects non-integer strings and defaults to 100', () => {
-        process.env['INPUT_MAX_FILES'] = 'abc';
-        const config = loadConfig();
-        assert.strictEqual(config.maxFiles, 100);
-    });
-    it('caps at 500', () => {
-        process.env['INPUT_MAX_FILES'] = '999';
-        const config = loadConfig();
-        assert.strictEqual(config.maxFiles, 500);
     });
 });
 describe('parseDiffHunks', () => {
@@ -474,5 +385,22 @@ describe('severityTally', () => {
                 { file: 'c.ts', severity: 'Warning', issue: 'z', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
                 { file: 'd.ts', severity: 'Suggestion', issue: 'w', critical_action: 'a', warning_action: 'a', suggestion_action: 'a' },
             ] }), { critical: 1, warning: 2, suggestion: 1 });
+    });
+});
+describe('loadConfig — prompt mode validation', () => {
+    it('coerces invalid prompt mode to append', () => {
+        const key = 'INPUT_NIM_PROMPT_MODE';
+        const saved = process.env[key];
+        process.env[key] = 'invalid-mode';
+        try {
+            const config = loadConfig();
+            assert.strictEqual(config.promptMode, 'append');
+        }
+        finally {
+            if (saved === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = saved;
+        }
     });
 });

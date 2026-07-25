@@ -1,22 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
-import { severityTally, validateFindings } from './review.js';
+import { validateFindings } from './review.js';
+import { severityTally } from './render.js';
 import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT } from './prompts.js';
-
-function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ url: string; close: () => void }> {
-  return new Promise((resolve) => {
-    const server = createServer(handler);
-    server.unref();
-    server.listen(0, () => {
-      const addr = server.address()!;
-      const port = typeof addr === 'string' ? 0 : addr.port;
-      resolve({ url: `http://localhost:${port}`, close: () => server.close() });
-    });
-  });
-}
+import { startMockServer } from './test-utils.js';
 
 describe('buildSystemMessage', () => {
   it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
