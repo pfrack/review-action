@@ -1,7 +1,7 @@
 import { getSweBenchScore } from './bench-reorder.js';
 import type { OpenAIClient } from './openai-client.js';
 
-export type Provider = 'nim' | 'mistral' | 'groq' | 'custom';
+export type Provider = 'nim' | 'mistral' | 'groq' | 'openrouter' | 'kilocode' | 'custom';
 
 export interface TaggedModel {
   id: string;
@@ -15,8 +15,14 @@ export interface ChainOptions {
   hasNimKey: boolean;
   hasMistralKey: boolean;
   hasGroqKey?: boolean;
+  openrouterModels?: string[];
+  hasOpenRouterKey?: boolean;
+  kiloModels?: string[];
+  hasKiloKey?: boolean;
   customModel?: string;
   hasCustomConfig?: boolean;
+  customModels?: string[];
+  hasCustomModels?: boolean;
 }
 
 /**
@@ -25,14 +31,17 @@ export interface ChainOptions {
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq) are combined and sorted by
- * SWE-bench score descending as the fallback chain.
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * and sorted by SWE-bench score descending as the fallback chain.
+ *
+ * Free-tier models (IDs ending with :free) are forced to rank last within
+ * the provider group, after all non-free models.
  *
  * Only includes models whose provider key is available.
  */
 export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   const providerModels: TaggedModel[] = [];
-  const { groqModels = [], hasGroqKey = false } = opts;
+  const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
 
   if (opts.hasNimKey) {
     for (const id of opts.nimModels) {
@@ -52,17 +61,40 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
     }
   }
 
+  if (hasOpenRouterKey) {
+    for (const id of openrouterModels) {
+      providerModels.push({ id, provider: 'openrouter' });
+    }
+  }
+
+  if (hasKiloKey) {
+    for (const id of kiloModels) {
+      providerModels.push({ id, provider: 'kilocode' });
+    }
+  }
+
   providerModels.sort((a, b) => {
     const scoreA = getSweBenchScore(a.id);
     const scoreB = getSweBenchScore(b.id);
     return scoreB - scoreA;
   });
 
+  const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
+  const free = providerModels.filter(m => m.id.endsWith(':free'));
+
+  const sortedProviderModels = [...nonFree, ...free];
+
+  const customModels: TaggedModel[] = [];
+  if (opts.hasCustomModels && opts.customModels) {
+    for (const id of opts.customModels) {
+      customModels.push({ id, provider: 'custom' });
+    }
+  }
   if (opts.customModel && opts.hasCustomConfig) {
-    return [{ id: opts.customModel, provider: 'custom' }, ...providerModels];
+    customModels.push({ id: opts.customModel, provider: 'custom' });
   }
 
-  return providerModels;
+  return [...customModels, ...sortedProviderModels];
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
