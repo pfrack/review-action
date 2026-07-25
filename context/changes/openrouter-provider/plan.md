@@ -455,11 +455,11 @@ This is an additive change. No existing behavior changes:
 
 #### Automated
 
-- [x] 3.1 SWE_BENCH_SCORES entries for free models (estimated)
-- [x] 3.2 ActionTarget + TARGET_CONFIG for openrouter_models + kilocode_models
-- [x] 3.3 updateActionYml helpers for OR/Kilo
-- [x] 3.4 Free-model ordering rule in buildCombinedChain
-- [x] 3.5 custom_models CSV fully wired
+- [x] 3.1 SWE_BENCH_SCORES entries for free models (estimated) — 1ba05b2
+- [x] 3.2 ActionTarget + TARGET_CONFIG for openrouter_models + kilocode_models — 1ba05b2
+- [x] 3.3 updateActionYml helpers for OR/Kilo — 1ba05b2
+- [x] 3.4 Free-model ordering rule in buildCombinedChain — 1ba05b2
+- [x] 3.5 custom_models CSV fully wired — 1ba05b2
 
 #### Manual
 
