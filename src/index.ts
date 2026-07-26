@@ -33,12 +33,12 @@ export async function withAggregateTimeout<T>(operation: () => Promise<T>, timeo
   }
 }
 
-async function cleanupPreviousOutput(repo: string, prNumber: number, token: string): Promise<void> {
-  const existingReviewId = await findExistingReview(repo, prNumber, token);
+async function cleanupPreviousOutput(repo: string, prNumber: number, token: string, botLogin: string): Promise<void> {
+  const existingReviewId = await findExistingReview(repo, prNumber, token, botLogin);
   if (existingReviewId) {
     await deleteReview(repo, prNumber, existingReviewId, token);
   }
-  const existingCommentId = await findExistingComment(repo, prNumber, token);
+  const existingCommentId = await findExistingComment(repo, prNumber, token, botLogin);
   if (existingCommentId) {
     await deleteComment(repo, existingCommentId, token);
   }
@@ -295,9 +295,9 @@ interface DispatchContext {
   lastRawContent: string;
 }
 
-async function safeCleanup(repo: string, prNumber: number, token: string): Promise<void> {
+async function safeCleanup(repo: string, prNumber: number, token: string, botLogin: string): Promise<void> {
   try {
-    await cleanupPreviousOutput(repo, prNumber, token);
+    await cleanupPreviousOutput(repo, prNumber, token, botLogin);
   } catch (err) {
     core.warning(`Failed to clean up previous review output: ${err}`);
   }
@@ -315,9 +315,9 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
   const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
   if (review.findings.length === 0) {
-    await safeCleanup(repo, prNumber, token);
+    await safeCleanup(repo, prNumber, token, config.botLogin);
     try {
-      await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
+      await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`, config.botLogin);
       core.info('Posted LGTM comment (no issues found)');
     } catch (err) {
       core.warning(`Failed to post LGTM comment: ${err}`);
@@ -325,29 +325,29 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     return { critical, warning, suggestion };
   }
 
-  await safeCleanup(repo, prNumber, token);
+  await safeCleanup(repo, prNumber, token, config.botLogin);
   const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
   if (truncated) {
     sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
   }
   try {
-    await postComment(repo, prNumber, token, sections.join('\n'));
+    await postComment(repo, prNumber, token, sections.join('\n'), config.botLogin);
     core.info(`Posted summary comment with ${review.findings.length} findings`);
   } catch (err) {
     core.warning(`Failed to post summary comment: ${err}`);
   }
 
   if (!usedModel) {
-    await safeCleanup(repo, prNumber, token);
+    await safeCleanup(repo, prNumber, token, config.botLogin);
     try {
-      await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
+      await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`, config.botLogin);
     } catch (err) {
       core.warning(`Failed to post no-content comment: ${err}`);
     }
   } else if (config.promptMode === 'replace' && lastRawContent) {
-    await safeCleanup(repo, prNumber, token);
+    await safeCleanup(repo, prNumber, token, config.botLogin);
     try {
-      await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
+      await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``, config.botLogin);
     } catch (err) {
       core.warning(`Failed to post raw output comment: ${err}`);
     }
@@ -407,7 +407,7 @@ async function run(): Promise<void> {
     filesDiff = await fetchDiff(repo, prNumber, token);
   } catch (err) {
     if (err instanceof DiffTooLargeError) {
-      try { await postComment(repo, prNumber, token, `### AI Code Review\n\n${err.message}`); }
+      try { await postComment(repo, prNumber, token, `### AI Code Review\n\n${err.message}`, config.botLogin); }
       catch (postErr) { core.warning(`Failed to post diff-too-large comment: ${postErr}`); }
       return;
     }
@@ -415,7 +415,7 @@ async function run(): Promise<void> {
   }
   const reviewableFiles = Object.keys(filesDiff).sort().filter(file => !shouldExclude(file, config.excludePatterns));
   if (reviewableFiles.length === 0) {
-    await postComment(repo, prNumber, token, '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).');
+    await postComment(repo, prNumber, token, '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).', config.botLogin);
     return;
   }
   const filesToReview = reviewableFiles.slice(0, config.maxFiles);
