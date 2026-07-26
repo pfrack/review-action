@@ -148,8 +148,8 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 100, body: 'Some other review', user: { login: 'other-bot' } },
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'github-actions[bot]' } },
+        { id: 100, body: 'Some other review' },
+        { id: 200, body: '### AI Code Review\nFindings here' },
       ],
     }) as any;
     try {
@@ -164,7 +164,7 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 200, body: 'Some other review', user: { login: 'other-bot' } },
+        { id: 200, body: 'Some other review' },
       ],
     }) as any;
     try {
@@ -179,7 +179,7 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'other-bot' } },
+        { id: 200, body: '### AI Code Review\nFindings here' },
       ],
     }) as any;
     try {
