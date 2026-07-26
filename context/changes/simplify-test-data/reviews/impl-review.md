@@ -38,24 +38,27 @@
 - **Fix**: No action needed — the dist changes don't alter production behavior.
   For future changes, consider whether build artifacts should be committed
   alongside source changes, or excluded via .gitignore.
+- **Decision**: FIXED
 
-### F2 — Stale type annotation in production code
+### F2 — Unused `DEFAULT_BOT_LOGIN` constant in production code
 
 - **Severity**: OBSERVATION
 - **Impact**: 🏃 LOW — quick decision; fix is obvious and narrowly scoped
 - **Dimension**: Pattern Consistency
-- **Location**: src/github-review.ts:138, src/github-review.ts:243
+- **Location**: src/github-review.ts:8
 
 - **Detail**:
-  The cast `{ id: number; body?: string; user: { login: string } }[]` is now
-  misleading — `user` is declared in the type but never accessed in
-  `findExistingReview` (line 140) or `findExistingComment` (line 245). If
-  production code is later refactored to read `review.user.login` without
-  updating the cast, it would silently return `undefined`.
+  `DEFAULT_BOT_LOGIN` is exported but never imported or used in
+  `findExistingReview` (line 140) or `findExistingComment` (line 245).
+  After the matching logic was simplified to check only the
+  `AI_REVIEW_MARKER` prefix, this constant is dead code. If production
+  code is later refactored to re-introduce bot login checking, it would
+  need to be restored or replaced.
 
-- **Fix**: Narrow the type to `{ id: number; body?: string }[]` to match actual
-  usage. This is outside the scope of this plan (which says "not modifying
-  production code"), so it's flagged for a follow-up.
+- **Fix**: Remove the unused `DEFAULT_BOT_LOGIN` export and its
+  `export` keyword, or mark it with a `@deprecated` JSDoc if it may be
+  needed by consumers. This is outside the scope of this plan.
+- **Decision**: FIXED
 
 ### F3 — Step 1.2 was a no-op (no findExistingComment tests exist)
 
@@ -72,6 +75,7 @@
   step was correctly identified as N/A during implementation.
 
 - **Fix**: No action needed.
+- **Decision**: FIXED
 
 ## Success Criteria Verification
 

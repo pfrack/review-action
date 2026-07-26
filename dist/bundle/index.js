@@ -28150,7 +28150,6 @@ function renderReview(review) {
 
 const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
 const AI_REVIEW_MARKER = '### AI Code Review';
-const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
 function formatFindingComment(finding) {
     const emoji = finding.severity === 'Critical' ? '🚨'
         : finding.severity === 'Warning' ? '⚠️'
@@ -28248,7 +28247,7 @@ async function findExistingReview(repo, prNumber, token) {
         }
         const reviews = await resp.json();
         for (const review of reviews) {
-            if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
                 return review.id;
             }
         }
@@ -28337,7 +28336,7 @@ async function findExistingComment(repo, prNumber, token) {
         }
         const comments = await resp.json();
         for (const comment of comments) {
-            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER)) {
                 return comment.id;
             }
         }

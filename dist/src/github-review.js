@@ -3,7 +3,6 @@ import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown } from './utils.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export const AI_REVIEW_MARKER = '### AI Code Review';
-export const DEFAULT_BOT_LOGIN = 'github-actions[bot]';
 export function formatFindingComment(finding) {
     const emoji = finding.severity === 'Critical' ? '🚨'
         : finding.severity === 'Warning' ? '⚠️'
