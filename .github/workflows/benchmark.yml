@@ -77,9 +77,14 @@ jobs:
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
-              echo "Moving tag $LATEST_TAG to current commit"
-              git tag -f "$LATEST_TAG"
-              git push origin "$LATEST_TAG" --force
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
             fi
           fi
 
@@ -149,9 +154,14 @@ jobs:
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
-              echo "Moving tag $LATEST_TAG to current commit"
-              git tag -f "$LATEST_TAG"
-              git push origin "$LATEST_TAG" --force
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
             fi
           fi
 
@@ -222,9 +232,14 @@ jobs:
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
-              echo "Moving tag $LATEST_TAG to current commit"
-              git tag -f "$LATEST_TAG"
-              git push origin "$LATEST_TAG" --force
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
             fi
           fi
 
@@ -295,9 +310,14 @@ jobs:
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
-              echo "Moving tag $LATEST_TAG to current commit"
-              git tag -f "$LATEST_TAG"
-              git push origin "$LATEST_TAG" --force
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
             fi
           fi
 
@@ -367,8 +387,13 @@ jobs:
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
-              echo "Moving tag $LATEST_TAG to current commit"
-              git tag -f "$LATEST_TAG"
-              git push origin "$LATEST_TAG" --force
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
             fi
           fi

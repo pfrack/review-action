@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { buildCombinedChain, type TaggedModel } from './model-chain.js';
+import { buildCombinedChain, probeModels, type TaggedModel, type Provider } from './model-chain.js';
+import type { OpenAIClient } from './openai-client.js';
 
 describe('buildCombinedChain', () => {
   it('NIM-only: includes only NIM models when only NIM key is available', () => {
@@ -384,5 +385,69 @@ describe('6-provider combined chain ordering', () => {
     assert.strictEqual(freeModels[0].id, 'deepseek/deepseek-r1:free');
     assert.strictEqual(freeModels[1].id, 'kilo-auto/frontier:free');
     assert.strictEqual(freeModels[2].id, 'meta-llama/llama-4-maverick:free');
+  });
+});
+
+function makeMockClient(probeResult: boolean, delayMs = 0): OpenAIClient {
+  return {
+    probeModel: async (_model: string) => {
+      if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+      return probeResult;
+    },
+  } as unknown as OpenAIClient;
+}
+
+function makeClients(model: TaggedModel, client: OpenAIClient | null): Record<Provider, OpenAIClient | null> {
+  const clients: Record<Provider, OpenAIClient | null> = {
+    nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+  };
+  clients[model.provider] = client;
+  return clients;
+}
+
+describe('probeModels', () => {
+  it('returns null when all probes fail', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'model-a', provider: 'nim' },
+      { id: 'model-b', provider: 'mistral' },
+    ];
+    const clients = makeClients(chain[0], makeMockClient(false));
+    clients.mistral = makeMockClient(false);
+
+    const result = await probeModels(chain, clients);
+    assert.strictEqual(result, null);
+  });
+
+  it('returns the fastest available model', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'model-slow', provider: 'nim' },
+      { id: 'model-fast', provider: 'mistral' },
+    ];
+    const clients = makeClients(chain[0], makeMockClient(true, 50));
+    clients.mistral = makeMockClient(true, 10);
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'model-fast');
+  });
+
+  it('skips models whose provider client is null', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'model-a', provider: 'nim' },
+      { id: 'model-b', provider: 'mistral' },
+    ];
+    const clients = makeClients(chain[0], makeMockClient(true));
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'model-a');
+  });
+
+  it('returns null when chain is empty', async () => {
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+    const result = await probeModels([], clients);
+    assert.strictEqual(result, null);
   });
 });

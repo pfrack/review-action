@@ -3,6 +3,20 @@ import assert from 'node:assert';
 import { OpenAIClient } from './openai-client.js';
 import { RetryableError } from './retry.js';
 import { startMockServer } from './test-utils.js';
+describe('OpenAIClient provider label detection', () => {
+    it('auto-detects OpenRouter label from base URL', () => {
+        const client = new OpenAIClient('https://openrouter.ai/api/v1', 'key');
+        assert.strictEqual(client.providerLabel, 'OpenRouter');
+    });
+    it('auto-detects Kilo label from base URL', () => {
+        const client = new OpenAIClient('https://api.kilo.ai/api/gateway', 'key');
+        assert.strictEqual(client.providerLabel, 'Kilo');
+    });
+    it('uses explicit label when provided', () => {
+        const client = new OpenAIClient('https://openrouter.ai/api/v1', 'key', 'MyLabel');
+        assert.strictEqual(client.providerLabel, 'MyLabel');
+    });
+});
 describe('OpenAIClient', () => {
     it('Chat sends correct request and returns response', async () => {
         const mock = await startMockServer((req, res) => {

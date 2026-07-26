@@ -27550,6 +27550,11 @@ function parseRetryAfter(value, now = Date.now()) {
         return undefined;
     return Math.max(0, timestamp - now);
 }
+function sanitizeErrorBody(body) {
+    return body
+        .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+        .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
+}
 class OpenAIClient {
     baseURL;
     apiKey;
@@ -27561,7 +27566,9 @@ class OpenAIClient {
             (baseURL.includes('nvidia.com') ? 'NIM' :
                 baseURL.includes('mistral') ? 'Mistral' :
                     baseURL.includes('groq') ? 'Groq' :
-                        baseURL.split('/')[2] || 'API');
+                        baseURL.includes('openrouter') ? 'OpenRouter' :
+                            baseURL.includes('kilo.ai') ? 'Kilo' :
+                                baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
         const payload = {
@@ -27610,7 +27617,7 @@ class OpenAIClient {
             if (!response.ok) {
                 const body = await response.text();
                 const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new retry_RetryableError(`${this.providerLabel} returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status, retryAfterMs);
+                throw new retry_RetryableError(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -27669,7 +27676,7 @@ class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new retry_RetryableError(`${this.providerLabel}: ${r.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, r.status, retryAfterMs);
+                throw new retry_RetryableError(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
             }
             return r;
         });
@@ -27765,11 +27772,21 @@ function loadConfig() {
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
         groqApiKey: lib_core.getInput('groq_api_key') || '',
         groqModels: splitCSV(lib_core.getInput('groq_models') ||
-            'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
+            'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
         groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
+        openRouterApiKey: lib_core.getInput('openrouter_api_key') || '',
+        openRouterBaseUrl: lib_core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
+        openRouterModels: splitCSV(lib_core.getInput('openrouter_models') ||
+            'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'),
+        kiloApiKey: lib_core.getInput('kilocode_api_key') || '',
+        kiloBaseUrl: lib_core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
+        kiloModels: splitCSV(lib_core.getInput('kilocode_models') ||
+            'kilo-auto/balanced:free,kilo-auto/frontier:free'),
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
         customApiKey: lib_core.getInput('custom_api_key') || '',
+        customModels: splitCSV(lib_core.getInput('custom_models') || ''),
+        customModelsBaseUrl: lib_core.getInput('custom_models_base_url') || lib_core.getInput('custom_api_url') || '',
         maxFiles: (() => {
             const raw = lib_core.getInput('max_files') || '100';
             const parsed = Number.parseInt(raw, 10);
@@ -36536,8 +36553,13 @@ function parseDuration(s) {
     return parseFloat(s) || Infinity;
 }
 /**
- * Known SWE-bench Verified scores for models available on NIM and Groq.
+ * Known SWE-bench Verified scores for models available on NIM, Groq,
+ * OpenRouter, and Kilo.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Free-tier entries (IDs ending with :free) are estimated scores; they
+ * should be replaced with measured values once benchmark data is available.
+ * Free models are forced to rank last in the fallback chain.
  *
  * Model identifiers are provider-specific — Groq uses different IDs than
  * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
@@ -36592,6 +36614,13 @@ const SWE_BENCH_SCORES = {
     'mistral-small-latest': 0.680,
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
+    // OpenRouter free-tier models (estimated scores)
+    'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
+    'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
+    'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
+    // Kilo free-tier models (estimated scores)
+    'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
+    'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
 };
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
@@ -36646,6 +36675,8 @@ const TARGET_CONFIG = {
     nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
     mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
     groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
+    openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
+    kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -36678,6 +36709,12 @@ function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
 }
 function updateActionYmlMistral(actionPath, orderedModels) {
     updateActionYml(actionPath, orderedModels, 'mistral_models');
+}
+function updateActionYmlOpenRouter(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'openrouter_models');
+}
+function updateActionYmlKilocode(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'kilocode_models');
 }
 /**
  * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
@@ -36731,7 +36768,7 @@ async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
     const target = (process.env.ACTION_TARGET || 'nim_models');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin
@@ -36808,14 +36845,17 @@ if (isMainModule) {
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq) are combined and sorted by
- * SWE-bench score descending as the fallback chain.
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * and sorted by SWE-bench score descending as the fallback chain.
+ *
+ * Free-tier models (IDs ending with :free) are forced to rank last within
+ * the provider group, after all non-free models.
  *
  * Only includes models whose provider key is available.
  */
 function buildCombinedChain(opts) {
     const providerModels = [];
-    const { groqModels = [], hasGroqKey = false } = opts;
+    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             providerModels.push({ id, provider: 'nim' });
@@ -36831,38 +36871,72 @@ function buildCombinedChain(opts) {
             providerModels.push({ id, provider: 'groq' });
         }
     }
+    if (hasOpenRouterKey) {
+        for (const id of openrouterModels) {
+            providerModels.push({ id, provider: 'openrouter' });
+        }
+    }
+    if (hasKiloKey) {
+        for (const id of kiloModels) {
+            providerModels.push({ id, provider: 'kilocode' });
+        }
+    }
     providerModels.sort((a, b) => {
         const scoreA = getSweBenchScore(a.id);
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
-    if (opts.customModel && opts.hasCustomConfig) {
-        return [{ id: opts.customModel, provider: 'custom' }, ...providerModels];
+    const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
+    const free = providerModels.filter(m => m.id.endsWith(':free'));
+    const sortedProviderModels = [...nonFree, ...free];
+    const customModels = [];
+    if (opts.hasCustomModels && opts.customModels) {
+        for (const id of opts.customModels) {
+            customModels.push({ id, provider: 'custom' });
+        }
     }
-    return providerModels;
+    if (opts.customModel && opts.hasCustomConfig) {
+        customModels.push({ id: opts.customModel, provider: 'custom' });
+    }
+    return [...customModels, ...sortedProviderModels];
 }
 const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_CONCURRENCY = 3;
 async function probeModels(chain, clients) {
-    const probes = chain.map(async (tagged) => {
-        const client = clients[tagged.provider];
-        if (!client)
-            return null;
-        try {
-            const start = Date.now();
-            const ok = await Promise.race([
-                client.probeModel(tagged.id),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)),
-            ]);
-            if (ok)
-                return { model: tagged, latency: Date.now() - start };
-            return null;
+    const available = [];
+    for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
+        const batch = chain.slice(i, i + PROBE_CONCURRENCY);
+        const probes = batch.map(async (tagged) => {
+            const client = clients[tagged.provider];
+            if (!client)
+                return null;
+            let timer;
+            try {
+                const start = Date.now();
+                const ok = await Promise.race([
+                    client.probeModel(tagged.id),
+                    new Promise((_, reject) => {
+                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
+                    }),
+                ]);
+                if (ok)
+                    return { model: tagged, latency: Date.now() - start };
+                return null;
+            }
+            catch {
+                return null;
+            }
+            finally {
+                if (timer)
+                    clearTimeout(timer);
+            }
+        });
+        const results = await Promise.all(probes);
+        for (const r of results) {
+            if (r !== null)
+                available.push(r);
         }
-        catch {
-            return null;
-        }
-    });
-    const results = await Promise.all(probes);
-    const available = results.filter((r) => r !== null);
+    }
     if (available.length === 0)
         return null;
     available.sort((a, b) => a.latency - b.latency);
@@ -37078,12 +37152,17 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
 }
 function validateConfig(config) {
     const hasCustom = !!(config.customApiUrl && config.customModel);
+    const hasCustomModels = !!(config.customApiUrl && config.customModels.length > 0);
     if (config.apiKey)
         lib_core.setSecret(config.apiKey);
     if (config.mistralApiKey)
         lib_core.setSecret(config.mistralApiKey);
     if (config.groqApiKey)
         lib_core.setSecret(config.groqApiKey);
+    if (config.openRouterApiKey)
+        lib_core.setSecret(config.openRouterApiKey);
+    if (config.kiloApiKey)
+        lib_core.setSecret(config.kiloApiKey);
     if (config.customApiKey)
         lib_core.setSecret(config.customApiKey);
     if (config.customApiUrl) {
@@ -37097,16 +37176,23 @@ function validateConfig(config) {
         }
         validateProviderUrl(config.customApiUrl, 'custom_api_url');
     }
+    if (config.openRouterBaseUrl)
+        validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
+    if (config.kiloBaseUrl)
+        validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
     if (config.baseURL)
         validateProviderUrl(config.baseURL, 'nim_base_url');
     if (config.mistralBaseUrl)
         validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
     if (config.groqBaseUrl)
         validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
-    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
     }
-    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+        lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
+    }
+    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
         lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
 }
@@ -37116,6 +37202,8 @@ function buildClients(config) {
         nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
         mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
         groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
+        openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
+        kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
         custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
     };
 }
@@ -37153,6 +37241,9 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
             lib_core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
         const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
+        if (result === null) {
+            lib_core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
+        }
         batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
     }
     if (batches.length > 1) {
@@ -37174,6 +37265,14 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
         batchCount: 1,
     };
 }
+async function safeCleanup(repo, prNumber, token) {
+    try {
+        await cleanupPreviousOutput(repo, prNumber, token);
+    }
+    catch (err) {
+        lib_core.warning(`Failed to clean up previous review output: ${err}`);
+    }
+}
 async function dispatchOutput(context) {
     const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
     const modelShort = usedModel.split('/').pop() || usedModel;
@@ -37185,12 +37284,7 @@ async function dispatchOutput(context) {
     ].filter(Boolean).join(' · ');
     const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
     if (review.findings.length === 0) {
-        try {
-            await cleanupPreviousOutput(repo, prNumber, token);
-        }
-        catch (err) {
-            lib_core.warning(`Failed to clean up previous review output: ${err}`);
-        }
+        await safeCleanup(repo, prNumber, token);
         try {
             await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
             lib_core.info('Posted LGTM comment (no issues found)');
@@ -37200,35 +37294,35 @@ async function dispatchOutput(context) {
         }
         return { critical, warning, suggestion };
     }
-    try {
-        await cleanupPreviousOutput(repo, prNumber, token);
-    }
-    catch (err) {
-        lib_core.warning(`Failed to clean up previous review output: ${err}`);
-    }
+    await safeCleanup(repo, prNumber, token);
     const sections = [summaryBody, `\n${renderReview(review)}\n`];
     if (truncated) {
         sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
     }
-    await postComment(repo, prNumber, token, sections.join('\n'));
-    lib_core.info(`Posted summary comment with ${review.findings.length} findings`);
+    try {
+        await postComment(repo, prNumber, token, sections.join('\n'));
+        lib_core.info(`Posted summary comment with ${review.findings.length} findings`);
+    }
+    catch (err) {
+        lib_core.warning(`Failed to post summary comment: ${err}`);
+    }
     if (!usedModel) {
+        await safeCleanup(repo, prNumber, token);
         try {
-            await cleanupPreviousOutput(repo, prNumber, token);
+            await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
         }
         catch (err) {
-            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+            lib_core.warning(`Failed to post no-content comment: ${err}`);
         }
-        await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
+        await safeCleanup(repo, prNumber, token);
         try {
-            await cleanupPreviousOutput(repo, prNumber, token);
+            await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
         }
         catch (err) {
-            lib_core.warning(`Failed to clean up previous review output: ${err}`);
+            lib_core.warning(`Failed to post raw output comment: ${err}`);
         }
-        await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     }
     return { critical, warning, suggestion };
 }
@@ -37250,7 +37344,22 @@ async function run() {
     validateConfig(config);
     const clients = buildClients(config);
     const hasCustom = !!(config.customApiUrl && config.customModel);
-    const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
+    const chain = buildCombinedChain({
+        nimModels: config.models,
+        mistralModels: config.mistralModels,
+        groqModels: config.groqModels,
+        hasNimKey: !!config.apiKey,
+        hasMistralKey: !!config.mistralApiKey,
+        hasGroqKey: !!config.groqApiKey,
+        openrouterModels: config.openRouterModels,
+        hasOpenRouterKey: !!config.openRouterApiKey,
+        kiloModels: config.kiloModels,
+        hasKiloKey: !!config.kiloApiKey,
+        customModel: config.customModel,
+        hasCustomConfig: hasCustom,
+        customModels: config.customModels,
+        hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+    });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;

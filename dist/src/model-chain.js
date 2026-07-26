@@ -5,14 +5,17 @@ import { getSweBenchScore } from './bench-reorder.js';
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq) are combined and sorted by
- * SWE-bench score descending as the fallback chain.
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * and sorted by SWE-bench score descending as the fallback chain.
+ *
+ * Free-tier models (IDs ending with :free) are forced to rank last within
+ * the provider group, after all non-free models.
  *
  * Only includes models whose provider key is available.
  */
 export function buildCombinedChain(opts) {
     const providerModels = [];
-    const { groqModels = [], hasGroqKey = false } = opts;
+    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             providerModels.push({ id, provider: 'nim' });
@@ -28,38 +31,72 @@ export function buildCombinedChain(opts) {
             providerModels.push({ id, provider: 'groq' });
         }
     }
+    if (hasOpenRouterKey) {
+        for (const id of openrouterModels) {
+            providerModels.push({ id, provider: 'openrouter' });
+        }
+    }
+    if (hasKiloKey) {
+        for (const id of kiloModels) {
+            providerModels.push({ id, provider: 'kilocode' });
+        }
+    }
     providerModels.sort((a, b) => {
         const scoreA = getSweBenchScore(a.id);
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
-    if (opts.customModel && opts.hasCustomConfig) {
-        return [{ id: opts.customModel, provider: 'custom' }, ...providerModels];
+    const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
+    const free = providerModels.filter(m => m.id.endsWith(':free'));
+    const sortedProviderModels = [...nonFree, ...free];
+    const customModels = [];
+    if (opts.hasCustomModels && opts.customModels) {
+        for (const id of opts.customModels) {
+            customModels.push({ id, provider: 'custom' });
+        }
     }
-    return providerModels;
+    if (opts.customModel && opts.hasCustomConfig) {
+        customModels.push({ id: opts.customModel, provider: 'custom' });
+    }
+    return [...customModels, ...sortedProviderModels];
 }
 const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_CONCURRENCY = 3;
 export async function probeModels(chain, clients) {
-    const probes = chain.map(async (tagged) => {
-        const client = clients[tagged.provider];
-        if (!client)
-            return null;
-        try {
-            const start = Date.now();
-            const ok = await Promise.race([
-                client.probeModel(tagged.id),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)),
-            ]);
-            if (ok)
-                return { model: tagged, latency: Date.now() - start };
-            return null;
+    const available = [];
+    for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
+        const batch = chain.slice(i, i + PROBE_CONCURRENCY);
+        const probes = batch.map(async (tagged) => {
+            const client = clients[tagged.provider];
+            if (!client)
+                return null;
+            let timer;
+            try {
+                const start = Date.now();
+                const ok = await Promise.race([
+                    client.probeModel(tagged.id),
+                    new Promise((_, reject) => {
+                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
+                    }),
+                ]);
+                if (ok)
+                    return { model: tagged, latency: Date.now() - start };
+                return null;
+            }
+            catch {
+                return null;
+            }
+            finally {
+                if (timer)
+                    clearTimeout(timer);
+            }
+        });
+        const results = await Promise.all(probes);
+        for (const r of results) {
+            if (r !== null)
+                available.push(r);
         }
-        catch {
-            return null;
-        }
-    });
-    const results = await Promise.all(probes);
-    const available = results.filter((r) => r !== null);
+    }
     if (available.length === 0)
         return null;
     available.sort((a, b) => a.latency - b.latency);
