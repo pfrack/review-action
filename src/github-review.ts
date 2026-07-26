@@ -5,7 +5,6 @@ import type { ReviewFinding } from './review-schema.js';
 
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export const AI_REVIEW_MARKER = '### AI Code Review';
-export const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
 
 interface ReviewComment {
   path: string;
@@ -135,9 +134,9 @@ export async function findExistingReview(
       throw err;
     }
 
-    const reviews = await resp.json() as { id: number; body?: string; user: { login: string } }[];
+    const reviews = await resp.json() as { id: number; body?: string }[];
     for (const review of reviews) {
-      if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+      if (review.body?.startsWith(AI_REVIEW_MARKER)) {
         return review.id;
       }
     }
@@ -240,9 +239,9 @@ export async function findExistingComment(repo: string, prNumber: number, token:
       throw err;
     }
 
-    const comments = await resp.json() as { id: number; body: string; user: { login: string } }[];
+    const comments = await resp.json() as { id: number; body: string }[];
     for (const comment of comments) {
-      if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
+      if (comment.body.startsWith(AI_REVIEW_MARKER)) {
         return comment.id;
       }
     }

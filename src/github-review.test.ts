@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, BOT_LOGIN } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment } from './github-review.js';
 import type { ReviewFinding } from './review-schema.js';
 
 function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
@@ -148,8 +148,8 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 100, body: 'Some other review', user: { login: 'other-bot' } },
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: BOT_LOGIN } },
+        { id: 100, body: 'Some other review' },
+        { id: 200, body: '### AI Code Review\nFindings here' },
       ],
     }) as any;
     try {
@@ -164,7 +164,7 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'other-bot' } },
+        { id: 200, body: 'Some other review' },
       ],
     }) as any;
     try {
@@ -175,16 +175,16 @@ describe('findExistingReview', () => {
     }
   });
 
-  it('returns null when matching marker but wrong bot login', async () => {
+  it('returns review ID for marker from any bot', async () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'human-reviewer' } },
+        { id: 200, body: '### AI Code Review\nFindings here' },
       ],
     }) as any;
     try {
       const reviewId = await findExistingReview('owner/repo', 42, 'token');
-      assert.strictEqual(reviewId, null);
+      assert.strictEqual(reviewId, 200);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -3,7 +3,6 @@ import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown } from './utils.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export const AI_REVIEW_MARKER = '### AI Code Review';
-export const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
 export function formatFindingComment(finding) {
     const emoji = finding.severity === 'Critical' ? '🚨'
         : finding.severity === 'Warning' ? '⚠️'
@@ -101,7 +100,7 @@ export async function findExistingReview(repo, prNumber, token) {
         }
         const reviews = await resp.json();
         for (const review of reviews) {
-            if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
                 return review.id;
             }
         }
@@ -190,7 +189,7 @@ export async function findExistingComment(repo, prNumber, token) {
         }
         const comments = await resp.json();
         for (const comment of comments) {
-            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER)) {
                 return comment.id;
             }
         }
