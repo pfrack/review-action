@@ -27,7 +27,6 @@ export interface Config {
   promptMode: 'append' | 'replace';
   customRules: string;
   revalidateFindings: boolean;
-  botLogin: string;
 }
 
 export function splitCSV(s: string): string[] {
@@ -79,6 +78,5 @@ export function loadConfig(): Config {
     promptMode,
     customRules: core.getInput('custom_rules') || '',
     revalidateFindings: core.getInput('revalidate_findings') === 'true',
-    botLogin: core.getInput('bot_login') || 'github-actions[bot]',
   };
 }

@@ -106,7 +106,6 @@ export async function findExistingReview(
   repo: string,
   prNumber: number,
   token: string,
-  botLogin: string = DEFAULT_BOT_LOGIN,
 ): Promise<number | null> {
   let page = 1;
   const perPage = 100;
@@ -138,7 +137,7 @@ export async function findExistingReview(
 
     const reviews = await resp.json() as { id: number; body?: string; user: { login: string } }[];
     for (const review of reviews) {
-      if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === botLogin) {
+      if (review.body?.startsWith(AI_REVIEW_MARKER)) {
         return review.id;
       }
     }
@@ -184,8 +183,8 @@ export function shouldUseInlineComments(findings: ReviewFinding[]): boolean {
   return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
 }
 
-export async function postComment(repo: string, prNumber: number, token: string, body: string, botLogin: string = DEFAULT_BOT_LOGIN): Promise<void> {
-  const existingId = await findExistingComment(repo, prNumber, token, botLogin);
+export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
+  const existingId = await findExistingComment(repo, prNumber, token);
   if (existingId) {
     await deleteComment(repo, existingId, token);
   }
@@ -211,7 +210,7 @@ export async function deleteComment(repo: string, commentId: number, token: stri
   });
 }
 
-export async function findExistingComment(repo: string, prNumber: number, token: string, botLogin: string = DEFAULT_BOT_LOGIN): Promise<number | null> {
+export async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
   let page = 1;
   const perPage = 100;
   const maxPages = 50;
@@ -243,7 +242,7 @@ export async function findExistingComment(repo: string, prNumber: number, token:
 
     const comments = await resp.json() as { id: number; body: string; user: { login: string } }[];
     for (const comment of comments) {
-      if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === botLogin) {
+      if (comment.body.startsWith(AI_REVIEW_MARKER)) {
         return comment.id;
       }
     }

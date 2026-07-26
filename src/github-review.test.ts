@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, DEFAULT_BOT_LOGIN } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment } from './github-review.js';
 import type { ReviewFinding } from './review-schema.js';
 
 function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
@@ -149,7 +149,7 @@ describe('findExistingReview', () => {
       ok: true,
       json: async () => [
         { id: 100, body: 'Some other review', user: { login: 'other-bot' } },
-         { id: 200, body: '### AI Code Review\nFindings here', user: { login: DEFAULT_BOT_LOGIN } },
+         { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'github-actions[bot]' } },
       ],
     }) as any;
     try {

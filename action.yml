@@ -91,10 +91,6 @@ inputs:
     description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
     required: false
     default: 'false'
-  bot_login:
-    description: 'GitHub bot login used to identify previous review comments for replacement'
-    required: false
-    default: 'github-actions[bot]'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'
