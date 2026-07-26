@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { buildCombinedChain } from './model-chain.js';
+import { buildCombinedChain, probeModels } from './model-chain.js';
 describe('buildCombinedChain', () => {
     it('NIM-only: includes only NIM models when only NIM key is available', () => {
         const chain = buildCombinedChain({
@@ -158,5 +158,243 @@ describe('buildCombinedChain', () => {
         assert.strictEqual(chain.length, 1);
         assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
         assert.strictEqual(chain[0].provider, 'nim');
+    });
+});
+describe('OpenRouter provider', () => {
+    it('includes OpenRouter models when key is available, sorted by SWE-bench score', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            openrouterModels: ['meta-llama/llama-4-maverick:free', 'deepseek/deepseek-r1:free'],
+            hasOpenRouterKey: true,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 3);
+        // deepseek-v4-pro (0.806) is non-free, comes before free models
+        assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+        assert.strictEqual(chain[0].provider, 'nim');
+        // Free models sorted by score: deepseek-r1:free (0.65) > llama-4-maverick:free (0.50)
+        assert.strictEqual(chain[1].id, 'deepseek/deepseek-r1:free');
+        assert.strictEqual(chain[1].provider, 'openrouter');
+        assert.strictEqual(chain[2].id, 'meta-llama/llama-4-maverick:free');
+        assert.strictEqual(chain[2].provider, 'openrouter');
+    });
+    it('free models rank last, after non-free provider models', () => {
+        const chain = buildCombinedChain({
+            nimModels: [],
+            hasNimKey: false,
+            mistralModels: ['mistralai/mistral-medium-3.5-128b', 'mistral-small-model:free'],
+            hasMistralKey: true,
+            openrouterModels: ['deepseek/deepseek-r1:free'],
+            hasOpenRouterKey: true,
+        });
+        // Non-free first, then free
+        assert.strictEqual(chain[0].id, 'mistralai/mistral-medium-3.5-128b');
+        assert.strictEqual(chain[0].provider, 'mistral');
+        // Both free models come after non-free, sorted by SWE-bench within free group
+        const freeModels = chain.filter(m => m.id.endsWith(':free'));
+        assert.strictEqual(freeModels.length, 2);
+    });
+    it('free-last rule overrides score ordering when free model scores higher than non-free', () => {
+        // deepseek-r1:free (score 0.65) > jamba (score 0.55) — without free-last, :free would come first
+        const chain = buildCombinedChain({
+            nimModels: [],
+            hasNimKey: false,
+            mistralModels: [],
+            hasMistralKey: false,
+            groqModels: ['llama-3.3-70b-versatile'],
+            hasGroqKey: true,
+            openrouterModels: ['deepseek/deepseek-r1:free', 'ai21labs/jamba-1.5-large-instruct'],
+            hasOpenRouterKey: true,
+        });
+        // Free-last rule: jamba (0.55, non-free) must come before deepseek-r1:free (0.65, free)
+        // even though the free model has higher SWE-bench score
+        assert.strictEqual(chain[0].id, 'llama-3.3-70b-versatile');
+        assert.strictEqual(chain[1].id, 'ai21labs/jamba-1.5-large-instruct');
+        assert.strictEqual(chain[2].id, 'deepseek/deepseek-r1:free');
+    });
+    it('OpenRouter absent when key is not available', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            openrouterModels: ['deepseek/deepseek-r1:free'],
+            hasOpenRouterKey: false,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 1);
+        assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    });
+});
+describe('Kilo provider', () => {
+    it('includes Kilo models when key is available, sorted by SWE-bench score', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['meta/llama-3.3-70b-instruct'],
+            mistralModels: [],
+            hasMistralKey: false,
+            kiloModels: ['kilo-auto/balanced:free', 'kilo-auto/frontier:free'],
+            hasKiloKey: true,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 3);
+        // Non-free first
+        assert.strictEqual(chain[0].id, 'meta/llama-3.3-70b-instruct');
+        assert.strictEqual(chain[0].provider, 'nim');
+        // Free models sorted by SWE-bench within free group
+        assert.strictEqual(chain[1].id, 'kilo-auto/frontier:free');
+        assert.strictEqual(chain[1].provider, 'kilocode');
+        assert.strictEqual(chain[2].id, 'kilo-auto/balanced:free');
+        assert.strictEqual(chain[2].provider, 'kilocode');
+    });
+    it('Kilo absent when key is not available', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            kiloModels: ['kilo-auto/balanced:free'],
+            hasKiloKey: false,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 1);
+        assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    });
+});
+describe('custom_models CSV', () => {
+    it('multiple custom models are prepended, always-first', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            customModels: ['local Model-A', 'local Model-B'],
+            hasCustomModels: true,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 3);
+        assert.strictEqual(chain[0].id, 'local Model-A');
+        assert.strictEqual(chain[0].provider, 'custom');
+        assert.strictEqual(chain[1].id, 'local Model-B');
+        assert.strictEqual(chain[1].provider, 'custom');
+        assert.strictEqual(chain[2].id, 'deepseek-ai/deepseek-v4-pro');
+        assert.strictEqual(chain[2].provider, 'nim');
+    });
+    it('custom_models entries prepended before single custom_model', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            customModels: ['local-model-csv'],
+            customModel: 'local-model-single',
+            hasCustomModels: true,
+            hasCustomConfig: true,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 3);
+        assert.strictEqual(chain[0].id, 'local-model-csv');
+        assert.strictEqual(chain[0].provider, 'custom');
+        assert.strictEqual(chain[1].id, 'local-model-single');
+        assert.strictEqual(chain[1].provider, 'custom');
+        assert.strictEqual(chain[2].id, 'deepseek-ai/deepseek-v4-pro');
+        assert.strictEqual(chain[2].provider, 'nim');
+    });
+    it('custom_models absent when not configured', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 1);
+        assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    });
+});
+describe('6-provider combined chain ordering', () => {
+    it('custom models first, then provider models sorted by score with free models last', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['meta/llama-3.3-70b-instruct'],
+            hasNimKey: true,
+            mistralModels: ['mistralai/mistral-large-3-675b-instruct-2512'],
+            hasMistralKey: true,
+            groqModels: ['llama-3.3-70b-versatile'],
+            hasGroqKey: true,
+            openrouterModels: ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick:free'],
+            hasOpenRouterKey: true,
+            kiloModels: ['kilo-auto/frontier:free'],
+            hasKiloKey: true,
+            customModels: ['local-model-a'],
+            customModel: 'local-model-b',
+            hasCustomModels: true,
+            hasCustomConfig: true,
+        });
+        const customModels = chain.filter(m => m.provider === 'custom');
+        assert.strictEqual(customModels.length, 2);
+        assert.strictEqual(customModels[0].id, 'local-model-a');
+        assert.strictEqual(customModels[1].id, 'local-model-b');
+        const providerModels = chain.filter(m => m.provider !== 'custom');
+        const freeModels = providerModels.filter(m => m.id.endsWith(':free'));
+        const nonFreeModels = providerModels.filter(m => !m.id.endsWith(':free'));
+        assert.strictEqual(nonFreeModels[0].id, 'mistralai/mistral-large-3-675b-instruct-2512');
+        assert.ok(nonFreeModels.some(m => m.id === 'meta/llama-3.3-70b-instruct'));
+        assert.ok(nonFreeModels.some(m => m.id === 'llama-3.3-70b-versatile'));
+        assert.strictEqual(freeModels.length, 3);
+        assert.strictEqual(freeModels[0].id, 'deepseek/deepseek-r1:free');
+        assert.strictEqual(freeModels[1].id, 'kilo-auto/frontier:free');
+        assert.strictEqual(freeModels[2].id, 'meta-llama/llama-4-maverick:free');
+    });
+});
+function makeMockClient(probeResult, delayMs = 0) {
+    return {
+        probeModel: async (_model) => {
+            if (delayMs > 0)
+                await new Promise(r => setTimeout(r, delayMs));
+            return probeResult;
+        },
+    };
+}
+function makeClients(model, client) {
+    const clients = {
+        nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+    clients[model.provider] = client;
+    return clients;
+}
+describe('probeModels', () => {
+    it('returns null when all probes fail', async () => {
+        const chain = [
+            { id: 'model-a', provider: 'nim' },
+            { id: 'model-b', provider: 'mistral' },
+        ];
+        const clients = makeClients(chain[0], makeMockClient(false));
+        clients.mistral = makeMockClient(false);
+        const result = await probeModels(chain, clients);
+        assert.strictEqual(result, null);
+    });
+    it('returns the fastest available model', async () => {
+        const chain = [
+            { id: 'model-slow', provider: 'nim' },
+            { id: 'model-fast', provider: 'mistral' },
+        ];
+        const clients = makeClients(chain[0], makeMockClient(true, 50));
+        clients.mistral = makeMockClient(true, 10);
+        const result = await probeModels(chain, clients);
+        assert.ok(result);
+        assert.strictEqual(result.id, 'model-fast');
+    });
+    it('skips models whose provider client is null', async () => {
+        const chain = [
+            { id: 'model-a', provider: 'nim' },
+            { id: 'model-b', provider: 'mistral' },
+        ];
+        const clients = makeClients(chain[0], makeMockClient(true));
+        const result = await probeModels(chain, clients);
+        assert.ok(result);
+        assert.strictEqual(result.id, 'model-a');
+    });
+    it('returns null when chain is empty', async () => {
+        const clients = {
+            nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        const result = await probeModels([], clients);
+        assert.strictEqual(result, null);
     });
 });

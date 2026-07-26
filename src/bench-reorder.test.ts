@@ -470,9 +470,16 @@ describe('parseSweBenchResponse', () => {
 
 describe('fetchSweBenchScores', () => {
   it('returns empty array on network failure (graceful degradation)', async () => {
-    const result = await fetchSweBenchScores();
-    assert.ok(Array.isArray(result));
-    // Should not throw
+    const originalUrl = process.env.SWE_BENCH_API_URL;
+    process.env.SWE_BENCH_API_URL = 'http://localhost:1';
+    try {
+      const result = await fetchSweBenchScores();
+      assert.ok(Array.isArray(result));
+      // Should not throw
+    } finally {
+      if (originalUrl === undefined) delete process.env.SWE_BENCH_API_URL;
+      else process.env.SWE_BENCH_API_URL = originalUrl;
+    }
   });
 });
 

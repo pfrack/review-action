@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, readFetchedScores, stripFetchedScoresComment } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment } from './bench-reorder.js';
 describe('updateActionYml groq target', () => {
     it('correctly replaces groq_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
@@ -151,6 +151,23 @@ describe('getSweBenchScore — Mistral direct-API IDs', () => {
         assert.strictEqual(getSweBenchScore('codestral-latest'), 0.650);
     });
 });
+describe('getSweBenchScore — OpenRouter and Kilo free-tier estimated scores', () => {
+    it('returns 0.65 for deepseek/deepseek-r1:free', () => {
+        assert.strictEqual(getSweBenchScore('deepseek/deepseek-r1:free'), 0.65);
+    });
+    it('returns 0.50 for meta-llama/llama-4-maverick:free', () => {
+        assert.strictEqual(getSweBenchScore('meta-llama/llama-4-maverick:free'), 0.50);
+    });
+    it('returns 0.60 for google/gemini-2.0-flash-exp:free', () => {
+        assert.strictEqual(getSweBenchScore('google/gemini-2.0-flash-exp:free'), 0.60);
+    });
+    it('returns 0.55 for kilo-auto/balanced:free', () => {
+        assert.strictEqual(getSweBenchScore('kilo-auto/balanced:free'), 0.55);
+    });
+    it('returns 0.60 for kilo-auto/frontier:free', () => {
+        assert.strictEqual(getSweBenchScore('kilo-auto/frontier:free'), 0.60);
+    });
+});
 describe('updateActionYmlMistral', () => {
     it('correctly replaces mistral_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
@@ -188,6 +205,94 @@ inputs:
 `;
             writeFileSync(actionPath, content, 'utf-8');
             updateActionYmlMistral(actionPath, ['codestral-2508']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.strictEqual(result, content); // unchanged
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+describe('updateActionYmlOpenRouter', () => {
+    it('correctly replaces openrouter_models default', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
+inputs:
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlOpenRouter(actionPath, ['deepseek/deepseek-r1:free']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.ok(result.includes("default: 'deepseek/deepseek-r1:free'"));
+            assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+    it('does not modify file when openrouter_models block not found', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlOpenRouter(actionPath, ['deepseek/deepseek-r1:free']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.strictEqual(result, content); // unchanged
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+describe('updateActionYmlKilocode', () => {
+    it('correctly replaces kilocode_models default', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
+inputs:
+  kilocode_models:
+    description: 'Comma-separated Kilo model fallback chain'
+    default: 'kilo-auto/balanced:free,kilo-auto/frontier:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlKilocode(actionPath, ['kilo-auto/frontier:free', 'kilo-auto/balanced:free']);
+            const result = readFileSync(actionPath, 'utf-8');
+            assert.ok(result.includes("default: 'kilo-auto/frontier:free,kilo-auto/balanced:free'"));
+            assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+    it('does not modify file when kilocode_models block not found', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+        try {
+            const actionPath = join(tmpDir, 'action.yml');
+            const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+            writeFileSync(actionPath, content, 'utf-8');
+            updateActionYmlKilocode(actionPath, ['kilo-auto/frontier:free']);
             const result = readFileSync(actionPath, 'utf-8');
             assert.strictEqual(result, content); // unchanged
         }
@@ -289,9 +394,19 @@ describe('parseSweBenchResponse', () => {
 });
 describe('fetchSweBenchScores', () => {
     it('returns empty array on network failure (graceful degradation)', async () => {
-        const result = await fetchSweBenchScores();
-        assert.ok(Array.isArray(result));
-        // Should not throw
+        const originalUrl = process.env.SWE_BENCH_API_URL;
+        process.env.SWE_BENCH_API_URL = 'http://localhost:1';
+        try {
+            const result = await fetchSweBenchScores();
+            assert.ok(Array.isArray(result));
+            // Should not throw
+        }
+        finally {
+            if (originalUrl === undefined)
+                delete process.env.SWE_BENCH_API_URL;
+            else
+                process.env.SWE_BENCH_API_URL = originalUrl;
+        }
     });
 });
 describe('readFetchedScores', () => {

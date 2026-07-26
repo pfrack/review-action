@@ -223,13 +223,13 @@ The custom model is tried before NIM and Mistral models in the fallback chain. I
 
 ## Default NIM Fallback Chain
 
-1. `z-ai/glm-5.2` (Zhipu AI)
-2. `minimaxai/minimax-m2.7` (MiniMax)
-3. `qwen/qwen3.5-397b-a17b` (Alibaba)
-4. `minimaxai/minimax-m3` (MiniMax)
-5. `stepfun-ai/step-3.7-flash` (StepFun)
-6. `mistralai/mistral-nemotron` (Mistral via NIM)
-7. `deepseek-ai/deepseek-v4-pro` (DeepSeek)
+1. `deepseek-ai/deepseek-v4-flash` (DeepSeek)
+2. `z-ai/glm-5.2` (Zhipu AI)
+3. `stepfun-ai/step-3.7-flash` (StepFun)
+4. `mistralai/mistral-nemotron` (Mistral via NIM)
+5. `minimaxai/minimax-m3` (MiniMax)
+6. `deepseek-ai/deepseek-v4-pro` (DeepSeek)
+7. `mistralai/mistral-medium-3.5-128b` (Mistral via NIM)
 
 Models are tried in order. On error (rate limit, 500, timeout, network failure), the next model is tried. Transient failures are retried once with exponential backoff before falling through.
 

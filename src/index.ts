@@ -255,6 +255,9 @@ async function executeReview(
     const result = await withAggregateTimeout(() => runModelChainForBatch(
       chain, clients, batch, systemMessage, 'json_schema', config,
     ));
+    if (result === null) {
+      core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
+    }
     batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
   }
 
@@ -292,6 +295,14 @@ interface DispatchContext {
   lastRawContent: string;
 }
 
+async function safeCleanup(repo: string, prNumber: number, token: string): Promise<void> {
+  try {
+    await cleanupPreviousOutput(repo, prNumber, token);
+  } catch (err) {
+    core.warning(`Failed to clean up previous review output: ${err}`);
+  }
+}
+
 async function dispatchOutput(context: DispatchContext): Promise<{ critical: number; warning: number; suggestion: number }> {
   const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
   const modelShort = usedModel.split('/').pop() || usedModel;
@@ -304,11 +315,7 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
   const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
   if (review.findings.length === 0) {
-    try {
-      await cleanupPreviousOutput(repo, prNumber, token);
-    } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
-    }
+    await safeCleanup(repo, prNumber, token);
     try {
       await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
       core.info('Posted LGTM comment (no issues found)');
@@ -318,32 +325,32 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     return { critical, warning, suggestion };
   }
 
-  try {
-    await cleanupPreviousOutput(repo, prNumber, token);
-  } catch (err) {
-    core.warning(`Failed to clean up previous review output: ${err}`);
-  }
+  await safeCleanup(repo, prNumber, token);
   const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
   if (truncated) {
     sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
   }
-  await postComment(repo, prNumber, token, sections.join('\n'));
-  core.info(`Posted summary comment with ${review.findings.length} findings`);
+  try {
+    await postComment(repo, prNumber, token, sections.join('\n'));
+    core.info(`Posted summary comment with ${review.findings.length} findings`);
+  } catch (err) {
+    core.warning(`Failed to post summary comment: ${err}`);
+  }
 
   if (!usedModel) {
+    await safeCleanup(repo, prNumber, token);
     try {
-      await cleanupPreviousOutput(repo, prNumber, token);
+      await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
+      core.warning(`Failed to post no-content comment: ${err}`);
     }
-    await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
+    await safeCleanup(repo, prNumber, token);
     try {
-      await cleanupPreviousOutput(repo, prNumber, token);
+      await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
+      core.warning(`Failed to post raw output comment: ${err}`);
     }
-    await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
   }
 
   return { critical, warning, suggestion };

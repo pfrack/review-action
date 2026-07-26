@@ -98,31 +98,43 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_CONCURRENCY = 3;
 
 export async function probeModels(
   chain: TaggedModel[],
   clients: Record<Provider, OpenAIClient | null>,
 ): Promise<TaggedModel | null> {
-  const probes = chain.map(async (tagged) => {
-    const client = clients[tagged.provider];
-    if (!client) return null;
-    try {
-      const start = Date.now();
-      const ok = await Promise.race([
-        client.probeModel(tagged.id),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)
-        ),
-      ]);
-      if (ok) return { model: tagged, latency: Date.now() - start };
-      return null;
-    } catch {
-      return null;
-    }
-  });
+  const available: { model: TaggedModel; latency: number }[] = [];
 
-  const results = await Promise.all(probes);
-  const available = results.filter((r): r is { model: TaggedModel; latency: number } => r !== null);
+  for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
+    const batch = chain.slice(i, i + PROBE_CONCURRENCY);
+    const probes = batch.map(async (tagged) => {
+      const client = clients[tagged.provider];
+      if (!client) return null;
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const start = Date.now();
+        const ok = await Promise.race([
+          client.probeModel(tagged.id),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
+          }),
+        ]);
+        if (ok) return { model: tagged, latency: Date.now() - start };
+        return null;
+      } catch {
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    });
+
+    const results = await Promise.all(probes);
+    for (const r of results) {
+      if (r !== null) available.push(r);
+    }
+  }
+
   if (available.length === 0) return null;
   available.sort((a, b) => a.latency - b.latency);
   return available[0].model;

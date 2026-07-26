@@ -49,7 +49,7 @@ export function loadConfig(): Config {
       'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
     groqApiKey: core.getInput('groq_api_key') || '',
     groqModels: splitCSV(core.getInput('groq_models') ||
-      'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'),
+      'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
     groqBaseUrl: core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
     openRouterApiKey: core.getInput('openrouter_api_key') || '',
     openRouterBaseUrl: core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',

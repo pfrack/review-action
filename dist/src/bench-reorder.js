@@ -94,8 +94,13 @@ function parseDuration(s) {
     return parseFloat(s) || Infinity;
 }
 /**
- * Known SWE-bench Verified scores for models available on NIM and Groq.
+ * Known SWE-bench Verified scores for models available on NIM, Groq,
+ * OpenRouter, and Kilo.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Free-tier entries (IDs ending with :free) are estimated scores; they
+ * should be replaced with measured values once benchmark data is available.
+ * Free models are forced to rank last in the fallback chain.
  *
  * Model identifiers are provider-specific — Groq uses different IDs than
  * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
@@ -150,6 +155,13 @@ export const SWE_BENCH_SCORES = {
     'mistral-small-latest': 0.680,
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
+    // OpenRouter free-tier models (estimated scores)
+    'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
+    'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
+    'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
+    // Kilo free-tier models (estimated scores)
+    'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
+    'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
 };
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
@@ -204,6 +216,8 @@ const TARGET_CONFIG = {
     nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
     mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
     groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
+    openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
+    kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -236,6 +250,12 @@ export function updateActionYml(actionPath, orderedModels, target = 'nim_models'
 }
 export function updateActionYmlMistral(actionPath, orderedModels) {
     updateActionYml(actionPath, orderedModels, 'mistral_models');
+}
+export function updateActionYmlOpenRouter(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'openrouter_models');
+}
+export function updateActionYmlKilocode(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'kilocode_models');
 }
 /**
  * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
@@ -289,7 +309,7 @@ async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
     const target = (process.env.ACTION_TARGET || 'nim_models');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin
