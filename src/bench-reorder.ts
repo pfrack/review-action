@@ -120,8 +120,13 @@ function parseDuration(s: string): number {
 }
 
 /**
- * Known SWE-bench Verified scores for models available on NIM and Groq.
+ * Known SWE-bench Verified scores for models available on NIM, Groq,
+ * OpenRouter, and Kilo.
  * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Free-tier entries (IDs ending with :free) are estimated scores; they
+ * should be replaced with measured values once benchmark data is available.
+ * Free models are forced to rank last in the fallback chain.
  *
  * Model identifiers are provider-specific — Groq uses different IDs than
  * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
@@ -176,6 +181,13 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'mistral-small-latest': 0.680,
   'codestral-2508': 0.650,
   'codestral-latest': 0.650,
+  // OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,           // estimated — free tier, quantized
+  'meta-llama/llama-4-maverick:free': 0.50,    // estimated — free tier, truncated
+  'google/gemini-2.0-flash-exp:free': 0.60,    // estimated — experimental free tier
+  // Kilo free-tier models (estimated scores)
+  'kilo-auto/balanced:free': 0.55,            // estimated — free auto tier
+  'kilo-auto/frontier:free': 0.60,            // estimated — free tier, frontier routing
 };
 
 /**
@@ -231,7 +243,7 @@ export function rankModels(
     });
 }
 
-type ActionTarget = 'nim_models' | 'mistral_models' | 'groq_models';
+type ActionTarget = 'nim_models' | 'mistral_models' | 'groq_models' | 'openrouter_models' | 'kilocode_models';
 
 function buildTargetPattern(targetKey: string): RegExp {
   return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
@@ -241,6 +253,8 @@ const TARGET_CONFIG: Record<ActionTarget, { pattern: RegExp; label: string }> = 
   nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
   mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
   groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
+  openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
+  kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
 };
 
 /**
@@ -279,6 +293,14 @@ export function updateActionYml(actionPath: string, orderedModels: string[], tar
 
 export function updateActionYmlMistral(actionPath: string, orderedModels: string[]): void {
   updateActionYml(actionPath, orderedModels, 'mistral_models');
+}
+
+export function updateActionYmlOpenRouter(actionPath: string, orderedModels: string[]): void {
+  updateActionYml(actionPath, orderedModels, 'openrouter_models');
+}
+
+export function updateActionYmlKilocode(actionPath: string, orderedModels: string[]): void {
+  updateActionYml(actionPath, orderedModels, 'kilocode_models');
 }
 
 /**
@@ -337,7 +359,7 @@ async function main(): Promise<void> {
   const target = (process.env.ACTION_TARGET || 'nim_models') as ActionTarget;
 
   if (!(target in TARGET_CONFIG)) {
-    console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', or 'groq_models'.`);
+    console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
     process.exit(1);
   }
 

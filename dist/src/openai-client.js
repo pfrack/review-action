@@ -10,6 +10,11 @@ export function parseRetryAfter(value, now = Date.now()) {
         return undefined;
     return Math.max(0, timestamp - now);
 }
+export function sanitizeErrorBody(body) {
+    return body
+        .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+        .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
+}
 export class OpenAIClient {
     baseURL;
     apiKey;
@@ -21,7 +26,9 @@ export class OpenAIClient {
             (baseURL.includes('nvidia.com') ? 'NIM' :
                 baseURL.includes('mistral') ? 'Mistral' :
                     baseURL.includes('groq') ? 'Groq' :
-                        baseURL.split('/')[2] || 'API');
+                        baseURL.includes('openrouter') ? 'OpenRouter' :
+                            baseURL.includes('kilo.ai') ? 'Kilo' :
+                                baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
         const payload = {
@@ -70,7 +77,7 @@ export class OpenAIClient {
             if (!response.ok) {
                 const body = await response.text();
                 const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status, retryAfterMs);
+                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -129,7 +136,7 @@ export class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, r.status, retryAfterMs);
+                throw new RetryableError(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
             }
             return r;
         });

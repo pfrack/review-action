@@ -161,10 +161,13 @@ export async function runModelChainForBatch(
 
 function validateConfig(config: Config): void {
   const hasCustom = !!(config.customApiUrl && config.customModel);
+  const hasCustomModels = !!(config.customApiUrl && config.customModels.length > 0);
 
   if (config.apiKey) core.setSecret(config.apiKey);
   if (config.mistralApiKey) core.setSecret(config.mistralApiKey);
   if (config.groqApiKey) core.setSecret(config.groqApiKey);
+  if (config.openRouterApiKey) core.setSecret(config.openRouterApiKey);
+  if (config.kiloApiKey) core.setSecret(config.kiloApiKey);
   if (config.customApiKey) core.setSecret(config.customApiKey);
 
   if (config.customApiUrl) {
@@ -178,14 +181,19 @@ function validateConfig(config: Config): void {
     }
     validateProviderUrl(config.customApiUrl, 'custom_api_url');
   }
+  if (config.openRouterBaseUrl) validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
+  if (config.kiloBaseUrl) validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
   if (config.baseURL) validateProviderUrl(config.baseURL, 'nim_base_url');
   if (config.mistralBaseUrl) validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
   if (config.groqBaseUrl) validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
 
-  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !hasCustom) {
-    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, or custom_api_url + custom_model is required');
+  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
+    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
   }
-  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey) {
+  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    core.info('Running with only custom API configured — no fallback chain available if custom model fails');
+  }
+  if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
 }
@@ -196,6 +204,8 @@ function buildClients(config: Config): Record<Provider, OpenAIClient | null> {
     nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
     mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
     groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
+    openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
+    kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
     custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
   };
 }
@@ -245,6 +255,9 @@ async function executeReview(
     const result = await withAggregateTimeout(() => runModelChainForBatch(
       chain, clients, batch, systemMessage, 'json_schema', config,
     ));
+    if (result === null) {
+      core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
+    }
     batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
   }
 
@@ -282,6 +295,14 @@ interface DispatchContext {
   lastRawContent: string;
 }
 
+async function safeCleanup(repo: string, prNumber: number, token: string): Promise<void> {
+  try {
+    await cleanupPreviousOutput(repo, prNumber, token);
+  } catch (err) {
+    core.warning(`Failed to clean up previous review output: ${err}`);
+  }
+}
+
 async function dispatchOutput(context: DispatchContext): Promise<{ critical: number; warning: number; suggestion: number }> {
   const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
   const modelShort = usedModel.split('/').pop() || usedModel;
@@ -294,11 +315,7 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
   const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
   if (review.findings.length === 0) {
-    try {
-      await cleanupPreviousOutput(repo, prNumber, token);
-    } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
-    }
+    await safeCleanup(repo, prNumber, token);
     try {
       await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
       core.info('Posted LGTM comment (no issues found)');
@@ -308,32 +325,32 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     return { critical, warning, suggestion };
   }
 
-  try {
-    await cleanupPreviousOutput(repo, prNumber, token);
-  } catch (err) {
-    core.warning(`Failed to clean up previous review output: ${err}`);
-  }
+  await safeCleanup(repo, prNumber, token);
   const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
   if (truncated) {
     sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
   }
-  await postComment(repo, prNumber, token, sections.join('\n'));
-  core.info(`Posted summary comment with ${review.findings.length} findings`);
+  try {
+    await postComment(repo, prNumber, token, sections.join('\n'));
+    core.info(`Posted summary comment with ${review.findings.length} findings`);
+  } catch (err) {
+    core.warning(`Failed to post summary comment: ${err}`);
+  }
 
   if (!usedModel) {
+    await safeCleanup(repo, prNumber, token);
     try {
-      await cleanupPreviousOutput(repo, prNumber, token);
+      await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
     } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
+      core.warning(`Failed to post no-content comment: ${err}`);
     }
-    await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
+    await safeCleanup(repo, prNumber, token);
     try {
-      await cleanupPreviousOutput(repo, prNumber, token);
+      await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
     } catch (err) {
-      core.warning(`Failed to clean up previous review output: ${err}`);
+      core.warning(`Failed to post raw output comment: ${err}`);
     }
-    await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
   }
 
   return { critical, warning, suggestion };
@@ -356,7 +373,22 @@ async function run(): Promise<void> {
   validateConfig(config);
   const clients = buildClients(config);
   const hasCustom = !!(config.customApiUrl && config.customModel);
-  const chain = buildCombinedChain({ nimModels: config.models, mistralModels: config.mistralModels, groqModels: config.groqModels, hasNimKey: !!config.apiKey, hasMistralKey: !!config.mistralApiKey, hasGroqKey: !!config.groqApiKey, customModel: config.customModel, hasCustomConfig: hasCustom });
+  const chain = buildCombinedChain({
+    nimModels: config.models,
+    mistralModels: config.mistralModels,
+    groqModels: config.groqModels,
+    hasNimKey: !!config.apiKey,
+    hasMistralKey: !!config.mistralApiKey,
+    hasGroqKey: !!config.groqApiKey,
+    openrouterModels: config.openRouterModels,
+    hasOpenRouterKey: !!config.openRouterApiKey,
+    kiloModels: config.kiloModels,
+    hasKiloKey: !!config.kiloApiKey,
+    customModel: config.customModel,
+    hasCustomConfig: hasCustom,
+    customModels: config.customModels,
+    hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+  });
   const event = loadEvent();
   const prNumber = event.pull_request.number;
   const repo = process.env.GITHUB_REPOSITORY;

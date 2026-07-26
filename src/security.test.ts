@@ -56,6 +56,8 @@ describe('validateProviderUrl — SSRF blocklist', () => {
     assert.doesNotThrow(() => validateProviderUrl('https://integrate.api.nvidia.com/v1', 'nim_base_url'));
     assert.doesNotThrow(() => validateProviderUrl('https://api.mistral.ai/v1', 'mistral_base_url'));
     assert.doesNotThrow(() => validateProviderUrl('https://api.groq.com/openai/v1', 'groq_base_url'));
+    assert.doesNotThrow(() => validateProviderUrl('https://openrouter.ai/api/v1', 'openrouter_base_url'));
+    assert.doesNotThrow(() => validateProviderUrl('https://api.kilo.ai/api/gateway', 'kilocode_base_url'));
   });
 
   it('blocks other 169.254.x.x link-local addresses', () => {

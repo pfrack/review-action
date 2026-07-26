@@ -32,6 +32,33 @@ inputs:
   groq_models:
     description: 'Comma-separated Groq model fallback chain'
     default: 'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'
+  openrouter_api_key:
+    description: 'OpenRouter API key'
+    required: false
+    default: ''
+  openrouter_base_url:
+    description: 'OpenRouter API base URL'
+    default: 'https://openrouter.ai/api/v1'
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'
+  kilocode_api_key:
+    description: 'Kilo Gateway API key'
+    required: false
+    default: ''
+  kilocode_base_url:
+    description: 'Kilo Gateway API base URL'
+    default: 'https://api.kilo.ai/api/gateway'
+  kilocode_models:
+    description: 'Comma-separated Kilo model fallback chain'
+    default: 'kilo-auto/balanced:free,kilo-auto/frontier:free'
+  custom_models:
+    description: 'Comma-separated custom model IDs for the custom API endpoint (multiple models enable fallback)'
+    required: false
+    default: ''
+  custom_models_base_url:
+    description: 'Base URL for custom_models (defaults to custom_api_url if not set)'
+    default: ''
   custom_api_url:
     description: 'Custom OpenAI-compatible API base URL (tried before NIM models)'
     required: false
