@@ -56,11 +56,11 @@ Remove unnecessary `user.login` from test fixtures.
 
 #### Automated
 
-- [x] 1.1 Remove user.login from findExistingReview test data
-- [x] 1.2 Remove user.login from findExistingComment test data
-- [x] 1.3 Tests pass
-- [x] 1.4 TypeScript compiles
+- [x] 1.1 Remove user.login from findExistingReview test data — 2dc8b7e
+- [x] 1.2 Remove user.login from findExistingComment test data — 2dc8b7e
+- [x] 1.3 Tests pass — 2dc8b7e
+- [x] 1.4 TypeScript compiles — 2dc8b7e
 
 #### Manual
 
-- [x] 1.5 Verify test data is clearer
+- [x] 1.5 Verify test data is clearer — 2dc8b7e
