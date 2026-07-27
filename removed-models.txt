@@ -1,3 +1,2 @@
-deepseek-ai/deepseek-v4-pro
 deepseek-ai/deepseek-v4-flash
-openai/gpt-oss-120b
+stepfun-ai/step-3.7-flash
