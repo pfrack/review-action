@@ -276,6 +276,7 @@ jobs:
           REMOVED_MODELS_PATH: 'removed-openrouter-models.txt'
           MODEL_HISTORY_PATH: 'openrouter-model-history.json'
           BENCH_SCORES_FILE: 'fetched-scores.json'
+          ACTION_TARGET: openrouter_models
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
@@ -355,6 +356,7 @@ jobs:
           REMOVED_MODELS_PATH: 'removed-kilocode-models.txt'
           MODEL_HISTORY_PATH: 'kilocode-model-history.json'
           BENCH_SCORES_FILE: 'fetched-scores.json'
+          ACTION_TARGET: kilocode_models
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
       - name: Show results
