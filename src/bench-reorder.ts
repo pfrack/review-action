@@ -404,11 +404,24 @@ export function stripFetchedScoresComment(rawInput: string, scoresFile: string |
 }
 
 /**
+ * Read current models from action.yml for the given target.
+ */
+function readCurrentModelsFromAction(actionPath: string, target: ActionTarget): string[] {
+  const content = readFileSync(actionPath, 'utf-8');
+  const pattern = new RegExp(`${target}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*'([^']*)'`);
+  const match = content.match(pattern);
+  if (!match) return [];
+  return match[1].split(',').map(s => s.trim()).filter(s => s !== '');
+}
+
+/**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
+ * With --two-tier, uses two-tier ranking (known models first, then new by latency).
  */
 async function main(): Promise<void> {
   const actionPath = process.env.ACTION_PATH || 'action.yml';
   const target = (process.env.ACTION_TARGET || 'nim_models') as ActionTarget;
+  const twoTier = process.argv.includes('--two-tier');
 
   if (!(target in TARGET_CONFIG)) {
     console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
@@ -452,9 +465,19 @@ async function main(): Promise<void> {
   }
 
   const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
-  const ranked = rankModels(rows, latencies, fetchedScoresMap);
 
-  console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+  let ranked: string[];
+  if (twoTier) {
+    const knownModels = new Set(readCurrentModelsFromAction(actionPath, target));
+    ranked = rankModelsTwoTier(rows, knownModels, latencies, fetchedScoresMap);
+    const knownCount = ranked.filter(m => knownModels.has(m)).length;
+    const newCount = ranked.length - knownCount;
+    console.log(`Two-tier ranking for ${target}: ${knownCount} known + ${newCount} new = ${ranked.length} total`);
+  } else {
+    ranked = rankModels(rows, latencies, fetchedScoresMap);
+    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+  }
+
   const summaryLines = [
     `\n## Model Ranking (${target})\n`,
     '| # | Model | SWE | Effective | Latency |',
