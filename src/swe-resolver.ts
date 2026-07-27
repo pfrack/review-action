@@ -1,7 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { withRetry } from './retry.js';
-import { normalizeModelId } from './bench-entry.js';
+import { deterministicMatch as benchDeterministicMatch } from './bench-entry.js';
+import { patchScoresTable } from './bench-reorder.js';
 import type { SweBenchEntry } from './bench-reorder.js';
+
+export { patchScoresTable };
 
 interface ResolvedScore {
   model: string;
@@ -30,33 +33,18 @@ export async function fetchLeaderboard(): Promise<SweBenchEntry[]> {
   });
   const data = await resp.json() as { models?: Array<{ model_id: string; score: number; organization_id?: string }> };
   return (data.models || [])
-    .filter(m => m.score > 0.5)
+    .filter(m => typeof m.score === 'number' && m.model_id)
     .sort((a, b) => b.score - a.score)
     .map(m => ({ modelId: m.model_id, score: m.score, org: m.organization_id || '' }));
 }
 
 function deterministicMatch(modelId: string, leaderboard: SweBenchEntry[]): { score: number; strategy: string; matchedId: string } | null {
-  const lc = modelId.toLowerCase();
-
-  const exact = leaderboard.find(e => e.modelId === modelId);
-  if (exact) return { score: exact.score, strategy: 'exact', matchedId: exact.modelId };
-
-  const ci = leaderboard.find(e => e.modelId.toLowerCase() === lc);
-  if (ci) return { score: ci.score, strategy: 'case-insensitive', matchedId: ci.modelId };
-
-  const norm = normalizeModelId(modelId);
-  const normMatches = leaderboard.filter(e => normalizeModelId(e.modelId) === norm);
-  if (normMatches.length === 1) {
-    return { score: normMatches[0].score, strategy: 'normalized', matchedId: normMatches[0].modelId };
-  }
-
-  return null;
+  return benchDeterministicMatch(modelId, leaderboard);
 }
 
 export function resolveScores(
   currentScores: Record<string, number>,
   leaderboard: SweBenchEntry[],
-  options: { llmClient?: undefined; matcherModel?: string } = {},
 ): ResolveResult {
   const resolved: ResolvedScore[] = [];
   const unresolved: UnresolvedModel[] = [];
@@ -76,34 +64,7 @@ export function resolveScores(
     }
   }
 
-  void options.matcherModel;
   return { resolved, unresolved };
-}
-
-export function patchScoresTable(sourcePath: string, entries: { model: string; score: number }[]): number {
-  const content = readFileSync(sourcePath, 'utf-8');
-  const marker = entries.some(e => e.model.startsWith('kilo-auto/'))
-    ? '// Kilo free-tier models (estimated scores)'
-    : '// OpenRouter free-tier models (estimated scores)';
-  const idx = content.indexOf(marker);
-  if (idx === -1) return 0;
-
-  const before = content.substring(0, idx);
-  const after = content.substring(idx);
-  const lines = after.split('\n');
-  let insertLine = 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
-      insertLine = i;
-      break;
-    }
-  }
-
-  const newLines = entries.map(e => `  '${e.model}': ${e.score},`);
-  lines.splice(insertLine, 0, ...newLines);
-  const updated = before + lines.join('\n');
-  writeFileSync(sourcePath, updated, 'utf-8');
-  return newLines.length;
 }
 
 async function main(): Promise<void> {
@@ -111,6 +72,8 @@ async function main(): Promise<void> {
   const dryRun = args.includes('--dry-run');
   const sourceIdx = args.indexOf('--source');
   const sourcePath = sourceIdx !== -1 ? args[sourceIdx + 1] : 'src/bench-reorder.ts';
+  const sectionArg = args.indexOf('--section');
+  const section = sectionArg !== -1 ? args[sectionArg + 1] as 'openrouter' | 'kilo' : undefined;
 
   process.stderr.write(`Fetching leaderboard...\n`);
   const leaderboard = await fetchLeaderboard();
@@ -123,7 +86,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const currentScores = eval('(' + scoresMatch[1] + ')') as Record<string, number>;
+  const currentScores = parseScoresLiteral(scoresMatch[1]);
 
   const { resolved, unresolved } = resolveScores(currentScores, leaderboard);
 
@@ -150,11 +113,20 @@ async function main(): Promise<void> {
   }
 
   if (resolved.length > 0) {
-    const count = patchScoresTable(sourcePath, resolved);
+    const count = patchScoresTable(sourcePath, resolved, section);
     process.stderr.write(`\nPatched ${count} score(s) into ${sourcePath}\n`);
   } else {
     process.stderr.write('\nNo scores to patch\n');
   }
+}
+
+function parseScoresLiteral(literal: string): Record<string, number> {
+  let json = literal
+    .replace(/(\s*\/\/[^\n]*)/g, '')
+    .replace(/'([^']*)'/g, '"$1"')
+    .replace(/,\s*}/g, '}')
+    .replace(/,\s*]/g, ']');
+  return JSON.parse(json) as Record<string, number>;
 }
 
 const isMainModule = process.argv[1]?.endsWith('swe-resolver.js');

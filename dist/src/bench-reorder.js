@@ -450,11 +450,15 @@ export function discoverNewModels(models) {
  * Insert new model entries into a SWE_BENCH_SCORES table in a source file.
  * Finds the table by marker comment and inserts before the closing brace.
  */
-export function patchScoresTable(sourcePath, entries) {
+export function patchScoresTable(sourcePath, entries, section) {
     const content = readFileSync(sourcePath, 'utf-8');
-    const marker = entries.some(e => e.model.startsWith('kilo-auto/'))
+    const marker = section === 'kilo'
         ? '// Kilo free-tier models (estimated scores)'
-        : '// OpenRouter free-tier models (estimated scores)';
+        : section === 'openrouter'
+            ? '// OpenRouter free-tier models (estimated scores)'
+            : entries.some(e => e.model.startsWith('kilo-auto/'))
+                ? '// Kilo free-tier models (estimated scores)'
+                : '// OpenRouter free-tier models (estimated scores)';
     const idx = content.indexOf(marker);
     if (idx === -1)
         return 0;
