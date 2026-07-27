@@ -279,8 +279,11 @@ async function main() {
         }
         results.push(result);
     }
-    // Replace failed models with next best from SWE-bench
-    if (failed.length > 0) {
+    // Replace failed models with next best from SWE-bench.
+    // Replacement uses the hardcoded SWE-bench table which is NIM-specific,
+    // so only run it for NIM endpoints.
+    const isNim = baseURL.includes('nvidia.com');
+    if (failed.length > 0 && isNim) {
         process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
         const replacements = getReplacements(models, availableModels ?? undefined);
         for (const deadModel of failed) {
