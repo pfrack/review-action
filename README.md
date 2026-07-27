@@ -43,10 +43,12 @@ jobs:
 | `groq_models` | see below | Comma-separated Groq fallback chain |
 | `openrouter_api_key` | `''` | OpenRouter API key |
 | `openrouter_base_url` | `https://openrouter.ai/api/v1` | OpenRouter endpoint |
-| `openrouter_models` | see below | Comma-separated OpenRouter fallback chain (free-tier models by default) |
+| `openrouter_models` | `''` (auto-fetches free models) | Comma-separated OpenRouter fallback chain. When empty, fetches all free-tier models from OpenRouter. |
+| `openrouter_free_only` | `false` | Filter OpenRouter models to only use free-tier models |
 | `kilocode_api_key` | `''` | Kilo Gateway API key |
 | `kilocode_base_url` | `https://api.kilo.ai/api/gateway` | Kilo Gateway endpoint |
-| `kilocode_models` | see below | Comma-separated Kilo fallback chain (free-tier models by default) |
+| `kilocode_models` | `''` (auto-fetches free models) | Comma-separated Kilo fallback chain. When empty, fetches all free-tier models from Kilo. |
+| `kilocode_free_only` | `false` | Filter Kilo models to only use free-tier models |
 | `custom_api_url` | `''` | Custom OpenAI-compatible endpoint (tried before NIM models) |
 | `custom_model` | `''` | Model name for the custom endpoint |
 | `custom_api_key` | `''` | API key for the custom endpoint (empty for local/keyless) |
@@ -158,13 +160,23 @@ jobs:
 
 When set alongside other provider keys, OpenRouter models are merged into the same fallback chain sorted by SWE-bench score. Free-tier models (IDs ending with `:free`) rank last in the chain after non-free models.
 
-### Default OpenRouter Free-Tier Models
+### Auto-Fetched Free-Tier Models
 
-1. `deepseek/deepseek-r1:free` — estimated SWE-bench: 0.65 (quantized)
-2. `google/gemini-2.0-flash-exp:free` — estimated SWE-bench: 0.60 (experimental)
-3. `meta-llama/llama-4-maverick:free` — estimated SWE-bench: 0.50 (truncated)
+When `openrouter_models` is left empty, the action fetches all free-tier models from OpenRouter automatically. This ensures the fallback chain always uses currently available models without manual updates.
 
-Free-tier models are experimental and volatile — their IDs and availability may change. Estimated scores are best-effort guesses and will be replaced with measured values once benchmark data is available.
+### Free-Only Filter
+
+When you specify custom model lists for OpenRouter or Kilo, you can enforce free-only usage with the `openrouter_free_only` and `kilocode_free_only` inputs. When enabled, any model without `free` in its name is dropped from the chain:
+
+```yaml
+- uses: pfrack/review-action@v1
+  with:
+    openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+    openrouter_models: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick,google/gemini-2.0-flash-exp:free'
+    openrouter_free_only: 'true'
+```
+
+This would filter out `meta-llama/llama-4-maverick` (no `free` in name) from OpenRouter, keeping only free-tier models.
 
 ## Kilo Gateway Support
 
@@ -180,14 +192,13 @@ Use Kilo Gateway models -- **note the privacy caveat described below**:
 
 When only `kilocode_api_key` is set, the action uses Kilo free-tier models exclusively.
 
-### Default Kilo Free-Tier Models
+### Auto-Fetched Free-Tier Models
 
-1. `kilo-auto/frontier:free` -- estimated SWE-bench: 0.60 (frontier routing)
-2. `kilo-auto/balanced:free` -- estimated SWE-bench: 0.55
+When `kilocode_models` is left empty, the action fetches all free-tier models from Kilo automatically.
 
 ### Privacy Warning
 
-Kilo Gateway free-tier models (kilo-auto/*:free) may route to providers that log prompts for training purposes. Since this action ingests PR diffs -- which may contain sensitive logic, credentials, or architectural details -- consider the privacy implications before enabling Kilo as a provider. The paid tiers do not have this concern. Only use Kilo free-tier on PRs from open-source/public repositories unless you explicitly trust the downstream providers.
+Kilo Gateway free-tier models may route to providers that log prompts for training purposes. Since this action ingests PR diffs -- which may contain sensitive logic, credentials, or architectural details -- consider the privacy implications before enabling Kilo as a provider. The paid tiers do not have this concern. Only use Kilo free-tier on PRs from open-source/public repositories unless you explicitly trust the downstream providers.
 
 ### Combined Mode (Kilo + NIM/Mistral/Groq/OpenRouter)
 
@@ -236,7 +247,7 @@ Models are tried in order. On error (rate limit, 500, timeout, network failure),
 ## Setup
 
 1. Get an API key from [build.nvidia.com](https://build.nvidia.com) and/or [console.mistral.ai](https://console.mistral.ai)
-2. Add `NIM_API_KEY` and/or `MISTRAL_API_KEY` as repository secrets
+2. Add `NIM_API_KEY` (NVIDIA), `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `KILO_API_KEY` as repository secrets
 3. Add the workflow file above
 
 ## Local Development
@@ -281,27 +292,35 @@ Use the benchmark tool to compare model speeds:
 
 ```bash
 npm run build
-export NIM_API_KEY=your-key
-export NIM_BENCH_ITERATIONS=5        # default: 5
-export NIM_BENCH_PROMPT="..."        # optional custom prompt
+export BENCH_API_KEY=your-key
+export BENCH_ITERATIONS=5              # default: 2
+export BENCH_PROMPT="..."              # optional custom prompt
 node dist/bench-entry.js
 ```
 
-For OpenRouter models:
+For OpenRouter models (auto-discover free models):
 
 ```bash
-export NIM_API_KEY=your-openrouter-key
-export NIM_BASE_URL='https://openrouter.ai/api/v1'
-export NIM_MODELS='deepseek/deepseek-r1:free,google/gemini-2.0-flash-exp:free'
+export BENCH_API_KEY=your-openrouter-key
+export BENCH_BASE_URL='https://openrouter.ai/api/v1'
+export BENCH_AUTO_FREE=true
 node dist/bench-entry.js
 ```
 
-For Kilo models:
+For Kilo models (auto-discover free models):
 
 ```bash
-export NIM_API_KEY=your-kilo-key
-export NIM_BASE_URL='https://api.kilo.ai/api/gateway'
-export NIM_MODELS='kilo-auto/balanced:free,kilo-auto/frontier:free'
+export BENCH_API_KEY=your-kilo-key
+export BENCH_BASE_URL='https://api.kilo.ai/api/gateway'
+export BENCH_AUTO_FREE=true
+node dist/bench-entry.js
+```
+
+Or specify models explicitly:
+
+```bash
+export BENCH_API_KEY=your-key
+export BENCH_MODELS='model-a,model-b,model-c'
 node dist/bench-entry.js
 ```
 

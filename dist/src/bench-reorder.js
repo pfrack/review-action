@@ -332,8 +332,8 @@ async function main() {
     }
     const rows = parseMarkdownTable(table);
     if (rows.length === 0) {
-        console.error('Could not parse any rows from benchmark output');
-        process.exit(1);
+        console.warn('No benchmark data rows found — all models may have failed. Skipping reorder.');
+        process.exit(0);
     }
     // Extract latencies
     const latencies = {};
@@ -369,9 +369,68 @@ async function main() {
     updateActionYml(actionPath, ranked, target);
     console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
 }
+/**
+ * Output new models (not in SWE_BENCH_SCORES) as JSON for the workflow
+ * to auto-add with default score 0.5.
+ */
+export function discoverNewModels(models) {
+    return models
+        .filter(m => !(m in SWE_BENCH_SCORES))
+        .map(m => ({ model: m, score: 0.5 }));
+}
+/**
+ * Insert new model entries into a SWE_BENCH_SCORES table in a source file.
+ * Finds the table by marker comment and inserts before the closing brace.
+ */
+export function patchScoresTable(sourcePath, entries) {
+    const content = readFileSync(sourcePath, 'utf-8');
+    const marker = '// OpenRouter free-tier models (estimated scores)';
+    const idx = content.indexOf(marker);
+    if (idx === -1)
+        return 0;
+    // Find the end of this comment block (next non-comment line)
+    const before = content.substring(0, idx);
+    const after = content.substring(idx);
+    const lines = after.split('\n');
+    let insertLine = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+            insertLine = i;
+            break;
+        }
+    }
+    const newLines = entries.map(e => `  '${e.model}': ${e.score},`);
+    lines.splice(insertLine, 0, ...newLines);
+    const updated = before + lines.join('\n');
+    writeFileSync(sourcePath, updated, 'utf-8');
+    return newLines.length;
+}
 // Only run when executed directly
 const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
 if (isMainModule) {
+    if (process.argv.includes('--discover-new')) {
+        const chunks = [];
+        for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+        }
+        const rawInput = Buffer.concat(chunks).toString('utf-8');
+        const rows = parseMarkdownTable(stripFetchedScoresComment(rawInput, process.env.BENCH_SCORES_FILE));
+        const models = rows.map(r => r.model);
+        const newEntries = discoverNewModels(models);
+        console.log(JSON.stringify(newEntries));
+        process.exit(0);
+    }
+    if (process.argv.includes('--patch-scores')) {
+        const srcPath = process.argv[process.argv.indexOf('--patch-scores') + 1];
+        const chunks = [];
+        for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+        }
+        const newEntries = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const count = patchScoresTable(srcPath, newEntries);
+        console.log(`Added ${count} new model(s) to scores table`);
+        process.exit(0);
+    }
     main().catch(err => {
         console.error(`Error: ${err.message}`);
         process.exit(1);

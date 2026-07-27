@@ -77,70 +77,70 @@ describe('loadConfig — max_files validation', () => {
                 process.env[key] = saved[key];
         }
     }
-    it('rejects -5 (negative)', () => {
+    it('rejects -5 (negative)', async () => {
         setup('-5');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 100);
         }
         finally {
             teardown();
         }
     });
-    it('rejects 0', () => {
+    it('rejects 0', async () => {
         setup('0');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 100);
         }
         finally {
             teardown();
         }
     });
-    it('rejects 5e3 (exponential notation)', () => {
+    it('rejects 5e3 (exponential notation)', async () => {
         setup('5e3');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 100);
         }
         finally {
             teardown();
         }
     });
-    it('rejects 501 (over max)', () => {
+    it('rejects 501 (over max)', async () => {
         setup('501');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 100);
         }
         finally {
             teardown();
         }
     });
-    it('accepts 1 (minimum valid)', () => {
+    it('accepts 1 (minimum valid)', async () => {
         setup('1');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 1);
         }
         finally {
             teardown();
         }
     });
-    it('accepts 100 (default)', () => {
+    it('accepts 100 (default)', async () => {
         setup('100');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 100);
         }
         finally {
             teardown();
         }
     });
-    it('accepts 500 (maximum valid)', () => {
+    it('accepts 500 (maximum valid)', async () => {
         setup('500');
         try {
-            const config = loadConfig();
+            const config = await loadConfig();
             assert.strictEqual(config.maxFiles, 500);
         }
         finally {

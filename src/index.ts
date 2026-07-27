@@ -34,13 +34,15 @@ export async function withAggregateTimeout<T>(operation: () => Promise<T>, timeo
 }
 
 async function cleanupPreviousOutput(repo: string, prNumber: number, token: string): Promise<void> {
-  const existingReviewId = await findExistingReview(repo, prNumber, token);
-  if (existingReviewId) {
-    await deleteReview(repo, prNumber, existingReviewId, token);
+  // Delete ALL AI-generated comments (not just the first one)
+  let commentId: number | null;
+  while ((commentId = await findExistingComment(repo, prNumber, token)) !== null) {
+    await deleteComment(repo, commentId, token);
   }
-  const existingCommentId = await findExistingComment(repo, prNumber, token);
-  if (existingCommentId) {
-    await deleteComment(repo, existingCommentId, token);
+  // Delete ALL AI-generated reviews (deleting the review removes its inline comments)
+  let reviewId: number | null;
+  while ((reviewId = await findExistingReview(repo, prNumber, token)) !== null) {
+    await deleteReview(repo, prNumber, reviewId, token);
   }
 }
 
@@ -314,8 +316,10 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
   ].filter(Boolean).join(' · ');
   const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
 
+  // Single cleanup at the start — removes ALL previous AI comments and reviews
+  await safeCleanup(repo, prNumber, token);
+
   if (review.findings.length === 0) {
-    await safeCleanup(repo, prNumber, token);
     try {
       await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
       core.info('Posted LGTM comment (no issues found)');
@@ -325,32 +329,26 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     return { critical, warning, suggestion };
   }
 
-  await safeCleanup(repo, prNumber, token);
-  const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
-  if (truncated) {
-    sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-  }
-  try {
-    await postComment(repo, prNumber, token, sections.join('\n'));
-    core.info(`Posted summary comment with ${review.findings.length} findings`);
-  } catch (err) {
-    core.warning(`Failed to post summary comment: ${err}`);
+  let body = summaryBody;
+  if (usedModel) {
+    const sections: string[] = [summaryBody, `\n${renderReview(review)}\n`];
+    if (truncated) {
+      sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+    }
+    body = sections.join('\n');
+  } else {
+    body = `${summaryBody}\nNo review content returned from any model.`;
   }
 
-  if (!usedModel) {
-    await safeCleanup(repo, prNumber, token);
-    try {
-      await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
-    } catch (err) {
-      core.warning(`Failed to post no-content comment: ${err}`);
-    }
-  } else if (config.promptMode === 'replace' && lastRawContent) {
-    await safeCleanup(repo, prNumber, token);
-    try {
-      await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
-    } catch (err) {
-      core.warning(`Failed to post raw output comment: ${err}`);
-    }
+  if (config.promptMode === 'replace' && lastRawContent) {
+    body = `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``;
+  }
+
+  try {
+    await postComment(repo, prNumber, token, body);
+    core.info(`Posted comment with ${review.findings.length} findings`);
+  } catch (err) {
+    core.warning(`Failed to post comment: ${err}`);
   }
 
   return { critical, warning, suggestion };
@@ -369,7 +367,7 @@ async function writeMetrics(metrics: ReviewMetrics): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  const config = loadConfig();
+  const config = await loadConfig();
   validateConfig(config);
   const clients = buildClients(config);
   const hasCustom = !!(config.customApiUrl && config.customModel);

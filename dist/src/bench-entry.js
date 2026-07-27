@@ -37,12 +37,15 @@ function readCurrentModels(actionPath) {
     return splitCSV(match[1]);
 }
 /**
- * Get SWE-bench ranked candidates not already in the active list
+ * Get SWE-bench ranked candidates not already in the active list.
+ * When availableModels is provided, only returns candidates present
+ * in the provider catalog (avoids cross-provider mismatches).
  */
-function getReplacements(activeModels) {
+function getReplacements(activeModels, availableModels) {
     const activeSet = new Set(activeModels);
     return Object.entries(SWE_BENCH_SCORES)
         .filter(([model]) => !activeSet.has(model))
+        .filter(([model]) => !availableModels || availableModels.has(model))
         .sort((a, b) => b[1] - a[1])
         .map(([model]) => model);
 }
@@ -152,11 +155,11 @@ async function probe(baseURL, apiKey, models) {
     }
 }
 async function main() {
-    const apiKey = process.env.NIM_API_KEY;
+    const apiKey = process.env.BENCH_API_KEY;
     if (!apiKey) {
-        throw new Error('NIM_API_KEY is required');
+        throw new Error('BENCH_API_KEY is required');
     }
-    const baseURL = envOrDefault('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1');
+    const baseURL = envOrDefault('BENCH_BASE_URL', 'https://integrate.api.nvidia.com/v1');
     const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
     const client = new OpenAIClient(baseURL, apiKey);
     // Fetch provider catalog to distinguish transient vs permanent failures
@@ -183,9 +186,20 @@ async function main() {
     }
     // Determine models to benchmark
     let models;
-    const modelsEnv = process.env.NIM_MODELS;
+    const modelsEnv = process.env.BENCH_MODELS;
     if (modelsEnv) {
         models = splitCSV(modelsEnv);
+    }
+    else if (process.env.BENCH_AUTO_FREE === 'true') {
+        // Auto-discover free models from provider catalog
+        if (availableModels) {
+            models = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+            process.stderr.write(`Auto-discovered ${models.length} free models from provider\n`);
+        }
+        else {
+            models = [];
+            process.stderr.write('No provider catalog available, cannot auto-discover models\n');
+        }
     }
     else {
         // Read current top from action.yml
@@ -221,7 +235,7 @@ async function main() {
                 // Use the first model from the active list as the matcher
                 const matcherModel = models[0];
                 if (matcherModel) {
-                    const maxDiscover = parseInt(envOrDefault('NIM_MAX_DISCOVER', '5'), 10);
+                    const maxDiscover = parseInt(envOrDefault('BENCH_MAX_DISCOVER', '5'), 10);
                     for (const nimModel of newModels.slice(0, maxDiscover)) {
                         process.stderr.write(`  Matching ${nimModel} ...`);
                         const score = await matchModelScore(client, nimModel, leaderboard, matcherModel);
@@ -243,14 +257,14 @@ async function main() {
         models = [...models, ...discoveredModels];
     }
     let iterations = 2;
-    const iterEnv = process.env.NIM_BENCH_ITERATIONS;
+    const iterEnv = process.env.BENCH_ITERATIONS;
     if (iterEnv) {
         const n = parseInt(iterEnv, 10);
         if (isNaN(n))
-            throw new Error('NIM_BENCH_ITERATIONS must be an integer');
+            throw new Error('BENCH_ITERATIONS must be an integer');
         iterations = n;
     }
-    const benchPrompt = envOrDefault('NIM_BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
+    const benchPrompt = envOrDefault('BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
     process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations...\n\n`);
     // Benchmark current models
     const results = [];
@@ -276,10 +290,13 @@ async function main() {
         }
         results.push(result);
     }
-    // Replace failed models with next best from SWE-bench
-    if (failed.length > 0) {
+    // Replace failed models with next best from SWE-bench.
+    // Replacement uses the hardcoded SWE-bench table which is NIM-specific,
+    // so only run it for NIM endpoints.
+    const isNim = baseURL.includes('nvidia.com');
+    if (failed.length > 0 && isNim) {
         process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
-        const replacements = getReplacements(models);
+        const replacements = getReplacements(models, availableModels ?? undefined);
         for (const deadModel of failed) {
             let replaced = false;
             for (const candidate of replacements) {
@@ -351,7 +368,7 @@ async function main() {
             process.stderr.write(`\nRechecking ${toRecheck.length} previously removed model(s)...\n`);
             const recovered = [];
             const stillFailed = [];
-            const concurrency = parseInt(envOrDefault('NIM_RECHECK_CONCURRENCY', '3'), 10);
+            const concurrency = parseInt(envOrDefault('BENCH_RECHECK_CONCURRENCY', '3'), 10);
             // Process models in batches of `concurrency`
             for (let i = 0; i < toRecheck.length; i += concurrency) {
                 const batch = toRecheck.slice(i, i + concurrency);

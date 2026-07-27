@@ -40,8 +40,11 @@ inputs:
     description: 'OpenRouter API base URL'
     default: 'https://openrouter.ai/api/v1'
   openrouter_models:
-    description: 'Comma-separated OpenRouter model fallback chain'
-    default: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'
+    description: 'Comma-separated OpenRouter model fallback chain (defaults to all free-tier models from provider when empty)'
+    default: ''
+  openrouter_free_only:
+    description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
+    default: 'false'
   kilocode_api_key:
     description: 'Kilo Gateway API key'
     required: false
@@ -50,8 +53,11 @@ inputs:
     description: 'Kilo Gateway API base URL'
     default: 'https://api.kilo.ai/api/gateway'
   kilocode_models:
-    description: 'Comma-separated Kilo model fallback chain'
-    default: 'kilo-auto/balanced:free,kilo-auto/frontier:free'
+    description: 'Comma-separated Kilo model fallback chain (defaults to all free-tier models from provider when empty)'
+    default: ''
+  kilocode_free_only:
+    description: 'Filter Kilo models to only use free-tier (:free suffix) models'
+    default: 'false'
   custom_models:
     description: 'Comma-separated custom model IDs for the custom API endpoint (multiple models enable fallback)'
     required: false
