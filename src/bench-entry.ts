@@ -4,6 +4,7 @@ import { runBenchmark, formatMarkdownTable, type BenchmarkResult } from './bench
 import { SWE_BENCH_SCORES, fetchSweBenchScores, type SweBenchEntry } from './bench-reorder.js';
 import { readRemovedModels, writeRemovedModels } from './removed-models.js';
 import { splitCSV } from './config.js';
+import { loadHistory, saveHistory, detectNewModels, detectRemovedModels, updateHistory } from './model-history.js';
 
 function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
@@ -31,13 +32,24 @@ func processOrder(items []Item, discount float64) Order {
 const TARGET_COUNT = 7;
 
 /**
- * Read current models from action.yml
+ * Read current models from action.yml for a given provider target.
+ * Target is the action.yml input key (e.g. 'openrouter_models').
  */
-function readCurrentModels(actionPath: string): string[] {
+function readCurrentModels(actionPath: string, target = 'nim_models'): string[] {
   const content = readFileSync(actionPath, 'utf-8');
-  const match = content.match(/nim_models:\n\s+description:[^\n]*\n\s+default:\s*'([^']*)'/);
+  const pattern = new RegExp(`${target}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*'([^']*)'`);
+  const match = content.match(pattern);
   if (!match) return [];
   return splitCSV(match[1]);
+}
+
+/**
+ * Resolve the provider name from ACTION_TARGET env var.
+ * Maps 'openrouter_models' -> 'openrouter', 'kilocode_models' -> 'kilocode', etc.
+ */
+function resolveProvider(): string {
+  const target = process.env.ACTION_TARGET || 'nim_models';
+  return target.replace(/_models$/, '');
 }
 
 /**
@@ -215,10 +227,14 @@ async function main(): Promise<void> {
   if (modelsEnv) {
     models = splitCSV(modelsEnv);
   } else if (process.env.BENCH_AUTO_FREE === 'true') {
-    // Auto-discover free models from provider catalog
+    // Hybrid discovery: combine known models from action.yml with new free models from catalog
     if (availableModels) {
-      models = [...availableModels].filter(m => m.toLowerCase().includes('free'));
-      process.stderr.write(`Auto-discovered ${models.length} free models from provider\n`);
+      const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+      const existingModels = readCurrentModels(actionPath, process.env.ACTION_TARGET || 'openrouter_models');
+      const existingSet = new Set(existingModels);
+      const newFreeModels = freeModels.filter(m => !existingSet.has(m));
+      models = [...existingModels, ...newFreeModels];
+      process.stderr.write(`Hybrid discovery: ${existingModels.length} known + ${newFreeModels.length} new free = ${models.length} total\n`);
     } else {
       models = [];
       process.stderr.write('No provider catalog available, cannot auto-discover models\n');
@@ -464,6 +480,25 @@ async function main(): Promise<void> {
     // No recheck needed, but still persist the new transient failures.
     const finalRemoved = new Set([...removedModels, ...transientFailed]);
     writeRemovedModels([...finalRemoved]);
+  }
+
+  // Update model history for hybrid discovery
+  if (process.env.BENCH_AUTO_FREE === 'true' && availableModels) {
+    const provider = resolveProvider();
+    const historyPath = process.env.MODEL_HISTORY_PATH || 'model-history.json';
+    const history = loadHistory(historyPath);
+    const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+    const newModels = detectNewModels(history, provider, freeModels);
+    const removedModelsHist = detectRemovedModels(history, provider, freeModels);
+    if (newModels.length > 0) {
+      process.stderr.write(`  New models detected: ${newModels.join(', ')}\n`);
+    }
+    if (removedModelsHist.length > 0) {
+      process.stderr.write(`  Removed models detected: ${removedModelsHist.join(', ')}\n`);
+    }
+    const updated = updateHistory(history, provider, freeModels);
+    saveHistory(updated, historyPath);
+    process.stderr.write(`  Updated history for ${provider}: ${freeModels.length} active models\n`);
   }
 
   // Output results table
