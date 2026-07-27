@@ -4,37 +4,46 @@ import { runBenchmark, formatMarkdownTable } from './bench.js';
 import { SWE_BENCH_SCORES, fetchSweBenchScores } from './bench-reorder.js';
 import { readRemovedModels, writeRemovedModels } from './removed-models.js';
 import { splitCSV } from './config.js';
+import { loadHistory, saveHistory, detectNewModels, detectRemovedModels, updateHistory } from './model-history.js';
 function envOrDefault(key, def) {
     return process.env[key] || def;
 }
-const SYNTHETIC_REVIEW_PROMPT = `You are reviewing a code change. Analyze the following diff for bugs, security issues, and performance problems. Respond in concise markdown with findings.
+const SYNTHETIC_REVIEW_PROMPT = `You are a helpful coding assistant. Review the following code snippet for bugs, security issues, and performance problems. Respond in concise markdown with findings.
 
-\`\`\`diff
-func processOrder(items []Item, discount float64) Order {
-    total := 0.0
-    for _, item := range items {
-        total += item.Price * float64(item.Quantity)
-    }
+\`\`\`python
+def process_order(items, discount):
+    total = 0.0
+    for item in items:
+        total += item.price * item.quantity
     total = total * (1 - discount)
-    tax := total * 0.08
-    return Order{
-        Items: items,
-        Subtotal: total,
-        Tax: tax,
-        Total: total + tax,
+    tax = total * 0.08
+    return {
+        'items': items,
+        'subtotal': total,
+        'tax': tax,
+        'total': total + tax,
     }
-}
 \`\`\``;
 const TARGET_COUNT = 7;
 /**
- * Read current models from action.yml
+ * Read current models from action.yml for a given provider target.
+ * Target is the action.yml input key (e.g. 'openrouter_models').
  */
-function readCurrentModels(actionPath) {
+function readCurrentModels(actionPath, target = 'nim_models') {
     const content = readFileSync(actionPath, 'utf-8');
-    const match = content.match(/nim_models:\n\s+description:[^\n]*\n\s+default:\s*'([^']*)'/);
+    const pattern = new RegExp(`${target}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*'([^']*)'`);
+    const match = content.match(pattern);
     if (!match)
         return [];
     return splitCSV(match[1]);
+}
+/**
+ * Resolve the provider name from ACTION_TARGET env var.
+ * Maps 'openrouter_models' -> 'openrouter', 'kilocode_models' -> 'kilocode', etc.
+ */
+function resolveProvider() {
+    const target = process.env.ACTION_TARGET || 'nim_models';
+    return target.replace(/_models$/, '');
 }
 /**
  * Get SWE-bench ranked candidates not already in the active list.
@@ -191,10 +200,14 @@ async function main() {
         models = splitCSV(modelsEnv);
     }
     else if (process.env.BENCH_AUTO_FREE === 'true') {
-        // Auto-discover free models from provider catalog
+        // Hybrid discovery: combine known models from action.yml with new free models from catalog
         if (availableModels) {
-            models = [...availableModels].filter(m => m.toLowerCase().includes('free'));
-            process.stderr.write(`Auto-discovered ${models.length} free models from provider\n`);
+            const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+            const existingModels = readCurrentModels(actionPath, process.env.ACTION_TARGET || 'openrouter_models');
+            const existingSet = new Set(existingModels);
+            const newFreeModels = freeModels.filter(m => !existingSet.has(m));
+            models = [...existingModels, ...newFreeModels];
+            process.stderr.write(`Hybrid discovery: ${existingModels.length} known + ${newFreeModels.length} new free = ${models.length} total\n`);
         }
         else {
             models = [];
@@ -422,6 +435,24 @@ async function main() {
         // No recheck needed, but still persist the new transient failures.
         const finalRemoved = new Set([...removedModels, ...transientFailed]);
         writeRemovedModels([...finalRemoved]);
+    }
+    // Update model history for hybrid discovery
+    if (process.env.BENCH_AUTO_FREE === 'true' && availableModels) {
+        const provider = resolveProvider();
+        const historyPath = process.env.MODEL_HISTORY_PATH || 'model-history.json';
+        const history = loadHistory(historyPath);
+        const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+        const newModels = detectNewModels(history, provider, freeModels);
+        const removedModelsHist = detectRemovedModels(history, provider, freeModels);
+        if (newModels.length > 0) {
+            process.stderr.write(`  New models detected: ${newModels.join(', ')}\n`);
+        }
+        if (removedModelsHist.length > 0) {
+            process.stderr.write(`  Removed models detected: ${removedModelsHist.join(', ')}\n`);
+        }
+        const updated = updateHistory(history, provider, freeModels);
+        saveHistory(updated, historyPath);
+        process.stderr.write(`  Updated history for ${provider}: ${freeModels.length} active models\n`);
     }
     // Output results table
     const successResults = results.filter(r => {

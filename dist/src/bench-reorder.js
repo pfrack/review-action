@@ -156,6 +156,17 @@ export const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'kilo-auto/free': 0.5,
+    'stepfun/step-3.7-flash:free': 0.5,
+    'inclusionai/ling-3.0-flash:free': 0.5,
+    'poolside/laguna-s-2.1:free': 0.5,
+    'poolside/laguna-xs-2.1:free': 0.5,
+    'nvidia/nemotron-3.5-content-safety:free': 0.5,
+    'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
+    'poolside/laguna-m.1:free': 0.5,
+    'nvidia/nemotron-3-super-120b-a12b:free': 0.5,
+    'openrouter/free': 0.5,
     'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
     'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
     'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
@@ -208,6 +219,39 @@ export function rankModels(rows, latencies, fetchedScores) {
         const latB = latencies?.[b] ?? Infinity;
         return latA - latB;
     });
+}
+/**
+ * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by SWE score
+ * descending, then new models (not in SWE_BENCH_SCORES) sorted by latency
+ * ascending. Known models always rank above new models.
+ */
+export function rankModelsTwoTier(rows, knownModels, latencies, fetchedScores) {
+    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    const known = [];
+    const unknown = [];
+    for (const model of alive.map(r => r.model)) {
+        if (knownModels.has(model)) {
+            known.push(model);
+        }
+        else {
+            unknown.push(model);
+        }
+    }
+    known.sort((a, b) => {
+        const sweA = getSweBenchScore(a, fetchedScores);
+        const sweB = getSweBenchScore(b, fetchedScores);
+        if (sweB !== sweA)
+            return sweB - sweA;
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+    unknown.sort((a, b) => {
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+    return [...known, ...unknown];
 }
 function buildTargetPattern(targetKey) {
     return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
@@ -303,11 +347,24 @@ export function stripFetchedScoresComment(rawInput, scoresFile) {
     return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
 }
 /**
+ * Read current models from action.yml for the given target.
+ */
+function readCurrentModelsFromAction(actionPath, target) {
+    const content = readFileSync(actionPath, 'utf-8');
+    const pattern = new RegExp(`${target}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*'([^']*)'`);
+    const match = content.match(pattern);
+    if (!match)
+        return [];
+    return match[1].split(',').map(s => s.trim()).filter(s => s !== '');
+}
+/**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
+ * With --two-tier, uses two-tier ranking (known models first, then new by latency).
  */
 async function main() {
     const actionPath = process.env.ACTION_PATH || 'action.yml';
     const target = (process.env.ACTION_TARGET || 'nim_models');
+    const twoTier = process.argv.includes('--two-tier');
     if (!(target in TARGET_CONFIG)) {
         console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
         process.exit(1);
@@ -343,8 +400,18 @@ async function main() {
         }
     }
     const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
-    const ranked = rankModels(rows, latencies, fetchedScoresMap);
-    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+    let ranked;
+    if (twoTier) {
+        const knownModels = new Set(readCurrentModelsFromAction(actionPath, target));
+        ranked = rankModelsTwoTier(rows, knownModels, latencies, fetchedScoresMap);
+        const knownCount = ranked.filter(m => knownModels.has(m)).length;
+        const newCount = ranked.length - knownCount;
+        console.log(`Two-tier ranking for ${target}: ${knownCount} known + ${newCount} new = ${ranked.length} total`);
+    }
+    else {
+        ranked = rankModels(rows, latencies, fetchedScoresMap);
+        console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+    }
     const summaryLines = [
         `\n## Model Ranking (${target})\n`,
         '| # | Model | SWE | Effective | Latency |',
@@ -384,7 +451,9 @@ export function discoverNewModels(models) {
  */
 export function patchScoresTable(sourcePath, entries) {
     const content = readFileSync(sourcePath, 'utf-8');
-    const marker = '// OpenRouter free-tier models (estimated scores)';
+    const marker = entries.some(e => e.model.startsWith('kilo-auto/'))
+        ? '// Kilo free-tier models (estimated scores)'
+        : '// OpenRouter free-tier models (estimated scores)';
     const idx = content.indexOf(marker);
     if (idx === -1)
         return 0;

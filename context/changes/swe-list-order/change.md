@@ -1,7 +1,7 @@
 ---
 id: swe-list-order
 title: "SWE List Order - Hybrid Model Management"
-status: implemented
+status: impl_reviewed
 created: 2026-07-27
 updated: 2026-07-27
 type: feature

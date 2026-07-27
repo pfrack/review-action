@@ -12,7 +12,12 @@ export function loadHistory(path = 'model-history.json'): ModelHistory {
   if (!existsSync(path)) return {};
   const content = readFileSync(path, 'utf-8').trim();
   if (!content) return {};
-  return JSON.parse(content) as ModelHistory;
+  try {
+    return JSON.parse(content) as ModelHistory;
+  } catch {
+    process.stderr.write(`Warning: could not parse history file ${path}, starting fresh\n`);
+    return {};
+  }
 }
 
 export function saveHistory(history: ModelHistory, path = 'model-history.json'): void {

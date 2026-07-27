@@ -520,7 +520,9 @@ export function discoverNewModels(models: string[]): { model: string; score: num
  */
 export function patchScoresTable(sourcePath: string, entries: { model: string; score: number }[]): number {
   const content = readFileSync(sourcePath, 'utf-8');
-  const marker = '// OpenRouter free-tier models (estimated scores)';
+  const marker = entries.some(e => e.model.startsWith('kilo-auto/'))
+    ? '// Kilo free-tier models (estimated scores)'
+    : '// OpenRouter free-tier models (estimated scores)';
   const idx = content.indexOf(marker);
   if (idx === -1) return 0;
 

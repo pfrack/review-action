@@ -10,23 +10,21 @@ function envOrDefault(key: string, def: string): string {
   return process.env[key] || def;
 }
 
-const SYNTHETIC_REVIEW_PROMPT = `You are reviewing a code change. Analyze the following diff for bugs, security issues, and performance problems. Respond in concise markdown with findings.
+const SYNTHETIC_REVIEW_PROMPT = `You are a helpful coding assistant. Review the following code snippet for bugs, security issues, and performance problems. Respond in concise markdown with findings.
 
-\`\`\`diff
-func processOrder(items []Item, discount float64) Order {
-    total := 0.0
-    for _, item := range items {
-        total += item.Price * float64(item.Quantity)
-    }
+\`\`\`python
+def process_order(items, discount):
+    total = 0.0
+    for item in items:
+        total += item.price * item.quantity
     total = total * (1 - discount)
-    tax := total * 0.08
-    return Order{
-        Items: items,
-        Subtotal: total,
-        Tax: tax,
-        Total: total + tax,
+    tax = total * 0.08
+    return {
+        'items': items,
+        'subtotal': total,
+        'tax': tax,
+        'total': total + tax,
     }
-}
 \`\`\``;
 
 const TARGET_COUNT = 7;

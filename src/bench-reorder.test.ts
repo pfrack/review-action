@@ -690,3 +690,68 @@ describe('rankModelsTwoTier', () => {
     assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
   });
 });
+
+describe('integration: discover → patch scores → rank two-tier → update action.yml', () => {
+  it('full pipeline: new models added to scores table and ranked below known', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'integration-test-'));
+    try {
+      const srcPath = join(tmpDir, 'bench-reorder.ts');
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const sourceContent = `export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  'z-ai/glm-5.2': 0.778,
+// OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+};`;
+      writeFileSync(srcPath, sourceContent, 'utf-8');
+
+      const actionContent = `name: 'NIM Code Review'
+inputs:
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free'
+`;
+      writeFileSync(actionPath, actionContent, 'utf-8');
+
+      const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
+|-------|---------------|------------------|---------------------|--------|
+| \`deepseek-ai/deepseek-v4-pro\` | 180ms | 1.80s | 62.1 | 0 |
+| \`brand-new/model-free\` | 200ms | 2.00s | 50.0 | 0 |
+| \`deepseek/deepseek-r1:free\` | 250ms | 2.50s | 40.0 | 0 |`;
+
+      const rows = parseMarkdownTable(table);
+
+      const newEntries = discoverNewModels(rows.map(r => r.model));
+      assert.strictEqual(newEntries.length, 1);
+      assert.strictEqual(newEntries[0].model, 'brand-new/model-free');
+      assert.strictEqual(newEntries[0].score, 0.5);
+
+      const patched = patchScoresTable(srcPath, newEntries);
+      assert.strictEqual(patched, 1);
+      const updatedSource = readFileSync(srcPath, 'utf-8');
+      assert.ok(updatedSource.includes("'brand-new/model-free': 0.5"));
+
+      const knownModels = new Set(['deepseek/deepseek-r1:free']);
+      assert.ok(knownModels.has('deepseek/deepseek-r1:free'));
+      assert.ok(!knownModels.has('brand-new/model-free'));
+
+      const latencies: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+          latencies[row.model] = row.latencyMs;
+        }
+      }
+
+      const ranked = rankModelsTwoTier(rows, knownModels, latencies);
+      assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+      assert.ok(ranked.indexOf('deepseek/deepseek-r1:free') < ranked.indexOf('brand-new/model-free'));
+
+      updateActionYml(actionPath, ranked, 'openrouter_models');
+      const updatedAction = readFileSync(actionPath, 'utf-8');
+      assert.ok(updatedAction.includes('deepseek-ai/deepseek-v4-pro,deepseek/deepseek-r1:free,brand-new/model-free'));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
