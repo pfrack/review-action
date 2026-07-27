@@ -248,7 +248,7 @@ async function main() {
                 // Use the first model from the active list as the matcher
                 const matcherModel = models[0];
                 if (matcherModel) {
-                    const maxDiscover = parseInt(envOrDefault('BENCH_MAX_DISCOVER', '5'), 10);
+                    const maxDiscover = parseInt(envOrDefault('BENCH_MAX_DISCOVER', '30'), 10);
                     for (const nimModel of newModels.slice(0, maxDiscover)) {
                         process.stderr.write(`  Matching ${nimModel} ...`);
                         const score = await matchModelScore(client, nimModel, leaderboard, matcherModel);

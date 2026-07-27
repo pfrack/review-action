@@ -25817,7 +25817,8 @@ function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_
     return swe * 0.5;
 }
 /**
- * Rank models by effective score (SWE-bench + latency penalty).
+ * Rank models by SWE-bench score descending. Latency is used only as
+ * a tiebreaker between models with the same SWE score.
  * Only includes models that worked today (tokensPerSec > 0).
  */
 function rankModels(rows, latencies, fetchedScores) {
@@ -25825,11 +25826,10 @@ function rankModels(rows, latencies, fetchedScores) {
     return alive
         .map(r => r.model)
         .sort((a, b) => {
-        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        if (effB !== effA)
-            return effB - effA;
-        // Tiebreaker: faster today wins
+        const sweA = getSweBenchScore(a, fetchedScores);
+        const sweB = getSweBenchScore(b, fetchedScores);
+        if (sweB !== sweA)
+            return sweB - sweA;
         const latA = latencies?.[a] ?? Infinity;
         const latB = latencies?.[b] ?? Infinity;
         return latA - latB;
@@ -26025,7 +26025,7 @@ async function main() {
     }
     else {
         ranked = rankModels(rows, latencies, fetchedScoresMap);
-        console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+        console.log(`Model ranking for ${target} (SWE-bench score):`);
     }
     const summaryLines = [
         `\n## Model Ranking (${target})\n`,

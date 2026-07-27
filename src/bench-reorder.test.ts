@@ -112,7 +112,7 @@ describe('rankModels', () => {
     assert.strictEqual(ranked[2], 'meta/llama-3.3-70b-instruct');
   });
 
-  it('demotes slow models even with high SWE-bench score', () => {
+  it('ranks by SWE score regardless of latency', () => {
     const rows: ParsedRow[] = [
       { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 150_000, tokensPerSec: 30, errors: 0 },
       { model: 'stepfun-ai/step-3.7-flash', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
@@ -120,9 +120,8 @@ describe('rankModels', () => {
     const latencies = { 'deepseek-ai/deepseek-v4-pro': 150_000, 'stepfun-ai/step-3.7-flash': 5000 };
 
     const ranked = rankModels(rows, latencies);
-    // deepseek effective: 0.806 * 0.5 = 0.403, step effective: 0.744
-    assert.strictEqual(ranked[0], 'stepfun-ai/step-3.7-flash');
-    assert.strictEqual(ranked[1], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'stepfun-ai/step-3.7-flash');
   });
 
   it('uses latency as tiebreaker for same SWE score', () => {
