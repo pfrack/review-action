@@ -182,6 +182,17 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'codestral-2508': 0.650,
   'codestral-latest': 0.650,
   // OpenRouter free-tier models (estimated scores)
+  'kilo-auto/free': 0.5,
+  'stepfun/step-3.7-flash:free': 0.5,
+  'inclusionai/ling-3.0-flash:free': 0.5,
+  'poolside/laguna-s-2.1:free': 0.5,
+  'poolside/laguna-xs-2.1:free': 0.5,
+  'nvidia/nemotron-3.5-content-safety:free': 0.5,
+  'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
+  'poolside/laguna-m.1:free': 0.5,
+  'nvidia/nemotron-3-super-120b-a12b:free': 0.5,
+  'openrouter/free': 0.5,
   'deepseek/deepseek-r1:free': 0.65,           // estimated — free tier, quantized
   'meta-llama/llama-4-maverick:free': 0.50,    // estimated — free tier, truncated
   'google/gemini-2.0-flash-exp:free': 0.60,    // estimated — experimental free tier
