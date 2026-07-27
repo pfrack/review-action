@@ -25555,1989 +25555,1510 @@ module.exports = {
 
 /***/ }),
 
-/***/ 2613:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("assert");
-
-/***/ }),
-
-/***/ 290:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("async_hooks");
-
-/***/ }),
-
-/***/ 181:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("buffer");
-
-/***/ }),
-
-/***/ 5317:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
-
-/***/ }),
-
-/***/ 4236:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("console");
-
-/***/ }),
-
-/***/ 6982:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
-
-/***/ }),
-
-/***/ 1637:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("diagnostics_channel");
-
-/***/ }),
-
-/***/ 4434:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("events");
-
-/***/ }),
-
-/***/ 9896:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
-
-/***/ }),
-
-/***/ 8611:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http");
-
-/***/ }),
-
-/***/ 5675:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http2");
-
-/***/ }),
-
-/***/ 5692:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("https");
-
-/***/ }),
-
-/***/ 9278:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("net");
-
-/***/ }),
-
-/***/ 7598:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:crypto");
-
-/***/ }),
-
-/***/ 8474:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:events");
-
-/***/ }),
-
-/***/ 3024:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-
-/***/ }),
-
-/***/ 7075:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream");
-
-/***/ }),
-
-/***/ 7975:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:util");
-
-/***/ }),
-
-/***/ 857:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("os");
-
-/***/ }),
-
-/***/ 6928:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("path");
-
-/***/ }),
-
-/***/ 2987:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("perf_hooks");
-
-/***/ }),
-
-/***/ 3480:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("querystring");
-
-/***/ }),
-
-/***/ 2203:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream");
-
-/***/ }),
-
-/***/ 3774:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream/web");
-
-/***/ }),
-
-/***/ 3193:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("string_decoder");
-
-/***/ }),
-
-/***/ 3557:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("timers");
-
-/***/ }),
-
-/***/ 4756:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tls");
-
-/***/ }),
-
-/***/ 7016:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("url");
-
-/***/ }),
-
-/***/ 9023:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
-
-/***/ }),
-
-/***/ 8253:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util/types");
-
-/***/ }),
-
-/***/ 8167:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("worker_threads");
-
-/***/ }),
-
-/***/ 3106:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("zlib");
-
-/***/ }),
-
-/***/ 7182:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-
-
-const WritableStream = (__nccwpck_require__(7075).Writable)
-const inherits = (__nccwpck_require__(7975).inherits)
-
-const StreamSearch = __nccwpck_require__(4136)
-
-const PartStream = __nccwpck_require__(612)
-const HeaderParser = __nccwpck_require__(2271)
-
-const DASH = 45
-const B_ONEDASH = Buffer.from('-')
-const B_CRLF = Buffer.from('\r\n')
-const EMPTY_FN = function () {}
-
-function Dicer (cfg) {
-  if (!(this instanceof Dicer)) { return new Dicer(cfg) }
-  WritableStream.call(this, cfg)
-
-  if (!cfg || (!cfg.headerFirst && typeof cfg.boundary !== 'string')) { throw new TypeError('Boundary required') }
-
-  if (typeof cfg.boundary === 'string') { this.setBoundary(cfg.boundary) } else { this._bparser = undefined }
-
-  this._headerFirst = cfg.headerFirst
-
-  this._dashes = 0
-  this._parts = 0
-  this._finished = false
-  this._realFinish = false
-  this._isPreamble = true
-  this._justMatched = false
-  this._firstWrite = true
-  this._inHeader = true
-  this._part = undefined
-  this._cb = undefined
-  this._ignoreData = false
-  this._partOpts = { highWaterMark: cfg.partHwm }
-  this._pause = false
-
-  const self = this
-  this._hparser = new HeaderParser(cfg)
-  this._hparser.on('header', function (header) {
-    self._inHeader = false
-    self._part.emit('header', header)
-  })
-}
-inherits(Dicer, WritableStream)
-
-Dicer.prototype.emit = function (ev) {
-  if (ev === 'finish' && !this._realFinish) {
-    if (!this._finished) {
-      const self = this
-      process.nextTick(function () {
-        self.emit('error', new Error('Unexpected end of multipart data'))
-        if (self._part && !self._ignoreData) {
-          const type = (self._isPreamble ? 'Preamble' : 'Part')
-          self._part.emit('error', new Error(type + ' terminated early due to unexpected end of multipart data'))
-          self._part.push(null)
-          process.nextTick(function () {
-            self._realFinish = true
-            self.emit('finish')
-            self._realFinish = false
-          })
-          return
+/***/ 8811:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   D: () => (/* binding */ mergeFindings),
+/* harmony export */   u: () => (/* binding */ batchFiles)
+/* harmony export */ });
+function batchFiles(filesDiff, batchSize = 50) {
+    if (batchSize <= 0) {
+        throw new Error('batchSize must be a positive integer');
+    }
+    const sortedFiles = Object.keys(filesDiff).sort();
+    const batches = [];
+    for (let i = 0; i < sortedFiles.length; i += batchSize) {
+        const batchFiles = sortedFiles.slice(i, i + batchSize);
+        const batchDiffs = {};
+        for (const file of batchFiles) {
+            batchDiffs[file] = filesDiff[file];
         }
-        self._realFinish = true
-        self.emit('finish')
-        self._realFinish = false
-      })
+        batches.push({ files: batchFiles, diffs: batchDiffs });
     }
-  } else { WritableStream.prototype.emit.apply(this, arguments) }
+    return batches;
 }
-
-Dicer.prototype._write = function (data, encoding, cb) {
-  // ignore unexpected data (e.g. extra trailer data after finished)
-  if (!this._hparser && !this._bparser) { return cb() }
-
-  if (this._headerFirst && this._isPreamble) {
-    if (!this._part) {
-      this._part = new PartStream(this._partOpts)
-      if (this.listenerCount('preamble') !== 0) { this.emit('preamble', this._part) } else { this._ignore() }
-    }
-    const r = this._hparser.push(data)
-    if (!this._inHeader && r !== undefined && r < data.length) { data = data.slice(r) } else { return cb() }
-  }
-
-  // allows for "easier" testing
-  if (this._firstWrite) {
-    this._bparser.push(B_CRLF)
-    this._firstWrite = false
-  }
-
-  this._bparser.push(data)
-
-  if (this._pause) { this._cb = cb } else { cb() }
-}
-
-Dicer.prototype.reset = function () {
-  this._part = undefined
-  this._bparser = undefined
-  this._hparser = undefined
-}
-
-Dicer.prototype.setBoundary = function (boundary) {
-  const self = this
-  this._bparser = new StreamSearch('\r\n--' + boundary)
-  this._bparser.on('info', function (isMatch, data, start, end) {
-    self._oninfo(isMatch, data, start, end)
-  })
-}
-
-Dicer.prototype._ignore = function () {
-  if (this._part && !this._ignoreData) {
-    this._ignoreData = true
-    this._part.on('error', EMPTY_FN)
-    // we must perform some kind of read on the stream even though we are
-    // ignoring the data, otherwise node's Readable stream will not emit 'end'
-    // after pushing null to the stream
-    this._part.resume()
-  }
-}
-
-Dicer.prototype._oninfo = function (isMatch, data, start, end) {
-  let buf; const self = this; let i = 0; let r; let shouldWriteMore = true
-
-  if (!this._part && this._justMatched && data) {
-    while (this._dashes < 2 && (start + i) < end) {
-      if (data[start + i] === DASH) {
-        ++i
-        ++this._dashes
-      } else {
-        if (this._dashes) { buf = B_ONEDASH }
-        this._dashes = 0
-        break
-      }
-    }
-    if (this._dashes === 2) {
-      if ((start + i) < end && this.listenerCount('trailer') !== 0) { this.emit('trailer', data.slice(start + i, end)) }
-      this.reset()
-      this._finished = true
-      // no more parts will be added
-      if (self._parts === 0) {
-        self._realFinish = true
-        self.emit('finish')
-        self._realFinish = false
-      }
-    }
-    if (this._dashes) { return }
-  }
-  if (this._justMatched) { this._justMatched = false }
-  if (!this._part) {
-    this._part = new PartStream(this._partOpts)
-    this._part._read = function (n) {
-      self._unpause()
-    }
-    if (this._isPreamble && this.listenerCount('preamble') !== 0) {
-      this.emit('preamble', this._part)
-    } else if (this._isPreamble !== true && this.listenerCount('part') !== 0) {
-      this.emit('part', this._part)
-    } else {
-      this._ignore()
-    }
-    if (!this._isPreamble) { this._inHeader = true }
-  }
-  if (data && start < end && !this._ignoreData) {
-    if (this._isPreamble || !this._inHeader) {
-      if (buf) { shouldWriteMore = this._part.push(buf) }
-      shouldWriteMore = this._part.push(data.slice(start, end))
-      if (!shouldWriteMore) { this._pause = true }
-    } else if (!this._isPreamble && this._inHeader) {
-      if (buf) { this._hparser.push(buf) }
-      r = this._hparser.push(data.slice(start, end))
-      if (!this._inHeader && r !== undefined && r < end) { this._oninfo(false, data, start + r, end) }
-    }
-  }
-  if (isMatch) {
-    this._hparser.reset()
-    if (this._isPreamble) { this._isPreamble = false } else {
-      if (start !== end) {
-        ++this._parts
-        this._part.on('end', function () {
-          if (--self._parts === 0) {
-            if (self._finished) {
-              self._realFinish = true
-              self.emit('finish')
-              self._realFinish = false
-            } else {
-              self._unpause()
+function mergeFindings(batchResults) {
+    const seen = new Set();
+    const merged = [];
+    const summaries = [];
+    for (const result of batchResults) {
+        if (result.summary) {
+            summaries.push(result.summary);
+        }
+        for (const finding of result.findings) {
+            const key = finding.line_start != null
+                ? `${finding.file}:${finding.line_start}:${finding.line_end ?? 'none'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`
+                : `${finding.file}:file:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                merged.push(finding);
             }
-          }
-        })
-      }
+        }
     }
-    this._part.push(null)
-    this._part = undefined
-    this._ignoreData = false
-    this._justMatched = true
-    this._dashes = 0
-  }
+    return { findings: merged, summary: summaries.length > 0 ? summaries.join('\n\n') : null };
 }
-
-Dicer.prototype._unpause = function () {
-  if (!this._pause) { return }
-
-  this._pause = false
-  if (this._cb) {
-    const cb = this._cb
-    this._cb = undefined
-    cb()
-  }
-}
-
-module.exports = Dicer
 
 
 /***/ }),
 
-/***/ 2271:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+/***/ 7911:
+/***/ ((module, __webpack_exports__, __nccwpck_require__) => {
 
-
-
-const EventEmitter = (__nccwpck_require__(8474).EventEmitter)
-const inherits = (__nccwpck_require__(7975).inherits)
-const getLimit = __nccwpck_require__(2393)
-
-const StreamSearch = __nccwpck_require__(4136)
-
-const B_DCRLF = Buffer.from('\r\n\r\n')
-const RE_CRLF = /\r\n/g
-const RE_HDR = /^([^:]+):[ \t]?([\x00-\xFF]+)?$/ // eslint-disable-line no-control-regex
-
-function HeaderParser (cfg) {
-  EventEmitter.call(this)
-
-  cfg = cfg || {}
-  const self = this
-  this.nread = 0
-  this.maxed = false
-  this.npairs = 0
-  this.maxHeaderPairs = getLimit(cfg, 'maxHeaderPairs', 2000)
-  this.maxHeaderSize = getLimit(cfg, 'maxHeaderSize', 80 * 1024)
-  this.buffer = ''
-  this.header = {}
-  this.finished = false
-  this.ss = new StreamSearch(B_DCRLF)
-  this.ss.on('info', function (isMatch, data, start, end) {
-    if (data && !self.maxed) {
-      if (self.nread + end - start >= self.maxHeaderSize) {
-        end = self.maxHeaderSize - self.nread + start
-        self.nread = self.maxHeaderSize
-        self.maxed = true
-      } else { self.nread += (end - start) }
-
-      self.buffer += data.toString('binary', start, end)
-    }
-    if (isMatch) { self._finish() }
-  })
-}
-inherits(HeaderParser, EventEmitter)
-
-HeaderParser.prototype.push = function (data) {
-  const r = this.ss.push(data)
-  if (this.finished) { return r }
-}
-
-HeaderParser.prototype.reset = function () {
-  this.finished = false
-  this.buffer = ''
-  this.header = {}
-  this.ss.reset()
-}
-
-HeaderParser.prototype._finish = function () {
-  if (this.buffer) { this._parseHeader() }
-  this.ss.matches = this.ss.maxMatches
-  const header = this.header
-  this.header = {}
-  this.buffer = ''
-  this.finished = true
-  this.nread = this.npairs = 0
-  this.maxed = false
-  this.emit('header', header)
-}
-
-HeaderParser.prototype._parseHeader = function () {
-  if (this.npairs === this.maxHeaderPairs) { return }
-
-  const lines = this.buffer.split(RE_CRLF)
-  const len = lines.length
-  let m, h
-
-  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
-    if (lines[i].length === 0) { continue }
-    if (lines[i][0] === '\t' || lines[i][0] === ' ') {
-      // folded header content
-      // RFC2822 says to just remove the CRLF and not the whitespace following
-      // it, so we follow the RFC and include the leading whitespace ...
-      if (h) {
-        this.header[h][this.header[h].length - 1] += lines[i]
-        continue
-      }
-    }
-
-    const posColon = lines[i].indexOf(':')
-    if (
-      posColon === -1 ||
-      posColon === 0
-    ) {
-      return
-    }
-    m = RE_HDR.exec(lines[i])
-    h = m[1].toLowerCase()
-    this.header[h] = this.header[h] || []
-    this.header[h].push((m[2] || ''))
-    if (++this.npairs === this.maxHeaderPairs) { break }
-  }
-}
-
-module.exports = HeaderParser
-
-
-/***/ }),
-
-/***/ 612:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-
-
-const inherits = (__nccwpck_require__(7975).inherits)
-const ReadableStream = (__nccwpck_require__(7075).Readable)
-
-function PartStream (opts) {
-  ReadableStream.call(this, opts)
-}
-inherits(PartStream, ReadableStream)
-
-PartStream.prototype._read = function (n) {}
-
-module.exports = PartStream
-
-
-/***/ }),
-
-/***/ 4136:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
+__nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   __: () => (/* binding */ getSweBenchScore)
+/* harmony export */ });
+/* unused harmony exports parseSweBenchResponse, fetchSweBenchScores, parseMarkdownTable, SWE_BENCH_SCORES, DEFAULT_MAX_LATENCY_MS, getEffectiveScore, rankModels, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable */
+/* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3024);
+/* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(node_fs__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
+/**
+ * bench-reorder.ts
+ *
+ * After a benchmark run, this script:
+ * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
+ * 2. Ranks models by SWE-bench score with latency penalty
+ * 3. Updates nim_models in action.yml
+ */
 
 
 /**
- * Copyright Brian White. All rights reserved.
- *
- * @see https://github.com/mscdex/streamsearch
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- * Based heavily on the Streaming Boyer-Moore-Horspool C++ implementation
- * by Hongli Lai at: https://github.com/FooBarWidget/boyer-moore-horspool
+ * Parse SWE-bench API response into sorted entries.
+ * Filters to score > 0.5, sorts by score descending, returns top 30.
  */
-const EventEmitter = (__nccwpck_require__(8474).EventEmitter)
-const inherits = (__nccwpck_require__(7975).inherits)
-
-function SBMH (needle) {
-  if (typeof needle === 'string') {
-    needle = Buffer.from(needle)
-  }
-
-  if (!Buffer.isBuffer(needle)) {
-    throw new TypeError('The needle has to be a String or a Buffer.')
-  }
-
-  const needleLength = needle.length
-
-  if (needleLength === 0) {
-    throw new Error('The needle cannot be an empty String/Buffer.')
-  }
-
-  if (needleLength > 256) {
-    throw new Error('The needle cannot have a length bigger than 256.')
-  }
-
-  this.maxMatches = Infinity
-  this.matches = 0
-
-  this._occ = new Array(256)
-    .fill(needleLength) // Initialize occurrence table.
-  this._lookbehind_size = 0
-  this._needle = needle
-  this._bufpos = 0
-
-  this._lookbehind = Buffer.alloc(needleLength)
-
-  // Populate occurrence table with analysis of the needle,
-  // ignoring last letter.
-  for (var i = 0; i < needleLength - 1; ++i) { // eslint-disable-line no-var
-    this._occ[needle[i]] = needleLength - 1 - i
-  }
+function parseSweBenchResponse(data) {
+    return (data.results || [])
+        .filter(m => m.score > 0.5)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30)
+        .map(m => ({
+        modelId: m.model_id,
+        score: m.score,
+        org: m.organization_id || '',
+    }));
 }
-inherits(SBMH, EventEmitter)
-
-SBMH.prototype.reset = function () {
-  this._lookbehind_size = 0
-  this.matches = 0
-  this._bufpos = 0
-}
-
-SBMH.prototype.push = function (chunk, pos) {
-  if (!Buffer.isBuffer(chunk)) {
-    chunk = Buffer.from(chunk, 'binary')
-  }
-  const chlen = chunk.length
-  this._bufpos = pos || 0
-  let r
-  while (r !== chlen && this.matches < this.maxMatches) { r = this._sbmh_feed(chunk) }
-  return r
-}
-
-SBMH.prototype._sbmh_feed = function (data) {
-  const len = data.length
-  const needle = this._needle
-  const needleLength = needle.length
-  const lastNeedleChar = needle[needleLength - 1]
-
-  // Positive: points to a position in `data`
-  //           pos == 3 points to data[3]
-  // Negative: points to a position in the lookbehind buffer
-  //           pos == -2 points to lookbehind[lookbehind_size - 2]
-  let pos = -this._lookbehind_size
-  let ch
-
-  if (pos < 0) {
-    // Lookbehind buffer is not empty. Perform Boyer-Moore-Horspool
-    // search with character lookup code that considers both the
-    // lookbehind buffer and the current round's haystack data.
-    //
-    // Loop until
-    //   there is a match.
-    // or until
-    //   we've moved past the position that requires the
-    //   lookbehind buffer. In this case we switch to the
-    //   optimized loop.
-    // or until
-    //   the character to look at lies outside the haystack.
-    while (pos < 0 && pos <= len - needleLength) {
-      ch = this._sbmh_lookup_char(data, pos + needleLength - 1)
-
-      if (
-        ch === lastNeedleChar &&
-        this._sbmh_memcmp(data, pos, needleLength - 1)
-      ) {
-        this._lookbehind_size = 0
-        ++this.matches
-        this.emit('info', true)
-
-        return (this._bufpos = pos + needleLength)
-      }
-      pos += this._occ[ch]
+// Module-level counter used to escalate the warning once consecutive
+// fetch failures pile up. This is intentionally process-local: bench-reorder
+// is invoked as a single CLI per workflow run, so there is no concurrency
+// to worry about. If this module is ever reused in a server context,
+// replace this with a per-request counter passed through fetchSweBenchScores.
+let sweBenchFetchFailures = 0;
+const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
+/**
+ * Fetch SWE-bench Verified scores from the leaderboard API.
+ * Returns top ~30 models by score, filtered to score > 0.5.
+ */
+async function fetchSweBenchScores() {
+    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
+    try {
+        const resp = await withRetry(async () => {
+            const r = await fetch(url, {
+                signal: AbortSignal.timeout(30_000),
+            });
+            if (!r.ok)
+                throw new Error(`SWE-bench API returned ${r.status}`);
+            return r;
+        });
+        const data = await resp.json();
+        sweBenchFetchFailures = 0;
+        return parseSweBenchResponse(data);
     }
-
-    // No match.
-
-    if (pos < 0) {
-      // There's too few data for Boyer-Moore-Horspool to run,
-      // so let's use a different algorithm to skip as much as
-      // we can.
-      // Forward pos until
-      //   the trailing part of lookbehind + data
-      //   looks like the beginning of the needle
-      // or until
-      //   pos == 0
-      while (pos < 0 && !this._sbmh_memcmp(data, pos, len - pos)) { ++pos }
-    }
-
-    if (pos >= 0) {
-      // Discard lookbehind buffer.
-      this.emit('info', false, this._lookbehind, 0, this._lookbehind_size)
-      this._lookbehind_size = 0
-    } else {
-      // Cut off part of the lookbehind buffer that has
-      // been processed and append the entire haystack
-      // into it.
-      const bytesToCutOff = this._lookbehind_size + pos
-      if (bytesToCutOff > 0) {
-        // The cut off data is guaranteed not to contain the needle.
-        this.emit('info', false, this._lookbehind, 0, bytesToCutOff)
-      }
-
-      this._lookbehind.copy(this._lookbehind, 0, bytesToCutOff,
-        this._lookbehind_size - bytesToCutOff)
-      this._lookbehind_size -= bytesToCutOff
-
-      data.copy(this._lookbehind, this._lookbehind_size)
-      this._lookbehind_size += len
-
-      this._bufpos = len
-      return len
-    }
-  }
-
-  pos += (pos >= 0) * this._bufpos
-
-  // Lookbehind buffer is now empty. We only need to check if the
-  // needle is in the haystack.
-  if (data.indexOf(needle, pos) !== -1) {
-    pos = data.indexOf(needle, pos)
-    ++this.matches
-    if (pos > 0) { this.emit('info', true, data, this._bufpos, pos) } else { this.emit('info', true) }
-
-    return (this._bufpos = pos + needleLength)
-  } else {
-    pos = len - needleLength
-  }
-
-  // There was no match. If there's trailing haystack data that we cannot
-  // match yet using the Boyer-Moore-Horspool algorithm (because the trailing
-  // data is less than the needle size) then match using a modified
-  // algorithm that starts matching from the beginning instead of the end.
-  // Whatever trailing data is left after running this algorithm is added to
-  // the lookbehind buffer.
-  while (
-    pos < len &&
-    (
-      data[pos] !== needle[0] ||
-      (
-        (Buffer.compare(
-          data.subarray(pos, pos + len - pos),
-          needle.subarray(0, len - pos)
-        ) !== 0)
-      )
-    )
-  ) {
-    ++pos
-  }
-  if (pos < len) {
-    data.copy(this._lookbehind, 0, pos, pos + (len - pos))
-    this._lookbehind_size = len - pos
-  }
-
-  // Everything until pos is guaranteed not to contain needle data.
-  if (pos > 0) { this.emit('info', false, data, this._bufpos, pos < len ? pos : len) }
-
-  this._bufpos = len
-  return len
-}
-
-SBMH.prototype._sbmh_lookup_char = function (data, pos) {
-  return (pos < 0)
-    ? this._lookbehind[this._lookbehind_size + pos]
-    : data[pos]
-}
-
-SBMH.prototype._sbmh_memcmp = function (data, pos, len) {
-  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
-    if (this._sbmh_lookup_char(data, pos + i) !== this._needle[i]) { return false }
-  }
-  return true
-}
-
-module.exports = SBMH
-
-
-/***/ }),
-
-/***/ 9581:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-
-
-const WritableStream = (__nccwpck_require__(7075).Writable)
-const { inherits } = __nccwpck_require__(7975)
-const Dicer = __nccwpck_require__(7182)
-
-const MultipartParser = __nccwpck_require__(1192)
-const UrlencodedParser = __nccwpck_require__(855)
-const parseParams = __nccwpck_require__(8929)
-
-function Busboy (opts) {
-  if (!(this instanceof Busboy)) { return new Busboy(opts) }
-
-  if (typeof opts !== 'object') {
-    throw new TypeError('Busboy expected an options-Object.')
-  }
-  if (typeof opts.headers !== 'object') {
-    throw new TypeError('Busboy expected an options-Object with headers-attribute.')
-  }
-  if (typeof opts.headers['content-type'] !== 'string') {
-    throw new TypeError('Missing Content-Type-header.')
-  }
-
-  const {
-    headers,
-    ...streamOptions
-  } = opts
-
-  this.opts = {
-    autoDestroy: false,
-    ...streamOptions
-  }
-  WritableStream.call(this, this.opts)
-
-  this._done = false
-  this._parser = this.getParserByHeaders(headers)
-  this._finished = false
-}
-inherits(Busboy, WritableStream)
-
-Busboy.prototype.emit = function (ev) {
-  if (ev === 'finish') {
-    if (!this._done) {
-      this._parser?.end()
-      return
-    } else if (this._finished) {
-      return
-    }
-    this._finished = true
-  }
-  WritableStream.prototype.emit.apply(this, arguments)
-}
-
-Busboy.prototype.getParserByHeaders = function (headers) {
-  const parsed = parseParams(headers['content-type'])
-
-  const cfg = {
-    defCharset: this.opts.defCharset,
-    fileHwm: this.opts.fileHwm,
-    headers,
-    highWaterMark: this.opts.highWaterMark,
-    isPartAFile: this.opts.isPartAFile,
-    limits: this.opts.limits,
-    parsedConType: parsed,
-    preservePath: this.opts.preservePath
-  }
-
-  if (MultipartParser.detect.test(parsed[0])) {
-    return new MultipartParser(this, cfg)
-  }
-  if (UrlencodedParser.detect.test(parsed[0])) {
-    return new UrlencodedParser(this, cfg)
-  }
-  throw new Error('Unsupported Content-Type.')
-}
-
-Busboy.prototype._write = function (chunk, encoding, cb) {
-  this._parser.write(chunk, cb)
-}
-
-module.exports = Busboy
-module.exports["default"] = Busboy
-module.exports.Busboy = Busboy
-
-module.exports.Dicer = Dicer
-
-
-/***/ }),
-
-/***/ 1192:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-
-
-// TODO:
-//  * support 1 nested multipart level
-//    (see second multipart example here:
-//     http://www.w3.org/TR/html401/interact/forms.html#didx-multipartform-data)
-//  * support limits.fieldNameSize
-//     -- this will require modifications to utils.parseParams
-
-const { Readable } = __nccwpck_require__(7075)
-const { inherits } = __nccwpck_require__(7975)
-
-const Dicer = __nccwpck_require__(7182)
-
-const parseParams = __nccwpck_require__(8929)
-const decodeText = __nccwpck_require__(2747)
-const basename = __nccwpck_require__(692)
-const getLimit = __nccwpck_require__(2393)
-
-const RE_BOUNDARY = /^boundary$/i
-const RE_FIELD = /^form-data$/i
-const RE_CHARSET = /^charset$/i
-const RE_FILENAME = /^filename$/i
-const RE_NAME = /^name$/i
-
-Multipart.detect = /^multipart\/form-data/i
-function Multipart (boy, cfg) {
-  let i
-  let len
-  const self = this
-  let boundary
-  const limits = cfg.limits
-  const isPartAFile = cfg.isPartAFile || ((fieldName, contentType, fileName) => (contentType === 'application/octet-stream' || fileName !== undefined))
-  const parsedConType = cfg.parsedConType || []
-  const defCharset = cfg.defCharset || 'utf8'
-  const preservePath = cfg.preservePath
-  const fileOpts = { highWaterMark: cfg.fileHwm }
-
-  for (i = 0, len = parsedConType.length; i < len; ++i) {
-    if (Array.isArray(parsedConType[i]) &&
-      RE_BOUNDARY.test(parsedConType[i][0])) {
-      boundary = parsedConType[i][1]
-      break
-    }
-  }
-
-  function checkFinished () {
-    if (nends === 0 && finished && !boy._done) {
-      finished = false
-      self.end()
-    }
-  }
-
-  if (typeof boundary !== 'string') { throw new Error('Multipart: Boundary not found') }
-
-  const fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024)
-  const fileSizeLimit = getLimit(limits, 'fileSize', Infinity)
-  const filesLimit = getLimit(limits, 'files', Infinity)
-  const fieldsLimit = getLimit(limits, 'fields', Infinity)
-  const partsLimit = getLimit(limits, 'parts', Infinity)
-  const headerPairsLimit = getLimit(limits, 'headerPairs', 2000)
-  const headerSizeLimit = getLimit(limits, 'headerSize', 80 * 1024)
-
-  let nfiles = 0
-  let nfields = 0
-  let nends = 0
-  let curFile
-  let curField
-  let finished = false
-
-  this._needDrain = false
-  this._pause = false
-  this._cb = undefined
-  this._nparts = 0
-  this._boy = boy
-
-  const parserCfg = {
-    boundary,
-    maxHeaderPairs: headerPairsLimit,
-    maxHeaderSize: headerSizeLimit,
-    partHwm: fileOpts.highWaterMark,
-    highWaterMark: cfg.highWaterMark
-  }
-
-  this.parser = new Dicer(parserCfg)
-  this.parser.on('drain', function () {
-    self._needDrain = false
-    if (self._cb && !self._pause) {
-      const cb = self._cb
-      self._cb = undefined
-      cb()
-    }
-  }).on('part', function onPart (part) {
-    if (++self._nparts > partsLimit) {
-      self.parser.removeListener('part', onPart)
-      self.parser.on('part', skipPart)
-      boy.hitPartsLimit = true
-      boy.emit('partsLimit')
-      return skipPart(part)
-    }
-
-    // hack because streams2 _always_ doesn't emit 'end' until nextTick, so let
-    // us emit 'end' early since we know the part has ended if we are already
-    // seeing the next part
-    if (curField) {
-      const field = curField
-      field.emit('end')
-      field.removeAllListeners('end')
-    }
-
-    part.on('header', function (header) {
-      let contype
-      let fieldname
-      let parsed
-      let charset
-      let encoding
-      let filename
-      let nsize = 0
-
-      if (header['content-type']) {
-        parsed = parseParams(header['content-type'][0])
-        if (parsed[0]) {
-          contype = parsed[0].toLowerCase()
-          for (i = 0, len = parsed.length; i < len; ++i) {
-            if (RE_CHARSET.test(parsed[i][0])) {
-              charset = parsed[i][1].toLowerCase()
-              break
-            }
-          }
+    catch (err) {
+        sweBenchFetchFailures++;
+        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
+            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
         }
-      }
-
-      if (contype === undefined) { contype = 'text/plain' }
-      if (charset === undefined) { charset = defCharset }
-
-      if (header['content-disposition']) {
-        parsed = parseParams(header['content-disposition'][0])
-        if (!RE_FIELD.test(parsed[0])) { return skipPart(part) }
-        for (i = 0, len = parsed.length; i < len; ++i) {
-          if (RE_NAME.test(parsed[i][0])) {
-            fieldname = parsed[i][1]
-          } else if (RE_FILENAME.test(parsed[i][0])) {
-            filename = parsed[i][1]
-            if (!preservePath) { filename = basename(filename) }
-          }
+        else {
+            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
         }
-      } else { return skipPart(part) }
-
-      if (header['content-transfer-encoding']) { encoding = header['content-transfer-encoding'][0].toLowerCase() } else { encoding = '7bit' }
-
-      let onData,
-        onEnd
-
-      if (isPartAFile(fieldname, contype, filename)) {
-        // file/binary field
-        if (nfiles === filesLimit) {
-          if (!boy.hitFilesLimit) {
-            boy.hitFilesLimit = true
-            boy.emit('filesLimit')
-          }
-          return skipPart(part)
+        return [];
+    }
+}
+/**
+ * Parse the markdown table output from bench-entry.ts
+ */
+function parseMarkdownTable(table) {
+    const lines = table.trim().split('\n');
+    const rows = [];
+    for (const line of lines) {
+        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
+            continue;
+        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+        if (cells.length < 5)
+            continue;
+        const model = cells[0].replace(/`/g, '');
+        const ttftMs = parseDuration(cells[1]);
+        const latencyMs = parseDuration(cells[2]);
+        const tokensPerSec = parseFloat(cells[3]) || 0;
+        const errors = parseInt(cells[4], 10) || 0;
+        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
+    }
+    return rows;
+}
+function parseDuration(s) {
+    s = s.trim();
+    if (s === 'N/A')
+        return Infinity;
+    if (s.endsWith('μs'))
+        return parseFloat(s) / 1000;
+    if (s.endsWith('ms'))
+        return parseFloat(s);
+    if (s.endsWith('s'))
+        return parseFloat(s) * 1000;
+    return parseFloat(s) || Infinity;
+}
+/**
+ * Known SWE-bench Verified scores for models available on NIM, Groq,
+ * OpenRouter, and Kilo.
+ * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ *
+ * Free-tier entries (IDs ending with :free) are estimated scores; they
+ * should be replaced with measured values once benchmark data is available.
+ * Free models are forced to rank last in the fallback chain.
+ *
+ * Model identifiers are provider-specific — Groq uses different IDs than
+ * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
+ * moonshotai/kimi-k2.6). If provider catalogs change, entries may drift;
+ * configured models without a score entry return 0.5 and rank lower.
+ */
+const SWE_BENCH_SCORES = {
+    'deepseek-ai/deepseek-v4-pro': 0.806,
+    'deepseek-ai/deepseek-v4-flash': 0.790,
+    'minimaxai/minimax-m3': 0.805,
+    'minimaxai/minimax-m2.7': 0.802,
+    'moonshotai/kimi-k2.6': 0.802,
+    'z-ai/glm-5.2': 0.778,
+    'mistralai/mistral-medium-3.5-128b': 0.776,
+    'qwen/qwen3.5-397b-a17b': 0.764,
+    'stepfun-ai/step-3.7-flash': 0.744,
+    'qwen/qwen3.5-122b-a10b': 0.734,
+    'bytedance/seed-oss-36b-instruct': 0.735,
+    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
+    'mistralai/mistral-nemotron': 0.720,
+    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
+    'openai/gpt-oss-120b': 0.720,
+    'moonshotai/kimi-k2-instruct': 0.802,
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
+    'mistralai/mistral-large': 0.700,
+    'mistralai/mistral-large-2-instruct': 0.700,
+    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
+    'nvidia/nemotron-3-super-120b-a12b': 0.680,
+    'mistralai/mistral-small-4-119b-2603': 0.680,
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
+    'nvidia/nemotron-4-340b-instruct': 0.650,
+    'openai/gpt-oss-20b': 0.650,
+    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
+    'thinkingmachines/inkling': 0.650,
+    'meta/llama-3.3-70b-instruct': 0.620,
+    'llama-3.3-70b-versatile': 0.620,
+    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
+    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
+    'meta/llama-3.1-70b-instruct': 0.600,
+    'poolside/laguna-xs-2.1': 0.600,
+    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
+    'microsoft/phi-3.5-moe-instruct': 0.580,
+    'databricks/dbrx-instruct': 0.550,
+    'ai21labs/jamba-1.5-large-instruct': 0.550,
+    // Direct Mistral API model IDs
+    'mistral-medium-3.5': 0.776,
+    'mistral-medium-latest': 0.776,
+    'mistral-large-2512': 0.720,
+    'mistral-large-latest': 0.720,
+    'mistral-small-2603': 0.680,
+    'mistral-small-latest': 0.680,
+    'codestral-2508': 0.650,
+    'codestral-latest': 0.650,
+    // OpenRouter free-tier models (estimated scores)
+    'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
+    'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
+    'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
+    // Kilo free-tier models (estimated scores)
+    'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
+    'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
+};
+/**
+ * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
+ * If fetchedScores is provided, checks it before the hardcoded table.
+ */
+function getSweBenchScore(model, fetchedScores) {
+    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
+}
+/**
+ * Effective score = SWE-bench score × latency multiplier.
+ * - Under 60s: no penalty (1.0)
+ * - 60-120s: linear penalty (1.0 → 0.7)
+ * - Over 120s: heavy penalty (0.5)
+ */
+const DEFAULT_MAX_LATENCY_MS = 60_000;
+function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
+    const swe = getSweBenchScore(model, fetchedScores);
+    if (!latencies || !(model in latencies))
+        return swe;
+    const lat = latencies[model];
+    if (lat <= maxLatencyMs)
+        return swe;
+    if (lat <= maxLatencyMs * 2) {
+        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
+}
+/**
+ * Rank models by effective score (SWE-bench + latency penalty).
+ * Only includes models that worked today (tokensPerSec > 0).
+ */
+function rankModels(rows, latencies, fetchedScores) {
+    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    return alive
+        .map(r => r.model)
+        .sort((a, b) => {
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        if (effB !== effA)
+            return effB - effA;
+        // Tiebreaker: faster today wins
+        const latA = latencies?.[a] ?? Infinity;
+        const latB = latencies?.[b] ?? Infinity;
+        return latA - latB;
+    });
+}
+function buildTargetPattern(targetKey) {
+    return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
+}
+const TARGET_CONFIG = {
+    nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
+    mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
+    groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
+    openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
+    kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
+};
+/**
+ * Update action.yml with new model order for the given target.
+ */
+function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
+    const content = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(actionPath, 'utf-8');
+    const modelString = orderedModels.join(',');
+    const config = TARGET_CONFIG[target];
+    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
+    if (!config.pattern.test(content)) {
+        // Show context around the target key for debugging
+        const key = config.label + ':';
+        const idx = content.indexOf(key);
+        if (idx === -1) {
+            console.warn(`Warning: '${key}' not found in ${actionPath}`);
         }
-
-        ++nfiles
-
-        if (boy.listenerCount('file') === 0) {
-          self.parser._ignore()
-          return
+        else {
+            const snippet = content.substring(idx, idx + 200);
+            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
+            console.warn(`Content around '${key}':\n${snippet}`);
         }
-
-        ++nends
-        const file = new FileStream(fileOpts)
-        curFile = file
-        file.on('end', function () {
-          --nends
-          self._pause = false
-          checkFinished()
-          if (self._cb && !self._needDrain) {
-            const cb = self._cb
-            self._cb = undefined
-            cb()
-          }
-        })
-        file._read = function (n) {
-          if (!self._pause) { return }
-          self._pause = false
-          if (self._cb && !self._needDrain) {
-            const cb = self._cb
-            self._cb = undefined
-            cb()
-          }
-        }
-        boy.emit('file', fieldname, file, filename, encoding, contype)
-
-        onData = function (data) {
-          if ((nsize += data.length) > fileSizeLimit) {
-            const extralen = fileSizeLimit - nsize + data.length
-            if (extralen > 0) { file.push(data.slice(0, extralen)) }
-            file.truncated = true
-            file.bytesRead = fileSizeLimit
-            part.removeAllListeners('data')
-            file.emit('limit')
-            return
-          } else if (!file.push(data)) { self._pause = true }
-
-          file.bytesRead = nsize
-        }
-
-        onEnd = function () {
-          curFile = undefined
-          file.push(null)
-        }
-      } else {
-        // non-file field
-        if (nfields === fieldsLimit) {
-          if (!boy.hitFieldsLimit) {
-            boy.hitFieldsLimit = true
-            boy.emit('fieldsLimit')
-          }
-          return skipPart(part)
-        }
-
-        ++nfields
-        ++nends
-        let buffer = ''
-        let truncated = false
-        curField = part
-
-        onData = function (data) {
-          if ((nsize += data.length) > fieldSizeLimit) {
-            const extralen = (fieldSizeLimit - (nsize - data.length))
-            buffer += data.toString('binary', 0, extralen)
-            truncated = true
-            part.removeAllListeners('data')
-          } else { buffer += data.toString('binary') }
-        }
-
-        onEnd = function () {
-          curField = undefined
-          if (buffer.length) { buffer = decodeText(buffer, 'binary', charset) }
-          boy.emit('field', fieldname, buffer, false, truncated, encoding, contype)
-          --nends
-          checkFinished()
-        }
-      }
-
-      /* As of node@2efe4ab761666 (v0.10.29+/v0.11.14+), busboy had become
-         broken. Streams2/streams3 is a huge black box of confusion, but
-         somehow overriding the sync state seems to fix things again (and still
-         seems to work for previous node versions).
-      */
-      part._readableState.sync = false
-
-      part.on('data', onData)
-      part.on('end', onEnd)
-    }).on('error', function (err) {
-      if (curFile) { curFile.emit('error', err) }
-    })
-  }).on('error', function (err) {
-    boy.emit('error', err)
-  }).on('finish', function () {
-    finished = true
-    checkFinished()
-  })
-}
-
-Multipart.prototype.write = function (chunk, cb) {
-  const r = this.parser.write(chunk)
-  if (r && !this._pause) {
-    cb()
-  } else {
-    this._needDrain = !r
-    this._cb = cb
-  }
-}
-
-Multipart.prototype.end = function () {
-  const self = this
-
-  if (self.parser.writable) {
-    self.parser.end()
-  } else if (!self._boy._done) {
-    process.nextTick(function () {
-      self._boy._done = true
-      self._boy.emit('finish')
-    })
-  }
-}
-
-function skipPart (part) {
-  part.resume()
-}
-
-function FileStream (opts) {
-  Readable.call(this, opts)
-
-  this.bytesRead = 0
-
-  this.truncated = false
-}
-
-inherits(FileStream, Readable)
-
-FileStream.prototype._read = function (n) {}
-
-module.exports = Multipart
-
-
-/***/ }),
-
-/***/ 855:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-
-
-const Decoder = __nccwpck_require__(1496)
-const decodeText = __nccwpck_require__(2747)
-const getLimit = __nccwpck_require__(2393)
-
-const RE_CHARSET = /^charset$/i
-
-UrlEncoded.detect = /^application\/x-www-form-urlencoded/i
-function UrlEncoded (boy, cfg) {
-  const limits = cfg.limits
-  const parsedConType = cfg.parsedConType
-  this.boy = boy
-
-  this.fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024)
-  this.fieldNameSizeLimit = getLimit(limits, 'fieldNameSize', 100)
-  this.fieldsLimit = getLimit(limits, 'fields', Infinity)
-
-  let charset
-  for (var i = 0, len = parsedConType.length; i < len; ++i) { // eslint-disable-line no-var
-    if (Array.isArray(parsedConType[i]) &&
-        RE_CHARSET.test(parsedConType[i][0])) {
-      charset = parsedConType[i][1].toLowerCase()
-      break
+        return;
     }
-  }
-
-  if (charset === undefined) { charset = cfg.defCharset || 'utf8' }
-
-  this.decoder = new Decoder()
-  this.charset = charset
-  this._fields = 0
-  this._state = 'key'
-  this._checkingBytes = true
-  this._bytesKey = 0
-  this._bytesVal = 0
-  this._key = ''
-  this._val = ''
-  this._keyTrunc = false
-  this._valTrunc = false
-  this._hitLimit = false
+    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
+    if (updated === content) {
+        console.log(`${config.label} models already in desired order, no changes needed`);
+        return;
+    }
+    (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.writeFileSync)(actionPath, updated, 'utf-8');
 }
-
-UrlEncoded.prototype.write = function (data, cb) {
-  if (this._fields === this.fieldsLimit) {
-    if (!this.boy.hitFieldsLimit) {
-      this.boy.hitFieldsLimit = true
-      this.boy.emit('fieldsLimit')
-    }
-    return cb()
-  }
-
-  let idxeq; let idxamp; let i; let p = 0; const len = data.length
-
-  while (p < len) {
-    if (this._state === 'key') {
-      idxeq = idxamp = undefined
-      for (i = p; i < len; ++i) {
-        if (!this._checkingBytes) { ++p }
-        if (data[i] === 0x3D/* = */) {
-          idxeq = i
-          break
-        } else if (data[i] === 0x26/* & */) {
-          idxamp = i
-          break
-        }
-        if (this._checkingBytes && this._bytesKey === this.fieldNameSizeLimit) {
-          this._hitLimit = true
-          break
-        } else if (this._checkingBytes) { ++this._bytesKey }
-      }
-
-      if (idxeq !== undefined) {
-        // key with assignment
-        if (idxeq > p) { this._key += this.decoder.write(data.toString('binary', p, idxeq)) }
-        this._state = 'val'
-
-        this._hitLimit = false
-        this._checkingBytes = true
-        this._val = ''
-        this._bytesVal = 0
-        this._valTrunc = false
-        this.decoder.reset()
-
-        p = idxeq + 1
-      } else if (idxamp !== undefined) {
-        // key with no assignment
-        ++this._fields
-        let key; const keyTrunc = this._keyTrunc
-        if (idxamp > p) { key = (this._key += this.decoder.write(data.toString('binary', p, idxamp))) } else { key = this._key }
-
-        this._hitLimit = false
-        this._checkingBytes = true
-        this._key = ''
-        this._bytesKey = 0
-        this._keyTrunc = false
-        this.decoder.reset()
-
-        if (key.length) {
-          this.boy.emit('field', decodeText(key, 'binary', this.charset),
-            '',
-            keyTrunc,
-            false)
-        }
-
-        p = idxamp + 1
-        if (this._fields === this.fieldsLimit) { return cb() }
-      } else if (this._hitLimit) {
-        // we may not have hit the actual limit if there are encoded bytes...
-        if (i > p) { this._key += this.decoder.write(data.toString('binary', p, i)) }
-        p = i
-        if ((this._bytesKey = this._key.length) === this.fieldNameSizeLimit) {
-          // yep, we actually did hit the limit
-          this._checkingBytes = false
-          this._keyTrunc = true
-        }
-      } else {
-        if (p < len) { this._key += this.decoder.write(data.toString('binary', p)) }
-        p = len
-      }
-    } else {
-      idxamp = undefined
-      for (i = p; i < len; ++i) {
-        if (!this._checkingBytes) { ++p }
-        if (data[i] === 0x26/* & */) {
-          idxamp = i
-          break
-        }
-        if (this._checkingBytes && this._bytesVal === this.fieldSizeLimit) {
-          this._hitLimit = true
-          break
-        } else if (this._checkingBytes) { ++this._bytesVal }
-      }
-
-      if (idxamp !== undefined) {
-        ++this._fields
-        if (idxamp > p) { this._val += this.decoder.write(data.toString('binary', p, idxamp)) }
-        this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
-          decodeText(this._val, 'binary', this.charset),
-          this._keyTrunc,
-          this._valTrunc)
-        this._state = 'key'
-
-        this._hitLimit = false
-        this._checkingBytes = true
-        this._key = ''
-        this._bytesKey = 0
-        this._keyTrunc = false
-        this.decoder.reset()
-
-        p = idxamp + 1
-        if (this._fields === this.fieldsLimit) { return cb() }
-      } else if (this._hitLimit) {
-        // we may not have hit the actual limit if there are encoded bytes...
-        if (i > p) { this._val += this.decoder.write(data.toString('binary', p, i)) }
-        p = i
-        if ((this._val === '' && this.fieldSizeLimit === 0) ||
-            (this._bytesVal = this._val.length) === this.fieldSizeLimit) {
-          // yep, we actually did hit the limit
-          this._checkingBytes = false
-          this._valTrunc = true
-        }
-      } else {
-        if (p < len) { this._val += this.decoder.write(data.toString('binary', p)) }
-        p = len
-      }
-    }
-  }
-  cb()
+function updateActionYmlMistral(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'mistral_models');
 }
-
-UrlEncoded.prototype.end = function () {
-  if (this.boy._done) { return }
-
-  if (this._state === 'key' && this._key.length > 0) {
-    this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
-      '',
-      this._keyTrunc,
-      false)
-  } else if (this._state === 'val') {
-    this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
-      decodeText(this._val, 'binary', this.charset),
-      this._keyTrunc,
-      this._valTrunc)
-  }
-  this.boy._done = true
-  this.boy.emit('finish')
+function updateActionYmlOpenRouter(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'openrouter_models');
 }
-
-module.exports = UrlEncoded
-
-
-/***/ }),
-
-/***/ 1496:
-/***/ ((module) => {
-
-
-
-const RE_PLUS = /\+/g
-
-const HEX = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-  0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-]
-
-function Decoder () {
-  this.buffer = undefined
+function updateActionYmlKilocode(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'kilocode_models');
 }
-Decoder.prototype.write = function (str) {
-  // Replace '+' with ' ' before decoding
-  str = str.replace(RE_PLUS, ' ')
-  let res = ''
-  let i = 0; let p = 0; const len = str.length
-  for (; i < len; ++i) {
-    if (this.buffer !== undefined) {
-      if (!HEX[str.charCodeAt(i)]) {
-        res += '%' + this.buffer
-        this.buffer = undefined
-        --i // retry character
-      } else {
-        this.buffer += str[i]
-        ++p
-        if (this.buffer.length === 2) {
-          res += String.fromCharCode(parseInt(this.buffer, 16))
-          this.buffer = undefined
-        }
-      }
-    } else if (str[i] === '%') {
-      if (i > p) {
-        res += str.substring(p, i)
-        p = i
-      }
-      this.buffer = ''
-      ++p
-    }
-  }
-  if (p < len && this.buffer === undefined) { res += str.substring(p) }
-  return res
-}
-Decoder.prototype.reset = function () {
-  this.buffer = undefined
-}
-
-module.exports = Decoder
-
-
-/***/ }),
-
-/***/ 692:
-/***/ ((module) => {
-
-
-
-module.exports = function basename (path) {
-  if (typeof path !== 'string') { return '' }
-  for (var i = path.length - 1; i >= 0; --i) { // eslint-disable-line no-var
-    switch (path.charCodeAt(i)) {
-      case 0x2F: // '/'
-      case 0x5C: // '\'
-        path = path.slice(i + 1)
-        return (path === '..' || path === '.' ? '' : path)
-    }
-  }
-  return (path === '..' || path === '.' ? '' : path)
-}
-
-
-/***/ }),
-
-/***/ 2747:
-/***/ (function(module) {
-
-
-
-// Node has always utf-8
-const utf8Decoder = new TextDecoder('utf-8')
-const textDecoders = new Map([
-  ['utf-8', utf8Decoder],
-  ['utf8', utf8Decoder]
-])
-
-function getDecoder (charset) {
-  let lc
-  while (true) {
-    switch (charset) {
-      case 'utf-8':
-      case 'utf8':
-        return decoders.utf8
-      case 'latin1':
-      case 'ascii': // TODO: Make these a separate, strict decoder?
-      case 'us-ascii':
-      case 'iso-8859-1':
-      case 'iso8859-1':
-      case 'iso88591':
-      case 'iso_8859-1':
-      case 'windows-1252':
-      case 'iso_8859-1:1987':
-      case 'cp1252':
-      case 'x-cp1252':
-        return decoders.latin1
-      case 'utf16le':
-      case 'utf-16le':
-      case 'ucs2':
-      case 'ucs-2':
-        return decoders.utf16le
-      case 'base64':
-        return decoders.base64
-      default:
-        if (lc === undefined) {
-          lc = true
-          charset = charset.toLowerCase()
-          continue
-        }
-        return decoders.other.bind(charset)
-    }
-  }
-}
-
-const decoders = {
-  utf8: (data, sourceEncoding) => {
-    if (data.length === 0) {
-      return ''
-    }
-    if (typeof data === 'string') {
-      data = Buffer.from(data, sourceEncoding)
-    }
-    return data.utf8Slice(0, data.length)
-  },
-
-  latin1: (data, sourceEncoding) => {
-    if (data.length === 0) {
-      return ''
-    }
-    if (typeof data === 'string') {
-      return data
-    }
-    return data.latin1Slice(0, data.length)
-  },
-
-  utf16le: (data, sourceEncoding) => {
-    if (data.length === 0) {
-      return ''
-    }
-    if (typeof data === 'string') {
-      data = Buffer.from(data, sourceEncoding)
-    }
-    return data.ucs2Slice(0, data.length)
-  },
-
-  base64: (data, sourceEncoding) => {
-    if (data.length === 0) {
-      return ''
-    }
-    if (typeof data === 'string') {
-      data = Buffer.from(data, sourceEncoding)
-    }
-    return data.base64Slice(0, data.length)
-  },
-
-  other: (data, sourceEncoding) => {
-    if (data.length === 0) {
-      return ''
-    }
-    if (typeof data === 'string') {
-      data = Buffer.from(data, sourceEncoding)
-    }
-
-    if (textDecoders.has(this.toString())) {
-      try {
-        return textDecoders.get(this).decode(data)
-      } catch {}
-    }
-    return typeof data === 'string'
-      ? data
-      : data.toString()
-  }
-}
-
-function decodeText (text, sourceEncoding, destEncoding) {
-  if (text) {
-    return getDecoder(destEncoding)(text, sourceEncoding)
-  }
-  return text
-}
-
-module.exports = decodeText
-
-
-/***/ }),
-
-/***/ 2393:
-/***/ ((module) => {
-
-
-
-module.exports = function getLimit (limits, name, defaultLimit) {
-  if (
-    !limits ||
-    limits[name] === undefined ||
-    limits[name] === null
-  ) { return defaultLimit }
-
-  if (
-    typeof limits[name] !== 'number' ||
-    isNaN(limits[name])
-  ) { throw new TypeError('Limit ' + name + ' is not a valid number') }
-
-  return limits[name]
-}
-
-
-/***/ }),
-
-/***/ 8929:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-/* eslint-disable object-property-newline */
-
-
-const decodeText = __nccwpck_require__(2747)
-
-const RE_ENCODED = /%[a-fA-F0-9][a-fA-F0-9]/g
-
-const EncodedLookup = {
-  '%00': '\x00', '%01': '\x01', '%02': '\x02', '%03': '\x03', '%04': '\x04',
-  '%05': '\x05', '%06': '\x06', '%07': '\x07', '%08': '\x08', '%09': '\x09',
-  '%0a': '\x0a', '%0A': '\x0a', '%0b': '\x0b', '%0B': '\x0b', '%0c': '\x0c',
-  '%0C': '\x0c', '%0d': '\x0d', '%0D': '\x0d', '%0e': '\x0e', '%0E': '\x0e',
-  '%0f': '\x0f', '%0F': '\x0f', '%10': '\x10', '%11': '\x11', '%12': '\x12',
-  '%13': '\x13', '%14': '\x14', '%15': '\x15', '%16': '\x16', '%17': '\x17',
-  '%18': '\x18', '%19': '\x19', '%1a': '\x1a', '%1A': '\x1a', '%1b': '\x1b',
-  '%1B': '\x1b', '%1c': '\x1c', '%1C': '\x1c', '%1d': '\x1d', '%1D': '\x1d',
-  '%1e': '\x1e', '%1E': '\x1e', '%1f': '\x1f', '%1F': '\x1f', '%20': '\x20',
-  '%21': '\x21', '%22': '\x22', '%23': '\x23', '%24': '\x24', '%25': '\x25',
-  '%26': '\x26', '%27': '\x27', '%28': '\x28', '%29': '\x29', '%2a': '\x2a',
-  '%2A': '\x2a', '%2b': '\x2b', '%2B': '\x2b', '%2c': '\x2c', '%2C': '\x2c',
-  '%2d': '\x2d', '%2D': '\x2d', '%2e': '\x2e', '%2E': '\x2e', '%2f': '\x2f',
-  '%2F': '\x2f', '%30': '\x30', '%31': '\x31', '%32': '\x32', '%33': '\x33',
-  '%34': '\x34', '%35': '\x35', '%36': '\x36', '%37': '\x37', '%38': '\x38',
-  '%39': '\x39', '%3a': '\x3a', '%3A': '\x3a', '%3b': '\x3b', '%3B': '\x3b',
-  '%3c': '\x3c', '%3C': '\x3c', '%3d': '\x3d', '%3D': '\x3d', '%3e': '\x3e',
-  '%3E': '\x3e', '%3f': '\x3f', '%3F': '\x3f', '%40': '\x40', '%41': '\x41',
-  '%42': '\x42', '%43': '\x43', '%44': '\x44', '%45': '\x45', '%46': '\x46',
-  '%47': '\x47', '%48': '\x48', '%49': '\x49', '%4a': '\x4a', '%4A': '\x4a',
-  '%4b': '\x4b', '%4B': '\x4b', '%4c': '\x4c', '%4C': '\x4c', '%4d': '\x4d',
-  '%4D': '\x4d', '%4e': '\x4e', '%4E': '\x4e', '%4f': '\x4f', '%4F': '\x4f',
-  '%50': '\x50', '%51': '\x51', '%52': '\x52', '%53': '\x53', '%54': '\x54',
-  '%55': '\x55', '%56': '\x56', '%57': '\x57', '%58': '\x58', '%59': '\x59',
-  '%5a': '\x5a', '%5A': '\x5a', '%5b': '\x5b', '%5B': '\x5b', '%5c': '\x5c',
-  '%5C': '\x5c', '%5d': '\x5d', '%5D': '\x5d', '%5e': '\x5e', '%5E': '\x5e',
-  '%5f': '\x5f', '%5F': '\x5f', '%60': '\x60', '%61': '\x61', '%62': '\x62',
-  '%63': '\x63', '%64': '\x64', '%65': '\x65', '%66': '\x66', '%67': '\x67',
-  '%68': '\x68', '%69': '\x69', '%6a': '\x6a', '%6A': '\x6a', '%6b': '\x6b',
-  '%6B': '\x6b', '%6c': '\x6c', '%6C': '\x6c', '%6d': '\x6d', '%6D': '\x6d',
-  '%6e': '\x6e', '%6E': '\x6e', '%6f': '\x6f', '%6F': '\x6f', '%70': '\x70',
-  '%71': '\x71', '%72': '\x72', '%73': '\x73', '%74': '\x74', '%75': '\x75',
-  '%76': '\x76', '%77': '\x77', '%78': '\x78', '%79': '\x79', '%7a': '\x7a',
-  '%7A': '\x7a', '%7b': '\x7b', '%7B': '\x7b', '%7c': '\x7c', '%7C': '\x7c',
-  '%7d': '\x7d', '%7D': '\x7d', '%7e': '\x7e', '%7E': '\x7e', '%7f': '\x7f',
-  '%7F': '\x7f', '%80': '\x80', '%81': '\x81', '%82': '\x82', '%83': '\x83',
-  '%84': '\x84', '%85': '\x85', '%86': '\x86', '%87': '\x87', '%88': '\x88',
-  '%89': '\x89', '%8a': '\x8a', '%8A': '\x8a', '%8b': '\x8b', '%8B': '\x8b',
-  '%8c': '\x8c', '%8C': '\x8c', '%8d': '\x8d', '%8D': '\x8d', '%8e': '\x8e',
-  '%8E': '\x8e', '%8f': '\x8f', '%8F': '\x8f', '%90': '\x90', '%91': '\x91',
-  '%92': '\x92', '%93': '\x93', '%94': '\x94', '%95': '\x95', '%96': '\x96',
-  '%97': '\x97', '%98': '\x98', '%99': '\x99', '%9a': '\x9a', '%9A': '\x9a',
-  '%9b': '\x9b', '%9B': '\x9b', '%9c': '\x9c', '%9C': '\x9c', '%9d': '\x9d',
-  '%9D': '\x9d', '%9e': '\x9e', '%9E': '\x9e', '%9f': '\x9f', '%9F': '\x9f',
-  '%a0': '\xa0', '%A0': '\xa0', '%a1': '\xa1', '%A1': '\xa1', '%a2': '\xa2',
-  '%A2': '\xa2', '%a3': '\xa3', '%A3': '\xa3', '%a4': '\xa4', '%A4': '\xa4',
-  '%a5': '\xa5', '%A5': '\xa5', '%a6': '\xa6', '%A6': '\xa6', '%a7': '\xa7',
-  '%A7': '\xa7', '%a8': '\xa8', '%A8': '\xa8', '%a9': '\xa9', '%A9': '\xa9',
-  '%aa': '\xaa', '%Aa': '\xaa', '%aA': '\xaa', '%AA': '\xaa', '%ab': '\xab',
-  '%Ab': '\xab', '%aB': '\xab', '%AB': '\xab', '%ac': '\xac', '%Ac': '\xac',
-  '%aC': '\xac', '%AC': '\xac', '%ad': '\xad', '%Ad': '\xad', '%aD': '\xad',
-  '%AD': '\xad', '%ae': '\xae', '%Ae': '\xae', '%aE': '\xae', '%AE': '\xae',
-  '%af': '\xaf', '%Af': '\xaf', '%aF': '\xaf', '%AF': '\xaf', '%b0': '\xb0',
-  '%B0': '\xb0', '%b1': '\xb1', '%B1': '\xb1', '%b2': '\xb2', '%B2': '\xb2',
-  '%b3': '\xb3', '%B3': '\xb3', '%b4': '\xb4', '%B4': '\xb4', '%b5': '\xb5',
-  '%B5': '\xb5', '%b6': '\xb6', '%B6': '\xb6', '%b7': '\xb7', '%B7': '\xb7',
-  '%b8': '\xb8', '%B8': '\xb8', '%b9': '\xb9', '%B9': '\xb9', '%ba': '\xba',
-  '%Ba': '\xba', '%bA': '\xba', '%BA': '\xba', '%bb': '\xbb', '%Bb': '\xbb',
-  '%bB': '\xbb', '%BB': '\xbb', '%bc': '\xbc', '%Bc': '\xbc', '%bC': '\xbc',
-  '%BC': '\xbc', '%bd': '\xbd', '%Bd': '\xbd', '%bD': '\xbd', '%BD': '\xbd',
-  '%be': '\xbe', '%Be': '\xbe', '%bE': '\xbe', '%BE': '\xbe', '%bf': '\xbf',
-  '%Bf': '\xbf', '%bF': '\xbf', '%BF': '\xbf', '%c0': '\xc0', '%C0': '\xc0',
-  '%c1': '\xc1', '%C1': '\xc1', '%c2': '\xc2', '%C2': '\xc2', '%c3': '\xc3',
-  '%C3': '\xc3', '%c4': '\xc4', '%C4': '\xc4', '%c5': '\xc5', '%C5': '\xc5',
-  '%c6': '\xc6', '%C6': '\xc6', '%c7': '\xc7', '%C7': '\xc7', '%c8': '\xc8',
-  '%C8': '\xc8', '%c9': '\xc9', '%C9': '\xc9', '%ca': '\xca', '%Ca': '\xca',
-  '%cA': '\xca', '%CA': '\xca', '%cb': '\xcb', '%Cb': '\xcb', '%cB': '\xcb',
-  '%CB': '\xcb', '%cc': '\xcc', '%Cc': '\xcc', '%cC': '\xcc', '%CC': '\xcc',
-  '%cd': '\xcd', '%Cd': '\xcd', '%cD': '\xcd', '%CD': '\xcd', '%ce': '\xce',
-  '%Ce': '\xce', '%cE': '\xce', '%CE': '\xce', '%cf': '\xcf', '%Cf': '\xcf',
-  '%cF': '\xcf', '%CF': '\xcf', '%d0': '\xd0', '%D0': '\xd0', '%d1': '\xd1',
-  '%D1': '\xd1', '%d2': '\xd2', '%D2': '\xd2', '%d3': '\xd3', '%D3': '\xd3',
-  '%d4': '\xd4', '%D4': '\xd4', '%d5': '\xd5', '%D5': '\xd5', '%d6': '\xd6',
-  '%D6': '\xd6', '%d7': '\xd7', '%D7': '\xd7', '%d8': '\xd8', '%D8': '\xd8',
-  '%d9': '\xd9', '%D9': '\xd9', '%da': '\xda', '%Da': '\xda', '%dA': '\xda',
-  '%DA': '\xda', '%db': '\xdb', '%Db': '\xdb', '%dB': '\xdb', '%DB': '\xdb',
-  '%dc': '\xdc', '%Dc': '\xdc', '%dC': '\xdc', '%DC': '\xdc', '%dd': '\xdd',
-  '%Dd': '\xdd', '%dD': '\xdd', '%DD': '\xdd', '%de': '\xde', '%De': '\xde',
-  '%dE': '\xde', '%DE': '\xde', '%df': '\xdf', '%Df': '\xdf', '%dF': '\xdf',
-  '%DF': '\xdf', '%e0': '\xe0', '%E0': '\xe0', '%e1': '\xe1', '%E1': '\xe1',
-  '%e2': '\xe2', '%E2': '\xe2', '%e3': '\xe3', '%E3': '\xe3', '%e4': '\xe4',
-  '%E4': '\xe4', '%e5': '\xe5', '%E5': '\xe5', '%e6': '\xe6', '%E6': '\xe6',
-  '%e7': '\xe7', '%E7': '\xe7', '%e8': '\xe8', '%E8': '\xe8', '%e9': '\xe9',
-  '%E9': '\xe9', '%ea': '\xea', '%Ea': '\xea', '%eA': '\xea', '%EA': '\xea',
-  '%eb': '\xeb', '%Eb': '\xeb', '%eB': '\xeb', '%EB': '\xeb', '%ec': '\xec',
-  '%Ec': '\xec', '%eC': '\xec', '%EC': '\xec', '%ed': '\xed', '%Ed': '\xed',
-  '%eD': '\xed', '%ED': '\xed', '%ee': '\xee', '%Ee': '\xee', '%eE': '\xee',
-  '%EE': '\xee', '%ef': '\xef', '%Ef': '\xef', '%eF': '\xef', '%EF': '\xef',
-  '%f0': '\xf0', '%F0': '\xf0', '%f1': '\xf1', '%F1': '\xf1', '%f2': '\xf2',
-  '%F2': '\xf2', '%f3': '\xf3', '%F3': '\xf3', '%f4': '\xf4', '%F4': '\xf4',
-  '%f5': '\xf5', '%F5': '\xf5', '%f6': '\xf6', '%F6': '\xf6', '%f7': '\xf7',
-  '%F7': '\xf7', '%f8': '\xf8', '%F8': '\xf8', '%f9': '\xf9', '%F9': '\xf9',
-  '%fa': '\xfa', '%Fa': '\xfa', '%fA': '\xfa', '%FA': '\xfa', '%fb': '\xfb',
-  '%Fb': '\xfb', '%fB': '\xfb', '%FB': '\xfb', '%fc': '\xfc', '%Fc': '\xfc',
-  '%fC': '\xfc', '%FC': '\xfc', '%fd': '\xfd', '%Fd': '\xfd', '%fD': '\xfd',
-  '%FD': '\xfd', '%fe': '\xfe', '%Fe': '\xfe', '%fE': '\xfe', '%FE': '\xfe',
-  '%ff': '\xff', '%Ff': '\xff', '%fF': '\xff', '%FF': '\xff'
-}
-
-function encodedReplacer (match) {
-  return EncodedLookup[match]
-}
-
-const STATE_KEY = 0
-const STATE_VALUE = 1
-const STATE_CHARSET = 2
-const STATE_LANG = 3
-
-function parseParams (str) {
-  const res = []
-  let state = STATE_KEY
-  let charset = ''
-  let inquote = false
-  let escaping = false
-  let p = 0
-  let tmp = ''
-  const len = str.length
-
-  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
-    const char = str[i]
-    if (char === '\\' && inquote) {
-      if (escaping) { escaping = false } else {
-        escaping = true
-        continue
-      }
-    } else if (char === '"') {
-      if (!escaping) {
-        if (inquote) {
-          inquote = false
-          state = STATE_KEY
-        } else { inquote = true }
-        continue
-      } else { escaping = false }
-    } else {
-      if (escaping && inquote) { tmp += '\\' }
-      escaping = false
-      if ((state === STATE_CHARSET || state === STATE_LANG) && char === "'") {
-        if (state === STATE_CHARSET) {
-          state = STATE_LANG
-          charset = tmp.substring(1)
-        } else { state = STATE_VALUE }
-        tmp = ''
-        continue
-      } else if (state === STATE_KEY &&
-        (char === '*' || char === '=') &&
-        res.length) {
-        state = char === '*'
-          ? STATE_CHARSET
-          : STATE_VALUE
-        res[p] = [tmp, undefined]
-        tmp = ''
-        continue
-      } else if (!inquote && char === ';') {
-        state = STATE_KEY
-        if (charset) {
-          if (tmp.length) {
-            tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer),
-              'binary',
-              charset)
-          }
-          charset = ''
-        } else if (tmp.length) {
-          tmp = decodeText(tmp, 'binary', 'utf8')
-        }
-        if (res[p] === undefined) { res[p] = tmp } else { res[p][1] = tmp }
-        tmp = ''
-        ++p
-        continue
-      } else if (!inquote && (char === ' ' || char === '\t')) { continue }
-    }
-    tmp += char
-  }
-  if (charset && tmp.length) {
-    tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer),
-      'binary',
-      charset)
-  } else if (tmp) {
-    tmp = decodeText(tmp, 'binary', 'utf8')
-  }
-
-  if (res[p] === undefined) {
-    if (tmp) { res[p] = tmp }
-  } else { res[p][1] = tmp }
-
-  return res
-}
-
-module.exports = parseParams
-
-
-/***/ })
-
-/******/ });
-/************************************************************************/
-/******/ // The module cache
-/******/ var __webpack_module_cache__ = {};
-/******/ 
-/******/ // The require function
-/******/ function __nccwpck_require__(moduleId) {
-/******/ 	// Check if module is in cache
-/******/ 	var cachedModule = __webpack_module_cache__[moduleId];
-/******/ 	if (cachedModule !== undefined) {
-/******/ 		return cachedModule.exports;
-/******/ 	}
-/******/ 	// Create a new module (and put it into the cache)
-/******/ 	var module = __webpack_module_cache__[moduleId] = {
-/******/ 		// no module.id needed
-/******/ 		// no module.loaded needed
-/******/ 		exports: {}
-/******/ 	};
-/******/ 
-/******/ 	// Execute the module function
-/******/ 	var threw = true;
-/******/ 	try {
-/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __nccwpck_require__);
-/******/ 		threw = false;
-/******/ 	} finally {
-/******/ 		if(threw) delete __webpack_module_cache__[moduleId];
-/******/ 	}
-/******/ 
-/******/ 	// Return the exports of the module
-/******/ 	return module.exports;
-/******/ }
-/******/ 
-/************************************************************************/
-/******/ /* webpack/runtime/create fake namespace object */
-/******/ (() => {
-/******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
-/******/ 	var leafPrototypes;
-/******/ 	// create a fake namespace object
-/******/ 	// mode & 1: value is a module id, require it
-/******/ 	// mode & 2: merge all properties of value into the ns
-/******/ 	// mode & 4: return value when already ns object
-/******/ 	// mode & 16: return value when it's Promise-like
-/******/ 	// mode & 8|1: behave like require
-/******/ 	__nccwpck_require__.t = function(value, mode) {
-/******/ 		if(mode & 1) value = this(value);
-/******/ 		if(mode & 8) return value;
-/******/ 		if(typeof value === 'object' && value) {
-/******/ 			if((mode & 4) && value.__esModule) return value;
-/******/ 			if((mode & 16) && typeof value.then === 'function') return value;
-/******/ 		}
-/******/ 		var ns = Object.create(null);
-/******/ 		__nccwpck_require__.r(ns);
-/******/ 		var def = {};
-/******/ 		leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
-/******/ 		for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
-/******/ 			Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
-/******/ 		}
-/******/ 		def['default'] = () => (value);
-/******/ 		__nccwpck_require__.d(ns, def);
-/******/ 		return ns;
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__nccwpck_require__.d = (exports, definition) => {
-/******/ 		for(var key in definition) {
-/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 			}
-/******/ 		}
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/make namespace object */
-/******/ (() => {
-/******/ 	// define __esModule on exports
-/******/ 	__nccwpck_require__.r = (exports) => {
-/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
-/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-/******/ 		}
-/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/compat */
-/******/ 
-/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
-/******/ 
-/************************************************************************/
-var __webpack_exports__ = {};
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  od: () => (/* binding */ detectLanguage),
-  pW: () => (/* binding */ runModelChainForBatch),
-  ni: () => (/* binding */ withAggregateTimeout)
-});
-
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var lib_core = __nccwpck_require__(7484);
-;// CONCATENATED MODULE: ./src/retry.ts
-class retry_RetryableError extends Error {
-    status;
-    retryAfterMs;
-    constructor(message, status, retryAfterMs) {
-        super(message);
-        this.name = 'RetryableError';
-        this.status = status;
-        this.retryAfterMs = retryAfterMs;
-    }
-}
-function getRetryDelay(error, attempt, delayMs) {
-    const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
-    const retryAfterMs = error instanceof retry_RetryableError ? error.retryAfterMs ?? 0 : 0;
-    return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
-}
-async function retry_withRetry(fn, maxRetries = 2, delayMs = 1000) {
-    let lastError;
-    for (let i = 0; i < maxRetries + 1; i++) {
+/**
+ * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
+ * Returns the parsed scores map (empty if neither source yields a value).
+ * Exported for testability.
+ */
+function readFetchedScores(rawInput, scoresFile) {
+    const fetchedScores = new Map();
+    if (scoresFile && (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.existsSync)(scoresFile)) {
         try {
-            return await fn();
+            const fileContent = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(scoresFile, 'utf-8').trim();
+            const scoresObj = JSON.parse(fileContent);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
         }
-        catch (error) {
-            lastError = error;
-            const status = error instanceof retry_RetryableError ? error.status : 0;
-            const isFetchNetworkError = error instanceof TypeError &&
-                /fetch|network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(error.message);
-            if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
-                const delay = getRetryDelay(error, i, delayMs);
-                await new Promise((resolve) => setTimeout(resolve, delay));
+        catch (err) {
+            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
+        }
+        return fetchedScores;
+    }
+    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
+    // so we never accidentally match a fragment in the markdown table body.
+    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
+    if (scoresMatch) {
+        try {
+            const scoresObj = JSON.parse(scoresMatch[1]);
+            for (const [k, v] of Object.entries(scoresObj)) {
+                fetchedScores.set(k, v);
+            }
+        }
+        catch {
+            console.warn('Warning: could not parse FETCHED_SCORES comment');
+        }
+    }
+    return fetchedScores;
+}
+/**
+ * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
+ * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
+ */
+function stripFetchedScoresComment(rawInput, scoresFile) {
+    if (scoresFile)
+        return rawInput;
+    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
+}
+/**
+ * Main entry point — reads table from stdin, ranks, updates action.yml.
+ */
+async function main() {
+    const actionPath = process.env.ACTION_PATH || 'action.yml';
+    const target = (process.env.ACTION_TARGET || 'nim_models');
+    if (!(target in TARGET_CONFIG)) {
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
+        process.exit(1);
+    }
+    // Read benchmark table from stdin
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    const rawInput = Buffer.concat(chunks).toString('utf-8');
+    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
+    const scoresFile = process.env.BENCH_SCORES_FILE;
+    const fetchedScores = readFetchedScores(rawInput, scoresFile);
+    if (fetchedScores.size > 0) {
+        const source = scoresFile && (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
+        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
+    }
+    const table = stripFetchedScoresComment(rawInput, scoresFile);
+    if (!table.trim()) {
+        console.error('No benchmark output received on stdin');
+        process.exit(1);
+    }
+    const rows = parseMarkdownTable(table);
+    if (rows.length === 0) {
+        console.warn('No benchmark data rows found — all models may have failed. Skipping reorder.');
+        process.exit(0);
+    }
+    // Extract latencies
+    const latencies = {};
+    for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+            latencies[row.model] = row.latencyMs;
+        }
+    }
+    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
+    const ranked = rankModels(rows, latencies, fetchedScoresMap);
+    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
+    const summaryLines = [
+        `\n## Model Ranking (${target})\n`,
+        '| # | Model | SWE | Effective | Latency |',
+        '|---|-------|-----|-----------|---------|',
+    ];
+    ranked.forEach((model, index) => {
+        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
+        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
+        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
+        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
+        summaryLines.push(`| ${index + 1} | \`${model}\` | ${swe} | ${eff} | ${lat} |`);
+    });
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+        try {
+            (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.appendFileSync)(summaryPath, summaryLines.join('\n') + '\n');
+        }
+        catch (err) {
+            console.warn(`Warning: could not write to GITHUB_STEP_SUMMARY: ${err}`);
+        }
+    }
+    updateActionYml(actionPath, ranked, target);
+    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
+}
+/**
+ * Output new models (not in SWE_BENCH_SCORES) as JSON for the workflow
+ * to auto-add with default score 0.5.
+ */
+function discoverNewModels(models) {
+    return models
+        .filter(m => !(m in SWE_BENCH_SCORES))
+        .map(m => ({ model: m, score: 0.5 }));
+}
+/**
+ * Insert new model entries into a SWE_BENCH_SCORES table in a source file.
+ * Finds the table by marker comment and inserts before the closing brace.
+ */
+function patchScoresTable(sourcePath, entries) {
+    const content = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(sourcePath, 'utf-8');
+    const marker = '// OpenRouter free-tier models (estimated scores)';
+    const idx = content.indexOf(marker);
+    if (idx === -1)
+        return 0;
+    // Find the end of this comment block (next non-comment line)
+    const before = content.substring(0, idx);
+    const after = content.substring(idx);
+    const lines = after.split('\n');
+    let insertLine = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+            insertLine = i;
+            break;
+        }
+    }
+    const newLines = entries.map(e => `  '${e.model}': ${e.score},`);
+    lines.splice(insertLine, 0, ...newLines);
+    const updated = before + lines.join('\n');
+    (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.writeFileSync)(sourcePath, updated, 'utf-8');
+    return newLines.length;
+}
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
+if (isMainModule) {
+    if (process.argv.includes('--discover-new')) {
+        const chunks = [];
+        for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+        }
+        const rawInput = Buffer.concat(chunks).toString('utf-8');
+        const rows = parseMarkdownTable(stripFetchedScoresComment(rawInput, process.env.BENCH_SCORES_FILE));
+        const models = rows.map(r => r.model);
+        const newEntries = discoverNewModels(models);
+        console.log(JSON.stringify(newEntries));
+        process.exit(0);
+    }
+    if (process.argv.includes('--patch-scores')) {
+        const srcPath = process.argv[process.argv.indexOf('--patch-scores') + 1];
+        const chunks = [];
+        for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+        }
+        const newEntries = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const count = patchScoresTable(srcPath, newEntries);
+        console.log(`Added ${count} new model(s) to scores table`);
+        process.exit(0);
+    }
+    main().catch(err => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+    });
+}
+
+__webpack_async_result__();
+} catch(e) { __webpack_async_result__(e); } }, 1);
+
+/***/ }),
+
+/***/ 2973:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Z9: () => (/* binding */ loadConfig)
+/* harmony export */ });
+/* unused harmony exports splitCSV, isFreeModel, filterFreeOnly, fetchFreeModels */
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _openai_client_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6689);
+
+
+function splitCSV(s) {
+    return s.split(',').map(item => item.trim()).filter(item => item !== '');
+}
+async function loadConfig() {
+    const rawPromptMode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_prompt_mode') || 'append';
+    if (rawPromptMode !== 'append' && rawPromptMode !== 'replace') {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid nim_prompt_mode "${rawPromptMode}", defaulting to "append"`);
+    }
+    const promptMode = rawPromptMode === 'replace' ? 'replace' : 'append';
+    const config = {
+        baseURL: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
+        apiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_api_key'),
+        models: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_models')),
+        mistralApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_api_key') || '',
+        mistralBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
+        mistralModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_models') ||
+            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        groqApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_api_key') || '',
+        groqModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_models') ||
+            'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
+        groqBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
+        openRouterApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_api_key') || '',
+        openRouterBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
+        openRouterModels: [],
+        openRouterFreeOnly: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_free_only') === 'true',
+        kiloApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_api_key') || '',
+        kiloBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
+        kiloModels: [],
+        kiloFreeOnly: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_free_only') === 'true',
+        customApiUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_url') || '',
+        customModel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_model') || '',
+        customApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_key') || '',
+        customModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_models') || ''),
+        customModelsBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_models_base_url') || _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_url') || '',
+        maxFiles: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('max_files') || '100';
+            const parsed = Number.parseInt(raw, 10);
+            if (!/^[+]?\d+$/.test(raw.trim()) || !Number.isInteger(parsed) || parsed <= 0 || parsed > 500) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid max_files "${raw}", must be 1-500. Defaulting to 100.`);
+                return 100;
+            }
+            return parsed;
+        })(),
+        excludePatterns: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
+        systemPrompt: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_system_prompt'),
+        promptMode,
+        customRules: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_rules') || '',
+        revalidateFindings: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('revalidate_findings') === 'true',
+    };
+    const openRouterInput = splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_models'));
+    if (openRouterInput.length > 0) {
+        config.openRouterModels = filterFreeOnly(openRouterInput, config.openRouterFreeOnly, 'OpenRouter');
+    }
+    else if (config.openRouterApiKey) {
+        config.openRouterModels = await fetchFreeModels(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter');
+    }
+    const kiloInput = splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_models'));
+    if (kiloInput.length > 0) {
+        config.kiloModels = filterFreeOnly(kiloInput, config.kiloFreeOnly, 'Kilo');
+    }
+    else if (config.kiloApiKey) {
+        config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
+    }
+    return config;
+}
+function isFreeModel(model) {
+    return model.toLowerCase().includes('free');
+}
+function filterFreeOnly(models, enabled, providerLabel) {
+    if (!enabled)
+        return models;
+    const free = models.filter(isFreeModel);
+    const dropped = models.length - free.length;
+    if (dropped > 0) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${providerLabel}: filtered out ${dropped} non-free model(s), keeping ${free.length} free-tier model(s)`);
+    }
+    return free;
+}
+async function fetchFreeModels(baseURL, apiKey, providerLabel) {
+    try {
+        const client = new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(baseURL, apiKey, providerLabel);
+        const models = await client.listModels();
+        const free = models.filter(isFreeModel);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${providerLabel}: fetched ${models.length} models, ${free.length} free-tier`);
+        return free;
+    }
+    catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`${providerLabel}: could not fetch model list: ${err}`);
+        return [];
+    }
+}
+
+
+/***/ }),
+
+/***/ 807:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   D: () => (/* binding */ loadEvent)
+/* harmony export */ });
+/* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3024);
+/* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(node_fs__WEBPACK_IMPORTED_MODULE_0__);
+
+function loadEvent() {
+    const path = process.env.GITHUB_EVENT_PATH;
+    if (!path) {
+        throw new Error('GITHUB_EVENT_PATH not set');
+    }
+    const data = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(path, 'utf8');
+    let event;
+    try {
+        event = JSON.parse(data);
+    }
+    catch (err) {
+        throw new Error(`Failed to parse GitHub event payload at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!event.pull_request?.number || !event.pull_request?.head?.sha) {
+        throw new Error('No PR number or head SHA in event payload');
+    }
+    return event;
+}
+
+
+/***/ }),
+
+/***/ 5761:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Gy: () => (/* binding */ postComment),
+/* harmony export */   Tu: () => (/* binding */ deleteComment),
+/* harmony export */   Vp: () => (/* binding */ AI_REVIEW_MARKER),
+/* harmony export */   Wr: () => (/* binding */ deleteReview),
+/* harmony export */   ZX: () => (/* binding */ findExistingReview),
+/* harmony export */   ic: () => (/* binding */ findExistingComment)
+/* harmony export */ });
+/* unused harmony exports formatFindingComment, createReview, INLINE_COMMENT_THRESHOLD, shouldUseInlineComments, updateComment */
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
+
+
+
+const GITHUB_API_TIMEOUT_MS = 30_000;
+const AI_REVIEW_MARKER = '### AI Code Review';
+function formatFindingComment(finding) {
+    const emoji = finding.severity === 'Critical' ? '🚨'
+        : finding.severity === 'Warning' ? '⚠️'
+            : '💡';
+    const parts = [`${emoji} **${finding.severity}**`];
+    parts.push(escapeMarkdown(finding.issue));
+    if (finding.suggestion) {
+        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
+    }
+    const action = finding.severity === 'Critical' ? finding.critical_action
+        : finding.severity === 'Warning' ? finding.warning_action
+            : finding.suggestion_action;
+    if (action && action !== 'not applicable') {
+        parts.push(`**Action:** ${escapeMarkdown(action)}`);
+    }
+    return parts.join('\n\n');
+}
+async function createReview(repo, prNumber, commitSha, findings, body, token) {
+    if (!token)
+        throw new Error('GITHUB_TOKEN required for review creation');
+    const comments = findings
+        .filter(f => f.line_start != null)
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
+    const payload = {
+        event: 'COMMENT',
+        comments,
+        commit_id: commitSha,
+    };
+    if (body)
+        payload.body = body;
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
+    const resp = await withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody.length > 200 ? '...' + errBody.slice(-200) : errBody}`, response.status);
+        }
+        return response;
+    });
+    const data = await resp.json();
+    return data.id;
+}
+async function findExistingReview(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            if (err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
+    }
+    if (page > maxPages) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
+    }
+    return null;
+}
+async function deleteReview(repo, prNumber, reviewId, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
+    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+        }
+    });
+}
+const INLINE_COMMENT_THRESHOLD = 50;
+function shouldUseInlineComments(findings) {
+    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
+async function postComment(repo, prNumber, token, body) {
+    const existingId = await findExistingComment(repo, prNumber, token);
+    if (existingId) {
+        await updateComment(repo, existingId, token, body);
+    }
+    else {
+        await createComment(repo, prNumber, token, body);
+    }
+}
+async function updateComment(repo, commentId, token, body) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const responseBody = await response.text();
+            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+        }
+    });
+}
+async function deleteComment(repo, commentId, token) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+        }
+    });
+}
+async function findExistingComment(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            // 404 means PR doesn't exist or token lacks access — skip comment update
+            if (err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw && err.status === 404)
+                return null;
+            throw err;
+        }
+        const comments = await resp.json();
+        for (const comment of comments) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER)) {
+                return comment.id;
+            }
+        }
+        if (comments.length < perPage)
+            break;
+        page++;
+    }
+    return null;
+}
+async function createComment(repo, prNumber, token, body) {
+    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
+    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const responseBody = await response.text();
+            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+        }
+    });
+}
+
+
+/***/ }),
+
+/***/ 9407:
+/***/ ((module, __webpack_exports__, __nccwpck_require__) => {
+
+__nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   ni: () => (/* binding */ withAggregateTimeout),
+/* harmony export */   od: () => (/* binding */ detectLanguage),
+/* harmony export */   pW: () => (/* binding */ runModelChainForBatch)
+/* harmony export */ });
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _openai_client_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6689);
+/* harmony import */ var _config_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(2973);
+/* harmony import */ var _review_js__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(8088);
+/* harmony import */ var _render_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(7055);
+/* harmony import */ var _github_review_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(5761);
+/* harmony import */ var _prompts_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(6896);
+/* harmony import */ var _event_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(807);
+/* harmony import */ var _model_chain_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(3818);
+/* harmony import */ var _review_schema_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(2246);
+/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(1798);
+/* harmony import */ var _rules_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(9244);
+/* harmony import */ var _metrics_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(5670);
+/* harmony import */ var _batching_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(8811);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_model_chain_js__WEBPACK_IMPORTED_MODULE_8__]);
+_model_chain_js__WEBPACK_IMPORTED_MODULE_8__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const CHAIN_TIMEOUT_MS = 120_000;
+async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
+    let timer;
+    try {
+        return await Promise.race([
+            operation(),
+            new Promise(resolve => {
+                timer = setTimeout(() => {
+                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Model chain timed out after ${timeoutMs}ms`);
+                    resolve(null);
+                }, timeoutMs);
+            }),
+        ]);
+    }
+    finally {
+        if (timer)
+            clearTimeout(timer);
+    }
+}
+async function cleanupPreviousOutput(repo, prNumber, token) {
+    // Delete ALL AI-generated comments (not just the first one)
+    let commentId;
+    while ((commentId = await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .findExistingComment */ .ic)(repo, prNumber, token)) !== null) {
+        await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .deleteComment */ .Tu)(repo, commentId, token);
+    }
+    // Delete ALL AI-generated reviews (deleting the review removes its inline comments)
+    let reviewId;
+    while ((reviewId = await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .findExistingReview */ .ZX)(repo, prNumber, token)) !== null) {
+        await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .deleteReview */ .Wr)(repo, prNumber, reviewId, token);
+    }
+}
+function providerToFormat(provider, responseFormat) {
+    return provider === 'mistral' ? 'tools' : responseFormat;
+}
+async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config) {
+    const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
+    const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
+    let batchReview = null;
+    let batchUsedModel = '';
+    let batchLastRawContent = '';
+    let batchDropped = 0;
+    for (const tagged of chain) {
+        const client = clients[tagged.provider];
+        if (!client)
+            continue;
+        try {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const result = await client.chat(tagged.id, [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: userMsg },
+            ], {
+                temperature: 0.2,
+                maxTokens: 4096,
+                schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
+                format: providerToFormat(tagged.provider, responseFormat),
+            });
+            if (result.finishReason === 'length') {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
                 continue;
             }
-            throw error;
+            if (!result.content || !result.content.trim()) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} returned empty, trying next...`);
+                continue;
+            }
+            let parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content));
+            if (!parsed.success) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} schema validation failed, retrying...`);
+                const truncatedContent = result.content.length > 500
+                    ? '...' + result.content.slice(-500)
+                    : result.content;
+                const errorSummary = parsed.error.issues.slice(0, 3)
+                    .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
+                    .join('\n');
+                const retryResult = await client.chat(tagged.id, [
+                    { role: 'system', content: systemMessage },
+                    { role: 'user', content: userMsg },
+                    { role: 'assistant', content: truncatedContent },
+                    { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
+                ], {
+                    temperature: 0.2,
+                    maxTokens: 4096,
+                    schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
+                    format: providerToFormat(tagged.provider, responseFormat),
+                });
+                if (retryResult.finishReason === 'length') {
+                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} retry truncated, trying next...`);
+                    continue;
+                }
+                parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(retryResult.content));
+                if (!parsed.success) {
+                    batchLastRawContent = retryResult.content;
+                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+                    continue;
+                }
+            }
+            batchReview = parsed.data;
+            const changedFiles = new Set(batch.files);
+            const validated = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .validateFindings */ .Fk)(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
+            for (const warning of validated.warnings)
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(warning);
+            batchReview = validated.valid;
+            batchDropped = validated.dropped;
+            batchUsedModel = tagged.id;
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Done with ${tagged.id} (${tagged.provider})`);
+            break;
+        }
+        catch (err) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
         }
     }
-    throw lastError;
+    return {
+        findings: batchReview?.findings ?? [],
+        summary: batchReview?.summary ?? '',
+        usedModel: batchUsedModel,
+        lastRawContent: batchLastRawContent,
+        dropped: batchDropped,
+    };
+}
+function validateConfig(config) {
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    const hasCustomModels = !!(config.customApiUrl && config.customModels.length > 0);
+    if (config.apiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.apiKey);
+    if (config.mistralApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.mistralApiKey);
+    if (config.groqApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.groqApiKey);
+    if (config.openRouterApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.openRouterApiKey);
+    if (config.kiloApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.kiloApiKey);
+    if (config.customApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.customApiKey);
+    if (config.customApiUrl) {
+        const url = new URL(config.customApiUrl);
+        const isLoopback = url.hostname === 'localhost'
+            || url.hostname === '127.0.0.1'
+            || url.hostname === '::1'
+            || url.hostname === '0.0.0.0';
+        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
+        }
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.customApiUrl, 'custom_api_url');
+    }
+    if (config.openRouterBaseUrl)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.openRouterBaseUrl, 'openrouter_base_url');
+    if (config.kiloBaseUrl)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.kiloBaseUrl, 'kilocode_base_url');
+    if (config.baseURL)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.baseURL, 'nim_base_url');
+    if (config.mistralBaseUrl)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.mistralBaseUrl, 'mistral_base_url');
+    if (config.groqBaseUrl)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.groqBaseUrl, 'groq_base_url');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
+    }
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running with only custom API configured — no fallback chain available if custom model fails');
+    }
+    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running with only custom API configured — no fallback chain available if custom model fails');
+    }
+}
+function buildClients(config) {
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    return {
+        nim: config.apiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.baseURL, config.apiKey, 'NIM') : null,
+        mistral: config.mistralApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
+        groq: config.groqApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
+        openrouter: config.openRouterApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
+        kilocode: config.kiloApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
+        custom: hasCustom ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.customApiUrl, config.customApiKey, 'Custom') : null,
+    };
+}
+function detectLanguage(files) {
+    const langCounts = {};
+    for (const filePath of files) {
+        const language = (0,_prompts_js__WEBPACK_IMPORTED_MODULE_6__/* .languageForFile */ .Qf)(filePath);
+        langCounts[language] = (langCounts[language] || 0) + 1;
+    }
+    return Object.entries(langCounts)
+        .filter(([language]) => language !== 'generic')
+        .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
+}
+async function prioritizeChain(chain, clients) {
+    try {
+        const fastest = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .probeModels */ .Z)(chain, clients);
+        if (fastest) {
+            const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
+            if (fastestIndex > 0) {
+                const [fastestModel] = chain.splice(fastestIndex, 1);
+                chain.unshift(fastestModel);
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
+            }
+        }
+    }
+    catch (probeErr) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Model probing failed, using original chain order: ${probeErr}`);
+    }
+}
+async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
+    const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
+    const batchResults = [];
+    for (const batch of work) {
+        if (batches.length > 1) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
+        }
+        const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
+        if (result === null) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
+        }
+        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
+    }
+    if (batches.length > 1) {
+        const merged = (0,_batching_js__WEBPACK_IMPORTED_MODULE_11__/* .mergeFindings */ .D)(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
+        return {
+            review: { findings: merged.findings, summary: merged.summary },
+            usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
+            lastRawContent: batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
+            validationDropped: batchResults.reduce((sum, result) => sum + result.dropped, 0),
+            batchCount: batches.length,
+        };
+    }
+    const result = batchResults[0];
+    return {
+        review: { findings: result.findings, summary: result.summary },
+        usedModel: result.usedModel,
+        lastRawContent: result.lastRawContent,
+        validationDropped: result.dropped,
+        batchCount: 1,
+    };
+}
+async function safeCleanup(repo, prNumber, token) {
+    try {
+        await cleanupPreviousOutput(repo, prNumber, token);
+    }
+    catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to clean up previous review output: ${err}`);
+    }
+}
+async function dispatchOutput(context) {
+    const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
+    const modelShort = usedModel.split('/').pop() || usedModel;
+    const { critical, warning, suggestion } = (0,_render_js__WEBPACK_IMPORTED_MODULE_4__/* .severityTally */ .k)(review);
+    const tally = [
+        critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
+        warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
+        suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
+    ].filter(Boolean).join(' · ');
+    const summaryBody = `${_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .AI_REVIEW_MARKER */ .Vp}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+    // Single cleanup at the start — removes ALL previous AI comments and reviews
+    await safeCleanup(repo, prNumber, token);
+    if (review.findings.length === 0) {
+        try {
+            await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Posted LGTM comment (no issues found)');
+        }
+        catch (err) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to post LGTM comment: ${err}`);
+        }
+        return { critical, warning, suggestion };
+    }
+    let body = summaryBody;
+    if (usedModel) {
+        const sections = [summaryBody, `\n${(0,_render_js__WEBPACK_IMPORTED_MODULE_4__/* .renderReview */ .F)(review)}\n`];
+        if (truncated) {
+            sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+        }
+        body = sections.join('\n');
+    }
+    else {
+        body = `${summaryBody}\nNo review content returned from any model.`;
+    }
+    if (config.promptMode === 'replace' && lastRawContent) {
+        body = `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``;
+    }
+    try {
+        await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, body);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Posted comment with ${review.findings.length} findings`);
+    }
+    catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to post comment: ${err}`);
+    }
+    return { critical, warning, suggestion };
+}
+async function writeMetrics(metrics) {
+    const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+    if (!stepSummary)
+        return;
+    try {
+        const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
+        fs.appendFileSync(stepSummary, `\n${(0,_metrics_js__WEBPACK_IMPORTED_MODULE_12__/* .formatMetrics */ .N)(metrics)}\n`);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Metrics written to step summary');
+    }
+    catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to write metrics to step summary: ${err}`);
+    }
+}
+async function run() {
+    const config = await (0,_config_js__WEBPACK_IMPORTED_MODULE_2__/* .loadConfig */ .Z9)();
+    validateConfig(config);
+    const clients = buildClients(config);
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    const chain = (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .buildCombinedChain */ .h)({
+        nimModels: config.models,
+        mistralModels: config.mistralModels,
+        groqModels: config.groqModels,
+        hasNimKey: !!config.apiKey,
+        hasMistralKey: !!config.mistralApiKey,
+        hasGroqKey: !!config.groqApiKey,
+        openrouterModels: config.openRouterModels,
+        hasOpenRouterKey: !!config.openRouterApiKey,
+        kiloModels: config.kiloModels,
+        hasKiloKey: !!config.kiloApiKey,
+        customModel: config.customModel,
+        hasCustomConfig: hasCustom,
+        customModels: config.customModels,
+        hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+    });
+    const event = (0,_event_js__WEBPACK_IMPORTED_MODULE_7__/* .loadEvent */ .D)();
+    const prNumber = event.pull_request.number;
+    const repo = process.env.GITHUB_REPOSITORY;
+    if (!repo)
+        throw new Error('GITHUB_REPOSITORY not set');
+    const token = process.env.GITHUB_TOKEN;
+    if (!token)
+        throw new Error('GITHUB_TOKEN not set');
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing PR #${prNumber} in ${repo}`);
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
+    const rules = (0,_rules_js__WEBPACK_IMPORTED_MODULE_13__/* .parseRules */ .NR)(config.customRules);
+    const rulesValidation = (0,_rules_js__WEBPACK_IMPORTED_MODULE_13__/* .validateRules */ .WH)(rules);
+    if (!rulesValidation.valid)
+        for (const err of rulesValidation.errors)
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(err);
+    if (rules.length > 0)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Loaded ${rules.length} custom rule(s)`);
+    const reviewStartTime = Date.now();
+    let filesDiff;
+    try {
+        filesDiff = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .fetchDiff */ .O8)(repo, prNumber, token);
+    }
+    catch (err) {
+        if (err instanceof _review_js__WEBPACK_IMPORTED_MODULE_3__/* .DiffTooLargeError */ .BR) {
+            try {
+                await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, `### AI Code Review\n\n${err.message}`);
+            }
+            catch (postErr) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to post diff-too-large comment: ${postErr}`);
+            }
+            return;
+        }
+        throw err;
+    }
+    const reviewableFiles = Object.keys(filesDiff).sort().filter(file => !(0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .shouldExclude */ .Ip)(file, config.excludePatterns));
+    if (reviewableFiles.length === 0) {
+        await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).');
+        return;
+    }
+    const filesToReview = reviewableFiles.slice(0, config.maxFiles);
+    const truncated = reviewableFiles.length > config.maxFiles;
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing ${filesToReview.length} files...`);
+    const detectedLanguage = detectLanguage(filesToReview);
+    if (detectedLanguage)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Detected language: ${detectedLanguage}`);
+    await prioritizeChain(chain, clients);
+    const filesDiffMap = {};
+    for (const file of filesToReview)
+        filesDiffMap[file] = filesDiff[file] || '';
+    const batches = filesToReview.length > 50 ? (0,_batching_js__WEBPACK_IMPORTED_MODULE_11__/* .batchFiles */ .u)(filesDiffMap, 50) : [];
+    const useBatching = batches.length > 1;
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
+    const systemMessage = (0,_prompts_js__WEBPACK_IMPORTED_MODULE_6__/* .buildSystemMessage */ .HB)(config.promptMode, config.systemPrompt, detectedLanguage, rules);
+    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
+    const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
+    await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
+}
+const inTest = process.argv.includes('--test') || !!process.env.NODE_TEST_CONTEXT;
+if (!inTest) {
+    run().catch(err => {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(err instanceof Error ? err.message : String(err));
+    });
 }
 
-;// CONCATENATED MODULE: ./src/openai-client.ts
+__webpack_async_result__();
+} catch(e) { __webpack_async_result__(e); } });
+
+/***/ }),
+
+/***/ 5670:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   N: () => (/* binding */ formatMetrics)
+/* harmony export */ });
+function formatMetrics(metrics) {
+    const duration = metrics.review_duration_ms > 0
+        ? `${(metrics.review_duration_ms / 1000).toFixed(1)}s`
+        : 'N/A';
+    const totalFindings = metrics.findings_count.critical
+        + metrics.findings_count.warning
+        + metrics.findings_count.suggestion;
+    const lines = [
+        '## Review Metrics',
+        '',
+        '| Metric | Value |',
+        '|--------|-------|',
+        `| Model | \`${metrics.model_used}\` |`,
+        `| Files reviewed | ${metrics.files_reviewed} |`,
+        `| Duration | ${duration} |`,
+        `| Total findings | ${totalFindings} |`,
+        '',
+        '### Severity Breakdown',
+        '',
+        '| Severity | Count |',
+        '|----------|-------|',
+        `| 🚨 Critical | ${metrics.findings_count.critical} |`,
+        `| ⚠️ Warning | ${metrics.findings_count.warning} |`,
+        `| 💡 Suggestion | ${metrics.findings_count.suggestion} |`,
+    ];
+    if (metrics.validation_dropped > 0) {
+        lines.push('');
+        lines.push(`**Validation:** ${metrics.validation_dropped} finding(s) dropped by validation`);
+    }
+    if (metrics.batch_count > 1) {
+        lines.push('');
+        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.round(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
+    }
+    return lines.join('\n');
+}
+
+
+/***/ }),
+
+/***/ 3818:
+/***/ ((module, __webpack_exports__, __nccwpck_require__) => {
+
+__nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Z: () => (/* binding */ probeModels),
+/* harmony export */   h: () => (/* binding */ buildCombinedChain)
+/* harmony export */ });
+/* harmony import */ var _bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7911);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__]);
+_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
+
+/**
+ * Build the model fallback chain.
+ *
+ * Custom models (no SWE-bench score) are always first — never sorted
+ * alongside provider models.
+ *
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * and sorted by SWE-bench score descending as the fallback chain.
+ *
+ * Free-tier models (IDs ending with :free) are forced to rank last within
+ * the provider group, after all non-free models.
+ *
+ * Only includes models whose provider key is available.
+ */
+function buildCombinedChain(opts) {
+    const providerModels = [];
+    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
+    if (opts.hasNimKey) {
+        for (const id of opts.nimModels) {
+            providerModels.push({ id, provider: 'nim' });
+        }
+    }
+    if (opts.hasMistralKey) {
+        for (const id of opts.mistralModels) {
+            providerModels.push({ id, provider: 'mistral' });
+        }
+    }
+    if (hasGroqKey) {
+        for (const id of groqModels) {
+            providerModels.push({ id, provider: 'groq' });
+        }
+    }
+    if (hasOpenRouterKey) {
+        for (const id of openrouterModels) {
+            providerModels.push({ id, provider: 'openrouter' });
+        }
+    }
+    if (hasKiloKey) {
+        for (const id of kiloModels) {
+            providerModels.push({ id, provider: 'kilocode' });
+        }
+    }
+    providerModels.sort((a, b) => {
+        const scoreA = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(a.id);
+        const scoreB = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(b.id);
+        return scoreB - scoreA;
+    });
+    const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
+    const free = providerModels.filter(m => m.id.endsWith(':free'));
+    const sortedProviderModels = [...nonFree, ...free];
+    const customModels = [];
+    if (opts.hasCustomModels && opts.customModels) {
+        for (const id of opts.customModels) {
+            customModels.push({ id, provider: 'custom' });
+        }
+    }
+    if (opts.customModel && opts.hasCustomConfig) {
+        customModels.push({ id: opts.customModel, provider: 'custom' });
+    }
+    return [...customModels, ...sortedProviderModels];
+}
+const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_CONCURRENCY = 3;
+async function probeModels(chain, clients) {
+    const available = [];
+    for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
+        const batch = chain.slice(i, i + PROBE_CONCURRENCY);
+        const probes = batch.map(async (tagged) => {
+            const client = clients[tagged.provider];
+            if (!client)
+                return null;
+            let timer;
+            try {
+                const start = Date.now();
+                const ok = await Promise.race([
+                    client.probeModel(tagged.id),
+                    new Promise((_, reject) => {
+                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
+                    }),
+                ]);
+                if (ok)
+                    return { model: tagged, latency: Date.now() - start };
+                return null;
+            }
+            catch {
+                return null;
+            }
+            finally {
+                if (timer)
+                    clearTimeout(timer);
+            }
+        });
+        const results = await Promise.all(probes);
+        for (const r of results) {
+            if (r !== null)
+                available.push(r);
+        }
+    }
+    if (available.length === 0)
+        return null;
+    available.sort((a, b) => a.latency - b.latency);
+    return available[0].model;
+}
+
+__webpack_async_result__();
+} catch(e) { __webpack_async_result__(e); } });
+
+/***/ }),
+
+/***/ 6689:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   gP: () => (/* binding */ OpenAIClient)
+/* harmony export */ });
+/* unused harmony exports parseRetryAfter, sanitizeErrorBody */
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(9809);
 
 function parseRetryAfter(value, now = Date.now()) {
     if (!value)
@@ -27604,7 +27125,7 @@ class OpenAIClient {
             }
         }
         const start = Date.now();
-        const resp = await retry_withRetry(async () => {
+        const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .bD)(async () => {
             const response = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27617,7 +27138,7 @@ class OpenAIClient {
             if (!response.ok) {
                 const body = await response.text();
                 const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new retry_RetryableError(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
             }
             return response;
         });
@@ -27627,7 +27148,7 @@ class OpenAIClient {
         }
         catch (err) {
             if (err instanceof SyntaxError) {
-                throw new retry_RetryableError(`${this.providerLabel} returned non-JSON response`, 502);
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel} returned non-JSON response`, 502);
             }
             throw err;
         }
@@ -27662,7 +27183,7 @@ class OpenAIClient {
             max_tokens: opts.maxTokens ?? 1024,
             stream: true,
         };
-        const resp = await retry_withRetry(async () => {
+        const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .bD)(async () => {
             const r = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27676,7 +27197,7 @@ class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new retry_RetryableError(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
             }
             return r;
         });
@@ -27751,383 +27272,260 @@ class OpenAIClient {
     }
 }
 
-;// CONCATENATED MODULE: ./src/config.ts
+
+/***/ }),
+
+/***/ 6896:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
-function splitCSV(s) {
-    return s.split(',').map(item => item.trim()).filter(item => item !== '');
-}
-async function loadConfig() {
-    const rawPromptMode = lib_core.getInput('nim_prompt_mode') || 'append';
-    if (rawPromptMode !== 'append' && rawPromptMode !== 'replace') {
-        lib_core.warning(`Invalid nim_prompt_mode "${rawPromptMode}", defaulting to "append"`);
-    }
-    const promptMode = rawPromptMode === 'replace' ? 'replace' : 'append';
-    const config = {
-        baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
-        apiKey: lib_core.getInput('nim_api_key'),
-        models: splitCSV(lib_core.getInput('nim_models')),
-        mistralApiKey: lib_core.getInput('mistral_api_key') || '',
-        mistralBaseUrl: lib_core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-        mistralModels: splitCSV(lib_core.getInput('mistral_models') ||
-            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
-        groqApiKey: lib_core.getInput('groq_api_key') || '',
-        groqModels: splitCSV(lib_core.getInput('groq_models') ||
-            'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
-        groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
-        openRouterApiKey: lib_core.getInput('openrouter_api_key') || '',
-        openRouterBaseUrl: lib_core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
-        openRouterModels: [],
-        openRouterFreeOnly: lib_core.getInput('openrouter_free_only') === 'true',
-        kiloApiKey: lib_core.getInput('kilocode_api_key') || '',
-        kiloBaseUrl: lib_core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
-        kiloModels: [],
-        kiloFreeOnly: lib_core.getInput('kilocode_free_only') === 'true',
-        customApiUrl: lib_core.getInput('custom_api_url') || '',
-        customModel: lib_core.getInput('custom_model') || '',
-        customApiKey: lib_core.getInput('custom_api_key') || '',
-        customModels: splitCSV(lib_core.getInput('custom_models') || ''),
-        customModelsBaseUrl: lib_core.getInput('custom_models_base_url') || lib_core.getInput('custom_api_url') || '',
-        maxFiles: (() => {
-            const raw = lib_core.getInput('max_files') || '100';
-            const parsed = Number.parseInt(raw, 10);
-            if (!/^[+]?\d+$/.test(raw.trim()) || !Number.isInteger(parsed) || parsed <= 0 || parsed > 500) {
-                lib_core.warning(`Invalid max_files "${raw}", must be 1-500. Defaulting to 100.`);
-                return 100;
-            }
-            return parsed;
-        })(),
-        excludePatterns: splitCSV(lib_core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
-        systemPrompt: lib_core.getInput('nim_system_prompt'),
-        promptMode,
-        customRules: lib_core.getInput('custom_rules') || '',
-        revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
-    };
-    const openRouterInput = splitCSV(lib_core.getInput('openrouter_models'));
-    if (openRouterInput.length > 0) {
-        config.openRouterModels = filterFreeOnly(openRouterInput, config.openRouterFreeOnly, 'OpenRouter');
-    }
-    else if (config.openRouterApiKey) {
-        config.openRouterModels = await fetchFreeModels(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter');
-    }
-    const kiloInput = splitCSV(lib_core.getInput('kilocode_models'));
-    if (kiloInput.length > 0) {
-        config.kiloModels = filterFreeOnly(kiloInput, config.kiloFreeOnly, 'Kilo');
-    }
-    else if (config.kiloApiKey) {
-        config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
-    }
-    return config;
-}
-function isFreeModel(model) {
-    return model.toLowerCase().includes('free');
-}
-function filterFreeOnly(models, enabled, providerLabel) {
-    if (!enabled)
-        return models;
-    const free = models.filter(isFreeModel);
-    const dropped = models.length - free.length;
-    if (dropped > 0) {
-        lib_core.info(`${providerLabel}: filtered out ${dropped} non-free model(s), keeping ${free.length} free-tier model(s)`);
-    }
-    return free;
-}
-async function fetchFreeModels(baseURL, apiKey, providerLabel) {
-    try {
-        const client = new OpenAIClient(baseURL, apiKey, providerLabel);
-        const models = await client.listModels();
-        const free = models.filter(isFreeModel);
-        lib_core.info(`${providerLabel}: fetched ${models.length} models, ${free.length} free-tier`);
-        return free;
-    }
-    catch (err) {
-        lib_core.warning(`${providerLabel}: could not fetch model list: ${err}`);
-        return [];
-    }
-}
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  HB: () => (/* binding */ buildSystemMessage),
+  Qf: () => (/* binding */ languageForFile)
+});
 
-;// CONCATENATED MODULE: ./src/validation.ts
+// UNUSED EXPORTS: BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE, buildSystemPrompt, languagePrompts
 
-function validateCodeContext(finding, diff) {
-    const issue = finding.issue;
-    const warnings = [];
-    function nameInDiff(name) {
-        const MAX_NAME_LENGTH = 80;
-        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-        const lowerDiff = diff.toLowerCase();
-        const lowerName = safeName.toLowerCase();
-        let idx = 0;
-        while (true) {
-            idx = lowerDiff.indexOf(lowerName, idx);
-            if (idx === -1)
-                return false;
-            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
-            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
-            if (before && after)
-                return true;
-            idx += 1;
-        }
-    }
-    // Check for backtick-wrapped identifiers (most reliable)
-    const backtickRefs = issue.match(/`(\w+)`/g);
-    if (backtickRefs) {
-        for (const ref of backtickRefs) {
-            const name = ref.slice(1, -1);
-            if (name.length > 2 && !nameInDiff(name)) {
-                warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
-            }
-        }
-    }
-    // Check for explicit references like "function X", "variable X", "class X"
-    const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
-    if (explicitRef) {
-        const name = explicitRef[1];
-        if (name.length > 2 && !nameInDiff(name)) {
-            warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
-        }
-    }
-    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
-}
-async function revalidateFindings(findings, diff, client, model) {
-    if (findings.length === 0)
-        return { valid: [], dropped: 0 };
-    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`).join('\n');
-    const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
-For each finding, determine if it is a REAL issue or a HALLUCINATION (not supported by the code).
-
-Findings:
-${findingsText}
-
-Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
-Example: [true, false, true]`;
-    const MAX_DIFF_LENGTH = 8000;
-    let truncatedDiff = diff;
-    if (diff.length > MAX_DIFF_LENGTH) {
-        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
-        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
-    }
-    try {
-        const result = await client.chat(model, [
-            { role: 'system', content: 'You are a validation assistant. Respond only with a JSON array of booleans.' },
-            { role: 'user', content: `${prompt}\n\nDiff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` },
-        ], {
-            temperature: 0,
-            maxTokens: 256,
-        });
-        let parsed;
-        try {
-            parsed = JSON.parse(result.content);
-        }
-        catch {
-            lib_core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
-            return { valid: findings, dropped: 0 };
-        }
-        if (!Array.isArray(parsed))
-            return { valid: findings, dropped: 0 };
-        if (parsed.length < findings.length) {
-            lib_core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
-        }
-        const valid = [];
-        let dropped = 0;
-        for (let i = 0; i < findings.length; i++) {
-            const decision = i >= parsed.length ? true : parsed[i];
-            if (decision === true) {
-                valid.push(findings[i]);
-            }
-            else {
-                dropped++;
-            }
-        }
-        return { valid, dropped };
-    }
-    catch {
-        lib_core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
-        return { valid: findings, dropped: 0 };
-    }
-}
-
-;// CONCATENATED MODULE: ./src/review.ts
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+// EXTERNAL MODULE: ./src/review-schema.ts + 17 modules
+var review_schema = __nccwpck_require__(2246);
+// EXTERNAL MODULE: ./src/rules.ts
+var src_rules = __nccwpck_require__(9244);
+;// CONCATENATED MODULE: ./src/prompts.ts
 
 
-const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
-function parseDiff(raw) {
-    const files = {};
-    const chunks = raw.split('diff --git ');
-    for (const chunk of chunks) {
-        const trimmed = chunk.trim();
-        if (!trimmed)
-            continue;
-        const diffText = 'diff --git ' + trimmed;
-        const firstLine = diffText.split('\n')[0];
-        const m = firstLine.match(diffHeaderRe);
-        if (m) {
-            files[m[2]] = diffText;
-        }
-    }
-    return files;
-}
-const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-function parseDiffHunks(diffText) {
-    const ranges = [];
-    for (const line of diffText.split('\n')) {
-        const m = line.match(hunkHeaderRe);
-        if (m) {
-            const start = parseInt(m[1], 10);
-            const count = m[2] ? parseInt(m[2], 10) : 1;
-            ranges.push({ start, end: start + count - 1 });
-        }
-    }
-    return ranges;
-}
-function getFileHunks(filesDiff) {
-    const map = new Map();
-    for (const [file, diffText] of Object.entries(filesDiff)) {
-        map.set(file, parseDiffHunks(diffText));
-    }
-    return map;
-}
-async function validateFindings(review, filesDiff, changedFiles, client, model) {
-    const warnings = [];
-    const hunks = getFileHunks(filesDiff);
-    const validFindings = [];
-    for (const f of review.findings) {
-        if (!changedFiles.has(f.file)) {
-            warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_end != null && f.line_start == null) {
-            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
-            warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
-            continue;
-        }
-        if (f.line_start != null) {
-            const fileHunks = hunks.get(f.file) || [];
-            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
-            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
-            const overlaps = fileHunks.some(h => {
-                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
-                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
-            });
-            if (!overlaps) {
-                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
-                continue;
-            }
-        }
-        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
-        if (codeContext.reason) {
-            warnings.push(`${codeContext.reason} in "${f.file}"`);
-        }
-        validFindings.push(f);
-    }
-    // Step 5: Optional LLM re-validation to catch hallucinated findings
-    let dropped = 0;
-    if (client && model && validFindings.length > 0) {
-        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
-        validFindings.length = 0;
-        validFindings.push(...revalidated.valid);
-        dropped = revalidated.dropped;
-    }
-    if (validFindings.length === 0 && !review.summary) {
-        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
-    }
-    return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
-}
-function globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-    return regex.test(str);
-}
-function shouldExclude(filePath, patterns) {
-    for (const pat of patterns) {
-        if (globMatch(filePath, pat))
-            return true;
-        if (globMatch(filePath.split('/').pop() || '', pat))
-            return true;
-    }
-    return false;
-}
-class DiffTooLargeError extends Error {
-    sizeMB;
-    constructor(sizeMB) {
-        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
-        this.name = 'DiffTooLargeError';
-        this.sizeMB = sizeMB;
-    }
-}
-async function fetchDiff(repo, prNumber, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github.v3.diff',
-            },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
-        }
-        return response;
-    });
-    const raw = await resp.text();
-    const byteLength = new TextEncoder().encode(raw).byteLength;
-    if (byteLength > 5 * 1024 * 1024) {
-        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
-    }
-    return parseDiff(raw);
-}
-const GITHUB_API_TIMEOUT_MS = 30_000;
 
-;// CONCATENATED MODULE: ./src/utils.ts
-function safeParseJson(content) {
-    const trimmed = content.trim();
-    if (!trimmed)
-        return undefined;
-    try {
-        return JSON.parse(trimmed);
-    }
-    catch {
-        return undefined;
+const SEVERITY_GUIDANCE = `## Severity Classification
+
+Assign exactly one severity to each finding. Use this decision tree:
+
+**Critical** — Blocks release. Requires immediate action.
+- Security vulnerabilities (injection, auth bypass, data exposure)
+- Data loss or corruption risks
+- Race conditions causing incorrect behavior
+- Undefined behavior (C/C++: buffer overflow, use-after-free)
+- Logic bugs that break core functionality
+
+**Warning** — Should be fixed before merge. Needs investigation.
+- Likely bugs (wrong variable, off-by-one, missing null check)
+- Resource leaks (unclosed handles, goroutine leaks)
+- Error handling gaps (swallowed errors, bare returns)
+- Maintainability issues (complex conditionals, unclear control flow)
+- Performance issues (unnecessary allocations, N+1 queries)
+
+**Suggestion** — Nice to have. Improve if convenient.
+- Style and readability (naming, formatting, organization)
+- Minor optimizations with negligible impact
+- Idiomatic alternatives (language-specific conventions)
+- Documentation improvements
+
+## Anti-Patterns (DO NOT flag these)
+- Import statements or dependency additions
+- Test files for style issues (only flag correctness bugs in tests)
+- Auto-generated code or lock files
+- Formatting-only changes in non-logic files
+- Files outside the diff (only review changed code)
+
+## Action Fields
+For the two action fields that do not match the severity, write "not applicable".
+The schema requires all three on every finding.`;
+const languagePromptData = {
+    go: {
+        role: 'You are an expert Go engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Goroutine leaks and channel misuse',
+            'Race conditions (missing sync primitives)',
+            'Swallowed errors and bare returns',
+            'Resource leaks (unclosed files, HTTP bodies, DB connections)',
+            'Nil pointer dereferences and missing checks',
+        ],
+        antiPatterns: [
+            'defer in loops (defer runs at function exit, not iteration)',
+            'String concatenation in loops (use strings.Builder)',
+            'Unnecessary interface conversions',
+            'fmt.Sprintf in hot paths',
+        ],
+        severityCalibration: [
+            'Goroutine leak without context cancellation → Critical',
+            'Missing error check on non-nil return → Warning',
+            'Using fmt.Errorf instead of errors.Join → Suggestion',
+        ],
+    },
+    python: {
+        role: 'You are an expert Python engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Mutable default arguments in function signatures',
+            'Bare except clauses and broad exception handling',
+            'Resource management (context managers vs manual close)',
+            'Type safety and mypy compatibility',
+            'Security: injection, unsafe eval/exec',
+        ],
+        antiPatterns: [
+            'Flagging missing type hints on third-party library code',
+            'Style issues in auto-generated or vendored files',
+            'Unused imports in test fixtures',
+        ],
+        severityCalibration: [
+            'SQL injection via string formatting → Critical',
+            'Mutable default argument that mutates → Warning',
+            'Missing type hints on new function → Suggestion',
+        ],
+    },
+    typescript: {
+        role: 'You are an expert TypeScript/JavaScript engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Async/await misuse and unhandled promise rejections',
+            'Type safety: any usage, unsafe assertions',
+            'Null/undefined handling and optional chaining',
+            'Memory leaks (event listeners, timers, subscriptions)',
+            'Security: XSS, prototype pollution',
+        ],
+        antiPatterns: [
+            'Flagging React imports or JSX patterns',
+            'Style issues in generated type declarations',
+            'Linting rules the project already enforces',
+        ],
+        severityCalibration: [
+            'Unhandled promise rejection in critical path → Critical',
+            'Missing cleanup in useEffect → Warning',
+            'Using enum instead of const object → Suggestion',
+        ],
+    },
+    java: {
+        role: 'You are an expert Java engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Resource management (try-with-resources, AutoCloseable)',
+            'Thread safety (volatile, synchronized, concurrent collections)',
+            'Null pointer risks and Optional usage',
+            'Exception handling (catching too broadly, swallowed exceptions)',
+            'Security: SQL injection, deserialization',
+        ],
+        antiPatterns: [
+            'Flagging Lombok annotations or boilerplate',
+            'Style issues in generated code',
+            'Import ordering conventions',
+        ],
+        severityCalibration: [
+            'SQL injection via string concatenation → Critical',
+            'Resource leak without try-with-resources → Warning',
+            'Using raw type instead of generic → Suggestion',
+        ],
+    },
+    rust: {
+        role: 'You are an expert Rust engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Unsafe code blocks and their invariants',
+            'Unwrap/expect calls that could panic in production',
+            'Lifetime issues and borrow checker violations',
+            'Error handling (Result vs panic, thiserror vs anyhow)',
+            'Performance: unnecessary clones and allocations',
+        ],
+        antiPatterns: [
+            'Flagging #[allow(unused)] in test modules',
+            'Style issues in macro-generated code',
+            'Naming conventions in third-party bindings',
+        ],
+        severityCalibration: [
+            'unwrap() on user input or network response → Critical',
+            'clone() where borrow would suffice → Warning',
+            'Using format! in logging macros → Suggestion',
+        ],
+    },
+    cpp: {
+        role: 'You are an expert C/C++ engineer reviewing code for correctness, safety, and idiomatic patterns.',
+        focusAreas: [
+            'Memory safety: buffer overflows, use-after-free, double-free',
+            'Null pointer dereferences and missing null checks',
+            'Resource leaks (memory, file handles, sockets)',
+            'Undefined behavior (signed overflow, strict aliasing)',
+            'Thread safety and data races',
+        ],
+        antiPatterns: [
+            'Flagging include order in system headers',
+            'Style issues in auto-generated bindings',
+            'Naming in external API wrappers',
+        ],
+        severityCalibration: [
+            'Buffer overflow via unchecked index → Critical',
+            'Raw pointer without RAII wrapper → Warning',
+            'C-style cast instead of static_cast → Suggestion',
+        ],
+    },
+};
+const languagePrompts = {};
+for (const [lang, data] of Object.entries(languagePromptData)) {
+    languagePrompts[lang] = [
+        data.role,
+        '',
+        'Focus areas (prioritize these):',
+        ...data.focusAreas.map(a => `- ${a}`),
+        '',
+        'Anti-patterns (do NOT flag these):',
+        ...data.antiPatterns.map(a => `- ${a}`),
+        '',
+        'Severity calibration:',
+        ...data.severityCalibration.map(s => `- ${s}`),
+        '',
+        SEVERITY_GUIDANCE,
+        '',
+        review_schema/* JSON_SCHEMA_DEFINITION */.n5,
+    ].join('\n');
+}
+function languageForFile(filePath) {
+    const ext = (0,external_node_path_namespaceObject.extname)(filePath).toLowerCase();
+    switch (ext) {
+        case '.go': return 'go';
+        case '.py': return 'python';
+        case '.ts':
+        case '.tsx':
+        case '.js':
+        case '.jsx': return 'typescript';
+        case '.java': return 'java';
+        case '.rs': return 'rust';
+        case '.cpp':
+        case '.c':
+        case '.h':
+        case '.hpp': return 'cpp';
+        default: return 'generic';
     }
 }
-function utils_escapeMarkdown(text) {
-    return text.replace(/[\\*_{}\[\]()#`>+~|!<&]/g, '\\$&');
+const GENERIC_PROMPT = [
+    'You are an expert senior software engineer performing a code review.',
+    'Analyse the diff for bugs, security issues, performance problems, and style/readability concerns.',
+    '',
+    SEVERITY_GUIDANCE,
+    '',
+    review_schema/* JSON_SCHEMA_DEFINITION */.n5,
+].join('\n');
+const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (GENERIC_PROMPT));
+function buildSystemMessage(promptMode, systemPrompt, language, rules) {
+    const base = buildSystemPrompt(language, rules);
+    if (promptMode === 'replace') {
+        return systemPrompt
+            ? `${systemPrompt}\n\n## Framework guidance\n${review_schema/* JSON_SCHEMA_DEFINITION */.n5}\n${SEVERITY_GUIDANCE}`
+            : base;
+    }
+    return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
 }
-function validateProviderUrl(url, label) {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase();
-    // Block known metadata hostnames
-    if (hostname === 'metadata.google.internal') {
-        throw new Error(`${label} blocked: metadata.google.internal is a cloud metadata endpoint`);
-    }
-    // Block IPv4 link-local (169.254.0.0/16 — covers AWS/Azure metadata at 169.254.169.254)
-    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-    if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
-        throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
-    }
-    // Block IPv6 link-local (fe80::/10 — covers fe80:: through febf::)
-    if (/^fe[89ab][0-9a-f]*:/i.test(hostname)) {
-        throw new Error(`${label} blocked: ${hostname} is an IPv6 link-local address`);
-    }
-    // Block IPv4-mapped IPv6 link-local (::ffff:169.254.x.x)
-    if (hostname.startsWith('::ffff:')) {
-        const mappedIpv4 = hostname.slice(7);
-        const ipv4Match = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-        if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
-            throw new Error(`${label} blocked: ${hostname} is an IPv4-mapped link-local address (cloud metadata endpoint)`);
-        }
-    }
-    // Block AWS IPv6 metadata endpoint (fd00:ec2::254)
-    if (hostname === 'fd00:ec2::254') {
-        throw new Error(`${label} blocked: ${hostname} is an AWS metadata endpoint`);
-    }
+function buildSystemPrompt(language, rules) {
+    const base = (language && languagePrompts[language]) ? languagePrompts[language] : GENERIC_PROMPT;
+    const rulesSection = (0,src_rules/* formatRulesForPrompt */.C5)(rules || []);
+    return rulesSection ? `${base}\n\n${rulesSection}` : base;
 }
 
-;// CONCATENATED MODULE: ./src/render.ts
+
+/***/ }),
+
+/***/ 7055:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   F: () => (/* binding */ renderReview),
+/* harmony export */   k: () => (/* binding */ severityTally)
+/* harmony export */ });
+/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(1798);
 
 const SEVERITY_META = {
     Critical: { emoji: '🚨', label: 'Critical', actionKey: 'critical_action', tag: 'Must-fix' },
@@ -28170,246 +27568,86 @@ function renderReview(review) {
                 const lineInfo = f.line_start != null
                     ? `  **Line:** ${f.line_start}${f.line_end != null && f.line_end !== f.line_start ? '-' + f.line_end : ''}\n`
                     : '';
-                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${utils_escapeMarkdown(f.suggestion)}` : '';
+                const suggestionInfo = f.suggestion ? `\n  **Suggestion:** ${(0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(f.suggestion)}` : '';
                 const matchAction = f[meta.actionKey];
                 const actionLine = (typeof matchAction === 'string' && matchAction && matchAction !== 'not applicable')
-                    ? `\n  - **${meta.tag}:** ${utils_escapeMarkdown(matchAction)}`
+                    ? `\n  - **${meta.tag}:** ${(0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(matchAction)}`
                     : '';
-                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${utils_escapeMarkdown(f.issue)}${actionLine}${suggestionInfo}`);
+                lines.push(`- ${meta.emoji} **${meta.label}**\n${lineInfo}  **Issue:** ${(0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(f.issue)}${actionLine}${suggestionInfo}`);
             }
             lines.push('');
         }
     }
     if (review.summary) {
-        lines.push(`**Summary:** ${utils_escapeMarkdown(review.summary)}`);
+        lines.push(`**Summary:** ${(0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(review.summary)}`);
     }
     return lines.join('\n');
 }
 
-;// CONCATENATED MODULE: ./src/github-review.ts
 
+/***/ }),
 
+/***/ 9809:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
-const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
-const AI_REVIEW_MARKER = '### AI Code Review';
-function formatFindingComment(finding) {
-    const emoji = finding.severity === 'Critical' ? '🚨'
-        : finding.severity === 'Warning' ? '⚠️'
-            : '💡';
-    const parts = [`${emoji} **${finding.severity}**`];
-    parts.push(escapeMarkdown(finding.issue));
-    if (finding.suggestion) {
-        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   bD: () => (/* binding */ withRetry),
+/* harmony export */   dw: () => (/* binding */ RetryableError)
+/* harmony export */ });
+/* unused harmony export getRetryDelay */
+class RetryableError extends Error {
+    status;
+    retryAfterMs;
+    constructor(message, status, retryAfterMs) {
+        super(message);
+        this.name = 'RetryableError';
+        this.status = status;
+        this.retryAfterMs = retryAfterMs;
     }
-    const action = finding.severity === 'Critical' ? finding.critical_action
-        : finding.severity === 'Warning' ? finding.warning_action
-            : finding.suggestion_action;
-    if (action && action !== 'not applicable') {
-        parts.push(`**Action:** ${escapeMarkdown(action)}`);
-    }
-    return parts.join('\n\n');
 }
-async function createReview(repo, prNumber, commitSha, findings, body, token) {
-    if (!token)
-        throw new Error('GITHUB_TOKEN required for review creation');
-    const comments = findings
-        .filter(f => f.line_start != null)
-        .map(f => {
-        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
-        const comment = {
-            path: f.file,
-            line: isMultiLine ? f.line_end : f.line_start,
-            body: formatFindingComment(f),
-            side: 'RIGHT',
-        };
-        if (isMultiLine) {
-            const start = f.line_start;
-            const end = f.line_end;
-            if (start != null && end > start) {
-                comment.start_line = start;
-            }
-        }
-        return comment;
-    });
-    const payload = {
-        event: 'COMMENT',
-        comments,
-        commit_id: commitSha,
-    };
-    if (body)
-        payload.body = body;
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
-    const resp = await withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody.length > 200 ? '...' + errBody.slice(-200) : errBody}`, response.status);
-        }
-        return response;
-    });
-    const data = await resp.json();
-    return data.id;
+function getRetryDelay(error, attempt, delayMs) {
+    const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
+    const retryAfterMs = error instanceof RetryableError ? error.retryAfterMs ?? 0 : 0;
+    return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
 }
-async function findExistingReview(repo, prNumber, token) {
-    let page = 1;
-    const perPage = 100;
-    const maxPages = 50;
-    while (page <= maxPages) {
-        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
-        let resp;
+async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
+    let lastError;
+    for (let i = 0; i < maxRetries + 1; i++) {
         try {
-            resp = await retry_withRetry(async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/vnd.github+json',
-                    },
-                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-                });
-                if (!response.ok) {
-                    const body = await response.text();
-                    throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
-                }
-                return response;
-            });
+            return await fn();
         }
-        catch (err) {
-            if (err instanceof retry_RetryableError && err.status === 404)
-                return null;
-            throw err;
-        }
-        const reviews = await resp.json();
-        for (const review of reviews) {
-            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
-                return review.id;
+        catch (error) {
+            lastError = error;
+            const status = error instanceof RetryableError ? error.status : 0;
+            const isFetchNetworkError = error instanceof TypeError &&
+                /fetch|network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(error.message);
+            if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
+                const delay = getRetryDelay(error, i, delayMs);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
             }
+            throw error;
         }
-        if (reviews.length < perPage)
-            break;
-        page++;
     }
-    if (page > maxPages) {
-        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
-    }
-    return null;
-}
-async function deleteReview(repo, prNumber, reviewId, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
-    await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
-        }
-    });
-}
-const INLINE_COMMENT_THRESHOLD = 50;
-function shouldUseInlineComments(findings) {
-    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
-}
-async function postComment(repo, prNumber, token, body) {
-    const existingId = await findExistingComment(repo, prNumber, token);
-    if (existingId) {
-        await deleteComment(repo, existingId, token);
-    }
-    await createComment(repo, prNumber, token, body);
-}
-async function deleteComment(repo, commentId, token) {
-    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
-        }
-    });
-}
-async function findExistingComment(repo, prNumber, token) {
-    let page = 1;
-    const perPage = 100;
-    const maxPages = 50;
-    while (page <= maxPages) {
-        const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-        let resp;
-        try {
-            resp = await retry_withRetry(async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/vnd.github+json',
-                    },
-                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-                });
-                if (!response.ok) {
-                    const body = await response.text();
-                    throw new retry_RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
-                }
-                return response;
-            });
-        }
-        catch (err) {
-            // 404 means PR doesn't exist or token lacks access — skip comment update
-            if (err instanceof retry_RetryableError && err.status === 404)
-                return null;
-            throw err;
-        }
-        const comments = await resp.json();
-        for (const comment of comments) {
-            if (comment.body.startsWith(AI_REVIEW_MARKER)) {
-                return comment.id;
-            }
-        }
-        if (comments.length < perPage)
-            break;
-        page++;
-    }
-    return null;
-}
-async function createComment(repo, prNumber, token, body) {
-    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const responseBody = await response.text();
-            throw new retry_RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
-        }
-    });
+    throw lastError;
 }
 
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+
+/***/ }),
+
+/***/ 2246:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  n5: () => (/* binding */ JSON_SCHEMA_DEFINITION),
+  uA: () => (/* binding */ ReviewJsonSchema),
+  uZ: () => (/* binding */ ReviewSchema)
+});
+
+// UNUSED EXPORTS: ReviewFindingSchema
+
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/core.js
 var _a;
 /** A special constant with type `never` */
@@ -36191,7 +35429,274 @@ const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```json\n'
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
 
-;// CONCATENATED MODULE: ./src/rules.ts
+
+/***/ }),
+
+/***/ 8088:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  BR: () => (/* binding */ DiffTooLargeError),
+  O8: () => (/* binding */ fetchDiff),
+  Ip: () => (/* binding */ shouldExclude),
+  Fk: () => (/* binding */ validateFindings)
+});
+
+// UNUSED EXPORTS: getFileHunks, globMatch, parseDiff, parseDiffHunks
+
+// EXTERNAL MODULE: ./src/retry.ts
+var retry = __nccwpck_require__(9809);
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(7484);
+;// CONCATENATED MODULE: ./src/validation.ts
+
+function validateCodeContext(finding, diff) {
+    const issue = finding.issue;
+    const warnings = [];
+    function nameInDiff(name) {
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = 0;
+        while (true) {
+            idx = lowerDiff.indexOf(lowerName, idx);
+            if (idx === -1)
+                return false;
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx += 1;
+        }
+    }
+    // Check for backtick-wrapped identifiers (most reliable)
+    const backtickRefs = issue.match(/`(\w+)`/g);
+    if (backtickRefs) {
+        for (const ref of backtickRefs) {
+            const name = ref.slice(1, -1);
+            if (name.length > 2 && !nameInDiff(name)) {
+                warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
+            }
+        }
+    }
+    // Check for explicit references like "function X", "variable X", "class X"
+    const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
+    if (explicitRef) {
+        const name = explicitRef[1];
+        if (name.length > 2 && !nameInDiff(name)) {
+            warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
+        }
+    }
+    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
+}
+async function revalidateFindings(findings, diff, client, model) {
+    if (findings.length === 0)
+        return { valid: [], dropped: 0 };
+    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`).join('\n');
+    const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
+For each finding, determine if it is a REAL issue or a HALLUCINATION (not supported by the code).
+
+Findings:
+${findingsText}
+
+Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
+Example: [true, false, true]`;
+    const MAX_DIFF_LENGTH = 8000;
+    let truncatedDiff = diff;
+    if (diff.length > MAX_DIFF_LENGTH) {
+        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
+    }
+    try {
+        const result = await client.chat(model, [
+            { role: 'system', content: 'You are a validation assistant. Respond only with a JSON array of booleans.' },
+            { role: 'user', content: `${prompt}\n\nDiff:\n\`\`\`\n${truncatedDiff}\n\`\`\`` },
+        ], {
+            temperature: 0,
+            maxTokens: 256,
+        });
+        let parsed;
+        try {
+            parsed = JSON.parse(result.content);
+        }
+        catch {
+            core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+            return { valid: findings, dropped: 0 };
+        }
+        if (!Array.isArray(parsed))
+            return { valid: findings, dropped: 0 };
+        if (parsed.length < findings.length) {
+            core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
+        }
+        const valid = [];
+        let dropped = 0;
+        for (let i = 0; i < findings.length; i++) {
+            const decision = i >= parsed.length ? true : parsed[i];
+            if (decision === true) {
+                valid.push(findings[i]);
+            }
+            else {
+                dropped++;
+            }
+        }
+        return { valid, dropped };
+    }
+    catch {
+        core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+        return { valid: findings, dropped: 0 };
+    }
+}
+
+;// CONCATENATED MODULE: ./src/review.ts
+
+
+const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
+function parseDiff(raw) {
+    const files = {};
+    const chunks = raw.split('diff --git ');
+    for (const chunk of chunks) {
+        const trimmed = chunk.trim();
+        if (!trimmed)
+            continue;
+        const diffText = 'diff --git ' + trimmed;
+        const firstLine = diffText.split('\n')[0];
+        const m = firstLine.match(diffHeaderRe);
+        if (m) {
+            files[m[2]] = diffText;
+        }
+    }
+    return files;
+}
+const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+function parseDiffHunks(diffText) {
+    const ranges = [];
+    for (const line of diffText.split('\n')) {
+        const m = line.match(hunkHeaderRe);
+        if (m) {
+            const start = parseInt(m[1], 10);
+            const count = m[2] ? parseInt(m[2], 10) : 1;
+            ranges.push({ start, end: start + count - 1 });
+        }
+    }
+    return ranges;
+}
+function getFileHunks(filesDiff) {
+    const map = new Map();
+    for (const [file, diffText] of Object.entries(filesDiff)) {
+        map.set(file, parseDiffHunks(diffText));
+    }
+    return map;
+}
+async function validateFindings(review, filesDiff, changedFiles, client, model) {
+    const warnings = [];
+    const hunks = getFileHunks(filesDiff);
+    const validFindings = [];
+    for (const f of review.findings) {
+        if (!changedFiles.has(f.file)) {
+            warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_end != null && f.line_start == null) {
+            warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
+            warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
+            continue;
+        }
+        if (f.line_start != null) {
+            const fileHunks = hunks.get(f.file) || [];
+            // Include findings near hunk edges — AI models often offset line numbers by a few lines.
+            // Tolerance scales with hunk size: min 2 lines, grows at 10% of hunk length.
+            const overlaps = fileHunks.some(h => {
+                const tolerance = Math.max(2, Math.floor((h.end - h.start + 1) * 0.1));
+                return f.line_start <= h.end + tolerance && (f.line_end ?? f.line_start) >= h.start - tolerance;
+            });
+            if (!overlaps) {
+                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
+                continue;
+            }
+        }
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        if (codeContext.reason) {
+            warnings.push(`${codeContext.reason} in "${f.file}"`);
+        }
+        validFindings.push(f);
+    }
+    // Step 5: Optional LLM re-validation to catch hallucinated findings
+    let dropped = 0;
+    if (client && model && validFindings.length > 0) {
+        const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        validFindings.length = 0;
+        validFindings.push(...revalidated.valid);
+        dropped = revalidated.dropped;
+    }
+    if (validFindings.length === 0 && !review.summary) {
+        return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
+    }
+    return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
+}
+function globMatch(str, pattern) {
+    const regex = new RegExp('^' + pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    return regex.test(str);
+}
+function shouldExclude(filePath, patterns) {
+    for (const pat of patterns) {
+        if (globMatch(filePath, pat))
+            return true;
+        if (globMatch(filePath.split('/').pop() || '', pat))
+            return true;
+    }
+    return false;
+}
+class DiffTooLargeError extends Error {
+    sizeMB;
+    constructor(sizeMB) {
+        super(`Diff too large (${sizeMB} MB). Maximum is 5 MB.`);
+        this.name = 'DiffTooLargeError';
+        this.sizeMB = sizeMB;
+    }
+}
+async function fetchDiff(repo, prNumber, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
+    const resp = await (0,retry/* withRetry */.bD)(async () => {
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3.diff',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new retry/* RetryableError */.dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+        }
+        return response;
+    });
+    const raw = await resp.text();
+    const byteLength = new TextEncoder().encode(raw).byteLength;
+    if (byteLength > 5 * 1024 * 1024) {
+        throw new DiffTooLargeError((byteLength / 1024 / 1024).toFixed(1));
+    }
+    return parseDiff(raw);
+}
+const GITHUB_API_TIMEOUT_MS = 30_000;
+
+
+/***/ }),
+
+/***/ 9244:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   C5: () => (/* binding */ formatRulesForPrompt),
+/* harmony export */   NR: () => (/* binding */ parseRules),
+/* harmony export */   WH: () => (/* binding */ validateRules)
+/* harmony export */ });
 function parseRules(input) {
     if (!input || !input.trim())
         return [];
@@ -36252,1220 +35757,2086 @@ function formatRulesForPrompt(rules) {
     return lines.join('\n');
 }
 
-;// CONCATENATED MODULE: ./src/prompts.ts
 
+/***/ }),
 
+/***/ 1798:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
-const SEVERITY_GUIDANCE = `## Severity Classification
-
-Assign exactly one severity to each finding. Use this decision tree:
-
-**Critical** — Blocks release. Requires immediate action.
-- Security vulnerabilities (injection, auth bypass, data exposure)
-- Data loss or corruption risks
-- Race conditions causing incorrect behavior
-- Undefined behavior (C/C++: buffer overflow, use-after-free)
-- Logic bugs that break core functionality
-
-**Warning** — Should be fixed before merge. Needs investigation.
-- Likely bugs (wrong variable, off-by-one, missing null check)
-- Resource leaks (unclosed handles, goroutine leaks)
-- Error handling gaps (swallowed errors, bare returns)
-- Maintainability issues (complex conditionals, unclear control flow)
-- Performance issues (unnecessary allocations, N+1 queries)
-
-**Suggestion** — Nice to have. Improve if convenient.
-- Style and readability (naming, formatting, organization)
-- Minor optimizations with negligible impact
-- Idiomatic alternatives (language-specific conventions)
-- Documentation improvements
-
-## Anti-Patterns (DO NOT flag these)
-- Import statements or dependency additions
-- Test files for style issues (only flag correctness bugs in tests)
-- Auto-generated code or lock files
-- Formatting-only changes in non-logic files
-- Files outside the diff (only review changed code)
-
-## Action Fields
-For the two action fields that do not match the severity, write "not applicable".
-The schema requires all three on every finding.`;
-const languagePromptData = {
-    go: {
-        role: 'You are an expert Go engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Goroutine leaks and channel misuse',
-            'Race conditions (missing sync primitives)',
-            'Swallowed errors and bare returns',
-            'Resource leaks (unclosed files, HTTP bodies, DB connections)',
-            'Nil pointer dereferences and missing checks',
-        ],
-        antiPatterns: [
-            'defer in loops (defer runs at function exit, not iteration)',
-            'String concatenation in loops (use strings.Builder)',
-            'Unnecessary interface conversions',
-            'fmt.Sprintf in hot paths',
-        ],
-        severityCalibration: [
-            'Goroutine leak without context cancellation → Critical',
-            'Missing error check on non-nil return → Warning',
-            'Using fmt.Errorf instead of errors.Join → Suggestion',
-        ],
-    },
-    python: {
-        role: 'You are an expert Python engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Mutable default arguments in function signatures',
-            'Bare except clauses and broad exception handling',
-            'Resource management (context managers vs manual close)',
-            'Type safety and mypy compatibility',
-            'Security: injection, unsafe eval/exec',
-        ],
-        antiPatterns: [
-            'Flagging missing type hints on third-party library code',
-            'Style issues in auto-generated or vendored files',
-            'Unused imports in test fixtures',
-        ],
-        severityCalibration: [
-            'SQL injection via string formatting → Critical',
-            'Mutable default argument that mutates → Warning',
-            'Missing type hints on new function → Suggestion',
-        ],
-    },
-    typescript: {
-        role: 'You are an expert TypeScript/JavaScript engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Async/await misuse and unhandled promise rejections',
-            'Type safety: any usage, unsafe assertions',
-            'Null/undefined handling and optional chaining',
-            'Memory leaks (event listeners, timers, subscriptions)',
-            'Security: XSS, prototype pollution',
-        ],
-        antiPatterns: [
-            'Flagging React imports or JSX patterns',
-            'Style issues in generated type declarations',
-            'Linting rules the project already enforces',
-        ],
-        severityCalibration: [
-            'Unhandled promise rejection in critical path → Critical',
-            'Missing cleanup in useEffect → Warning',
-            'Using enum instead of const object → Suggestion',
-        ],
-    },
-    java: {
-        role: 'You are an expert Java engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Resource management (try-with-resources, AutoCloseable)',
-            'Thread safety (volatile, synchronized, concurrent collections)',
-            'Null pointer risks and Optional usage',
-            'Exception handling (catching too broadly, swallowed exceptions)',
-            'Security: SQL injection, deserialization',
-        ],
-        antiPatterns: [
-            'Flagging Lombok annotations or boilerplate',
-            'Style issues in generated code',
-            'Import ordering conventions',
-        ],
-        severityCalibration: [
-            'SQL injection via string concatenation → Critical',
-            'Resource leak without try-with-resources → Warning',
-            'Using raw type instead of generic → Suggestion',
-        ],
-    },
-    rust: {
-        role: 'You are an expert Rust engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Unsafe code blocks and their invariants',
-            'Unwrap/expect calls that could panic in production',
-            'Lifetime issues and borrow checker violations',
-            'Error handling (Result vs panic, thiserror vs anyhow)',
-            'Performance: unnecessary clones and allocations',
-        ],
-        antiPatterns: [
-            'Flagging #[allow(unused)] in test modules',
-            'Style issues in macro-generated code',
-            'Naming conventions in third-party bindings',
-        ],
-        severityCalibration: [
-            'unwrap() on user input or network response → Critical',
-            'clone() where borrow would suffice → Warning',
-            'Using format! in logging macros → Suggestion',
-        ],
-    },
-    cpp: {
-        role: 'You are an expert C/C++ engineer reviewing code for correctness, safety, and idiomatic patterns.',
-        focusAreas: [
-            'Memory safety: buffer overflows, use-after-free, double-free',
-            'Null pointer dereferences and missing null checks',
-            'Resource leaks (memory, file handles, sockets)',
-            'Undefined behavior (signed overflow, strict aliasing)',
-            'Thread safety and data races',
-        ],
-        antiPatterns: [
-            'Flagging include order in system headers',
-            'Style issues in auto-generated bindings',
-            'Naming in external API wrappers',
-        ],
-        severityCalibration: [
-            'Buffer overflow via unchecked index → Critical',
-            'Raw pointer without RAII wrapper → Warning',
-            'C-style cast instead of static_cast → Suggestion',
-        ],
-    },
-};
-const languagePrompts = {};
-for (const [lang, data] of Object.entries(languagePromptData)) {
-    languagePrompts[lang] = [
-        data.role,
-        '',
-        'Focus areas (prioritize these):',
-        ...data.focusAreas.map(a => `- ${a}`),
-        '',
-        'Anti-patterns (do NOT flag these):',
-        ...data.antiPatterns.map(a => `- ${a}`),
-        '',
-        'Severity calibration:',
-        ...data.severityCalibration.map(s => `- ${s}`),
-        '',
-        SEVERITY_GUIDANCE,
-        '',
-        JSON_SCHEMA_DEFINITION,
-    ].join('\n');
-}
-function languageForFile(filePath) {
-    const ext = (0,external_node_path_namespaceObject.extname)(filePath).toLowerCase();
-    switch (ext) {
-        case '.go': return 'go';
-        case '.py': return 'python';
-        case '.ts':
-        case '.tsx':
-        case '.js':
-        case '.jsx': return 'typescript';
-        case '.java': return 'java';
-        case '.rs': return 'rust';
-        case '.cpp':
-        case '.c':
-        case '.h':
-        case '.hpp': return 'cpp';
-        default: return 'generic';
-    }
-}
-const GENERIC_PROMPT = [
-    'You are an expert senior software engineer performing a code review.',
-    'Analyse the diff for bugs, security issues, performance problems, and style/readability concerns.',
-    '',
-    SEVERITY_GUIDANCE,
-    '',
-    JSON_SCHEMA_DEFINITION,
-].join('\n');
-const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (GENERIC_PROMPT));
-function buildSystemMessage(promptMode, systemPrompt, language, rules) {
-    const base = buildSystemPrompt(language, rules);
-    if (promptMode === 'replace') {
-        return systemPrompt
-            ? `${systemPrompt}\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`
-            : base;
-    }
-    return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
-}
-function buildSystemPrompt(language, rules) {
-    const base = (language && languagePrompts[language]) ? languagePrompts[language] : GENERIC_PROMPT;
-    const rulesSection = formatRulesForPrompt(rules || []);
-    return rulesSection ? `${base}\n\n${rulesSection}` : base;
-}
-
-// EXTERNAL MODULE: external "node:fs"
-var external_node_fs_ = __nccwpck_require__(3024);
-;// CONCATENATED MODULE: ./src/event.ts
-
-function loadEvent() {
-    const path = process.env.GITHUB_EVENT_PATH;
-    if (!path) {
-        throw new Error('GITHUB_EVENT_PATH not set');
-    }
-    const data = (0,external_node_fs_.readFileSync)(path, 'utf8');
-    let event;
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   FV: () => (/* binding */ escapeMarkdown),
+/* harmony export */   NS: () => (/* binding */ safeParseJson),
+/* harmony export */   ph: () => (/* binding */ validateProviderUrl)
+/* harmony export */ });
+function safeParseJson(content) {
+    const trimmed = content.trim();
+    if (!trimmed)
+        return undefined;
     try {
-        event = JSON.parse(data);
+        return JSON.parse(trimmed);
     }
-    catch (err) {
-        throw new Error(`Failed to parse GitHub event payload at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    catch {
+        return undefined;
     }
-    if (!event.pull_request?.number || !event.pull_request?.head?.sha) {
-        throw new Error('No PR number or head SHA in event payload');
+}
+function escapeMarkdown(text) {
+    return text.replace(/[\\*_{}\[\]()#`>+~|!<&]/g, '\\$&');
+}
+function validateProviderUrl(url, label) {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    // Block known metadata hostnames
+    if (hostname === 'metadata.google.internal') {
+        throw new Error(`${label} blocked: metadata.google.internal is a cloud metadata endpoint`);
     }
-    return event;
+    // Block IPv4 link-local (169.254.0.0/16 — covers AWS/Azure metadata at 169.254.169.254)
+    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+        throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+    }
+    // Block IPv6 link-local (fe80::/10 — covers fe80:: through febf::)
+    if (/^fe[89ab][0-9a-f]*:/i.test(hostname)) {
+        throw new Error(`${label} blocked: ${hostname} is an IPv6 link-local address`);
+    }
+    // Block IPv4-mapped IPv6 link-local (::ffff:169.254.x.x)
+    if (hostname.startsWith('::ffff:')) {
+        const mappedIpv4 = hostname.slice(7);
+        const ipv4Match = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+        if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+            throw new Error(`${label} blocked: ${hostname} is an IPv4-mapped link-local address (cloud metadata endpoint)`);
+        }
+    }
+    // Block AWS IPv6 metadata endpoint (fd00:ec2::254)
+    if (hostname === 'fd00:ec2::254') {
+        throw new Error(`${label} blocked: ${hostname} is an AWS metadata endpoint`);
+    }
 }
 
-;// CONCATENATED MODULE: ./src/bench-reorder.ts
+
+/***/ }),
+
+/***/ 2613:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("assert");
+
+/***/ }),
+
+/***/ 290:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("async_hooks");
+
+/***/ }),
+
+/***/ 181:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("buffer");
+
+/***/ }),
+
+/***/ 5317:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
+
+/***/ }),
+
+/***/ 4236:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("console");
+
+/***/ }),
+
+/***/ 6982:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
+
+/***/ }),
+
+/***/ 1637:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("diagnostics_channel");
+
+/***/ }),
+
+/***/ 4434:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("events");
+
+/***/ }),
+
+/***/ 9896:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
+
+/***/ }),
+
+/***/ 8611:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http");
+
+/***/ }),
+
+/***/ 5675:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http2");
+
+/***/ }),
+
+/***/ 5692:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("https");
+
+/***/ }),
+
+/***/ 9278:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("net");
+
+/***/ }),
+
+/***/ 7598:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:crypto");
+
+/***/ }),
+
+/***/ 8474:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:events");
+
+/***/ }),
+
+/***/ 3024:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+
+/***/ }),
+
+/***/ 7075:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream");
+
+/***/ }),
+
+/***/ 7975:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:util");
+
+/***/ }),
+
+/***/ 857:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("os");
+
+/***/ }),
+
+/***/ 6928:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("path");
+
+/***/ }),
+
+/***/ 2987:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("perf_hooks");
+
+/***/ }),
+
+/***/ 3480:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("querystring");
+
+/***/ }),
+
+/***/ 2203:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream");
+
+/***/ }),
+
+/***/ 3774:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream/web");
+
+/***/ }),
+
+/***/ 3193:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("string_decoder");
+
+/***/ }),
+
+/***/ 3557:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("timers");
+
+/***/ }),
+
+/***/ 4756:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tls");
+
+/***/ }),
+
+/***/ 7016:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("url");
+
+/***/ }),
+
+/***/ 9023:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
+
+/***/ }),
+
+/***/ 8253:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util/types");
+
+/***/ }),
+
+/***/ 8167:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("worker_threads");
+
+/***/ }),
+
+/***/ 3106:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("zlib");
+
+/***/ }),
+
+/***/ 7182:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const WritableStream = (__nccwpck_require__(7075).Writable)
+const inherits = (__nccwpck_require__(7975).inherits)
+
+const StreamSearch = __nccwpck_require__(4136)
+
+const PartStream = __nccwpck_require__(612)
+const HeaderParser = __nccwpck_require__(2271)
+
+const DASH = 45
+const B_ONEDASH = Buffer.from('-')
+const B_CRLF = Buffer.from('\r\n')
+const EMPTY_FN = function () {}
+
+function Dicer (cfg) {
+  if (!(this instanceof Dicer)) { return new Dicer(cfg) }
+  WritableStream.call(this, cfg)
+
+  if (!cfg || (!cfg.headerFirst && typeof cfg.boundary !== 'string')) { throw new TypeError('Boundary required') }
+
+  if (typeof cfg.boundary === 'string') { this.setBoundary(cfg.boundary) } else { this._bparser = undefined }
+
+  this._headerFirst = cfg.headerFirst
+
+  this._dashes = 0
+  this._parts = 0
+  this._finished = false
+  this._realFinish = false
+  this._isPreamble = true
+  this._justMatched = false
+  this._firstWrite = true
+  this._inHeader = true
+  this._part = undefined
+  this._cb = undefined
+  this._ignoreData = false
+  this._partOpts = { highWaterMark: cfg.partHwm }
+  this._pause = false
+
+  const self = this
+  this._hparser = new HeaderParser(cfg)
+  this._hparser.on('header', function (header) {
+    self._inHeader = false
+    self._part.emit('header', header)
+  })
+}
+inherits(Dicer, WritableStream)
+
+Dicer.prototype.emit = function (ev) {
+  if (ev === 'finish' && !this._realFinish) {
+    if (!this._finished) {
+      const self = this
+      process.nextTick(function () {
+        self.emit('error', new Error('Unexpected end of multipart data'))
+        if (self._part && !self._ignoreData) {
+          const type = (self._isPreamble ? 'Preamble' : 'Part')
+          self._part.emit('error', new Error(type + ' terminated early due to unexpected end of multipart data'))
+          self._part.push(null)
+          process.nextTick(function () {
+            self._realFinish = true
+            self.emit('finish')
+            self._realFinish = false
+          })
+          return
+        }
+        self._realFinish = true
+        self.emit('finish')
+        self._realFinish = false
+      })
+    }
+  } else { WritableStream.prototype.emit.apply(this, arguments) }
+}
+
+Dicer.prototype._write = function (data, encoding, cb) {
+  // ignore unexpected data (e.g. extra trailer data after finished)
+  if (!this._hparser && !this._bparser) { return cb() }
+
+  if (this._headerFirst && this._isPreamble) {
+    if (!this._part) {
+      this._part = new PartStream(this._partOpts)
+      if (this.listenerCount('preamble') !== 0) { this.emit('preamble', this._part) } else { this._ignore() }
+    }
+    const r = this._hparser.push(data)
+    if (!this._inHeader && r !== undefined && r < data.length) { data = data.slice(r) } else { return cb() }
+  }
+
+  // allows for "easier" testing
+  if (this._firstWrite) {
+    this._bparser.push(B_CRLF)
+    this._firstWrite = false
+  }
+
+  this._bparser.push(data)
+
+  if (this._pause) { this._cb = cb } else { cb() }
+}
+
+Dicer.prototype.reset = function () {
+  this._part = undefined
+  this._bparser = undefined
+  this._hparser = undefined
+}
+
+Dicer.prototype.setBoundary = function (boundary) {
+  const self = this
+  this._bparser = new StreamSearch('\r\n--' + boundary)
+  this._bparser.on('info', function (isMatch, data, start, end) {
+    self._oninfo(isMatch, data, start, end)
+  })
+}
+
+Dicer.prototype._ignore = function () {
+  if (this._part && !this._ignoreData) {
+    this._ignoreData = true
+    this._part.on('error', EMPTY_FN)
+    // we must perform some kind of read on the stream even though we are
+    // ignoring the data, otherwise node's Readable stream will not emit 'end'
+    // after pushing null to the stream
+    this._part.resume()
+  }
+}
+
+Dicer.prototype._oninfo = function (isMatch, data, start, end) {
+  let buf; const self = this; let i = 0; let r; let shouldWriteMore = true
+
+  if (!this._part && this._justMatched && data) {
+    while (this._dashes < 2 && (start + i) < end) {
+      if (data[start + i] === DASH) {
+        ++i
+        ++this._dashes
+      } else {
+        if (this._dashes) { buf = B_ONEDASH }
+        this._dashes = 0
+        break
+      }
+    }
+    if (this._dashes === 2) {
+      if ((start + i) < end && this.listenerCount('trailer') !== 0) { this.emit('trailer', data.slice(start + i, end)) }
+      this.reset()
+      this._finished = true
+      // no more parts will be added
+      if (self._parts === 0) {
+        self._realFinish = true
+        self.emit('finish')
+        self._realFinish = false
+      }
+    }
+    if (this._dashes) { return }
+  }
+  if (this._justMatched) { this._justMatched = false }
+  if (!this._part) {
+    this._part = new PartStream(this._partOpts)
+    this._part._read = function (n) {
+      self._unpause()
+    }
+    if (this._isPreamble && this.listenerCount('preamble') !== 0) {
+      this.emit('preamble', this._part)
+    } else if (this._isPreamble !== true && this.listenerCount('part') !== 0) {
+      this.emit('part', this._part)
+    } else {
+      this._ignore()
+    }
+    if (!this._isPreamble) { this._inHeader = true }
+  }
+  if (data && start < end && !this._ignoreData) {
+    if (this._isPreamble || !this._inHeader) {
+      if (buf) { shouldWriteMore = this._part.push(buf) }
+      shouldWriteMore = this._part.push(data.slice(start, end))
+      if (!shouldWriteMore) { this._pause = true }
+    } else if (!this._isPreamble && this._inHeader) {
+      if (buf) { this._hparser.push(buf) }
+      r = this._hparser.push(data.slice(start, end))
+      if (!this._inHeader && r !== undefined && r < end) { this._oninfo(false, data, start + r, end) }
+    }
+  }
+  if (isMatch) {
+    this._hparser.reset()
+    if (this._isPreamble) { this._isPreamble = false } else {
+      if (start !== end) {
+        ++this._parts
+        this._part.on('end', function () {
+          if (--self._parts === 0) {
+            if (self._finished) {
+              self._realFinish = true
+              self.emit('finish')
+              self._realFinish = false
+            } else {
+              self._unpause()
+            }
+          }
+        })
+      }
+    }
+    this._part.push(null)
+    this._part = undefined
+    this._ignoreData = false
+    this._justMatched = true
+    this._dashes = 0
+  }
+}
+
+Dicer.prototype._unpause = function () {
+  if (!this._pause) { return }
+
+  this._pause = false
+  if (this._cb) {
+    const cb = this._cb
+    this._cb = undefined
+    cb()
+  }
+}
+
+module.exports = Dicer
+
+
+/***/ }),
+
+/***/ 2271:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const EventEmitter = (__nccwpck_require__(8474).EventEmitter)
+const inherits = (__nccwpck_require__(7975).inherits)
+const getLimit = __nccwpck_require__(2393)
+
+const StreamSearch = __nccwpck_require__(4136)
+
+const B_DCRLF = Buffer.from('\r\n\r\n')
+const RE_CRLF = /\r\n/g
+const RE_HDR = /^([^:]+):[ \t]?([\x00-\xFF]+)?$/ // eslint-disable-line no-control-regex
+
+function HeaderParser (cfg) {
+  EventEmitter.call(this)
+
+  cfg = cfg || {}
+  const self = this
+  this.nread = 0
+  this.maxed = false
+  this.npairs = 0
+  this.maxHeaderPairs = getLimit(cfg, 'maxHeaderPairs', 2000)
+  this.maxHeaderSize = getLimit(cfg, 'maxHeaderSize', 80 * 1024)
+  this.buffer = ''
+  this.header = {}
+  this.finished = false
+  this.ss = new StreamSearch(B_DCRLF)
+  this.ss.on('info', function (isMatch, data, start, end) {
+    if (data && !self.maxed) {
+      if (self.nread + end - start >= self.maxHeaderSize) {
+        end = self.maxHeaderSize - self.nread + start
+        self.nread = self.maxHeaderSize
+        self.maxed = true
+      } else { self.nread += (end - start) }
+
+      self.buffer += data.toString('binary', start, end)
+    }
+    if (isMatch) { self._finish() }
+  })
+}
+inherits(HeaderParser, EventEmitter)
+
+HeaderParser.prototype.push = function (data) {
+  const r = this.ss.push(data)
+  if (this.finished) { return r }
+}
+
+HeaderParser.prototype.reset = function () {
+  this.finished = false
+  this.buffer = ''
+  this.header = {}
+  this.ss.reset()
+}
+
+HeaderParser.prototype._finish = function () {
+  if (this.buffer) { this._parseHeader() }
+  this.ss.matches = this.ss.maxMatches
+  const header = this.header
+  this.header = {}
+  this.buffer = ''
+  this.finished = true
+  this.nread = this.npairs = 0
+  this.maxed = false
+  this.emit('header', header)
+}
+
+HeaderParser.prototype._parseHeader = function () {
+  if (this.npairs === this.maxHeaderPairs) { return }
+
+  const lines = this.buffer.split(RE_CRLF)
+  const len = lines.length
+  let m, h
+
+  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
+    if (lines[i].length === 0) { continue }
+    if (lines[i][0] === '\t' || lines[i][0] === ' ') {
+      // folded header content
+      // RFC2822 says to just remove the CRLF and not the whitespace following
+      // it, so we follow the RFC and include the leading whitespace ...
+      if (h) {
+        this.header[h][this.header[h].length - 1] += lines[i]
+        continue
+      }
+    }
+
+    const posColon = lines[i].indexOf(':')
+    if (
+      posColon === -1 ||
+      posColon === 0
+    ) {
+      return
+    }
+    m = RE_HDR.exec(lines[i])
+    h = m[1].toLowerCase()
+    this.header[h] = this.header[h] || []
+    this.header[h].push((m[2] || ''))
+    if (++this.npairs === this.maxHeaderPairs) { break }
+  }
+}
+
+module.exports = HeaderParser
+
+
+/***/ }),
+
+/***/ 612:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const inherits = (__nccwpck_require__(7975).inherits)
+const ReadableStream = (__nccwpck_require__(7075).Readable)
+
+function PartStream (opts) {
+  ReadableStream.call(this, opts)
+}
+inherits(PartStream, ReadableStream)
+
+PartStream.prototype._read = function (n) {}
+
+module.exports = PartStream
+
+
+/***/ }),
+
+/***/ 4136:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
 /**
- * bench-reorder.ts
+ * Copyright Brian White. All rights reserved.
  *
- * After a benchmark run, this script:
- * 1. Reads benchmark results from stdin (markdown table from bench-entry.ts)
- * 2. Ranks models by SWE-bench score with latency penalty
- * 3. Updates nim_models in action.yml
- */
-
-
-/**
- * Parse SWE-bench API response into sorted entries.
- * Filters to score > 0.5, sorts by score descending, returns top 30.
- */
-function parseSweBenchResponse(data) {
-    return (data.results || [])
-        .filter(m => m.score > 0.5)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 30)
-        .map(m => ({
-        modelId: m.model_id,
-        score: m.score,
-        org: m.organization_id || '',
-    }));
-}
-// Module-level counter used to escalate the warning once consecutive
-// fetch failures pile up. This is intentionally process-local: bench-reorder
-// is invoked as a single CLI per workflow run, so there is no concurrency
-// to worry about. If this module is ever reused in a server context,
-// replace this with a per-request counter passed through fetchSweBenchScores.
-let sweBenchFetchFailures = 0;
-const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
-/**
- * Fetch SWE-bench Verified scores from the leaderboard API.
- * Returns top ~30 models by score, filtered to score > 0.5.
- */
-async function fetchSweBenchScores() {
-    const url = process.env.SWE_BENCH_API_URL || 'https://api.zeroeval.com/leaderboard/benchmarks/swe-bench-verified/details';
-    try {
-        const resp = await withRetry(async () => {
-            const r = await fetch(url, {
-                signal: AbortSignal.timeout(30_000),
-            });
-            if (!r.ok)
-                throw new Error(`SWE-bench API returned ${r.status}`);
-            return r;
-        });
-        const data = await resp.json();
-        sweBenchFetchFailures = 0;
-        return parseSweBenchResponse(data);
-    }
-    catch (err) {
-        sweBenchFetchFailures++;
-        if (sweBenchFetchFailures >= SWE_BENCH_FAIL_WARN_THRESHOLD) {
-            process.stderr.write(`\n*** ALERT: SWE-bench API at ${url} has failed ${sweBenchFetchFailures} time(s). Rankings will use fallback scores only. Last error: ${err}\n\n`);
-        }
-        else {
-            process.stderr.write(`Warning: could not fetch SWE-bench scores from ${url}: ${err}\n`);
-        }
-        return [];
-    }
-}
-/**
- * Parse the markdown table output from bench-entry.ts
- */
-function parseMarkdownTable(table) {
-    const lines = table.trim().split('\n');
-    const rows = [];
-    for (const line of lines) {
-        if (!line.startsWith('|') || line.includes('---') || line.includes('Model'))
-            continue;
-        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
-        if (cells.length < 5)
-            continue;
-        const model = cells[0].replace(/`/g, '');
-        const ttftMs = parseDuration(cells[1]);
-        const latencyMs = parseDuration(cells[2]);
-        const tokensPerSec = parseFloat(cells[3]) || 0;
-        const errors = parseInt(cells[4], 10) || 0;
-        rows.push({ model, ttftMs, latencyMs, tokensPerSec, errors });
-    }
-    return rows;
-}
-function parseDuration(s) {
-    s = s.trim();
-    if (s === 'N/A')
-        return Infinity;
-    if (s.endsWith('μs'))
-        return parseFloat(s) / 1000;
-    if (s.endsWith('ms'))
-        return parseFloat(s);
-    if (s.endsWith('s'))
-        return parseFloat(s) * 1000;
-    return parseFloat(s) || Infinity;
-}
-/**
- * Known SWE-bench Verified scores for models available on NIM, Groq,
- * OpenRouter, and Kilo.
- * Source: https://llm-stats.com/benchmarks/swe-bench-verified
+ * @see https://github.com/mscdex/streamsearch
  *
- * Free-tier entries (IDs ending with :free) are estimated scores; they
- * should be replaced with measured values once benchmark data is available.
- * Free models are forced to rank last in the fallback chain.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Model identifiers are provider-specific — Groq uses different IDs than
- * NIM for the same underlying models (e.g. moonshotai/kimi-k2-instruct vs
- * moonshotai/kimi-k2.6). If provider catalogs change, entries may drift;
- * configured models without a score entry return 0.5 and rank lower.
- */
-const SWE_BENCH_SCORES = {
-    'deepseek-ai/deepseek-v4-pro': 0.806,
-    'deepseek-ai/deepseek-v4-flash': 0.790,
-    'minimaxai/minimax-m3': 0.805,
-    'minimaxai/minimax-m2.7': 0.802,
-    'moonshotai/kimi-k2.6': 0.802,
-    'z-ai/glm-5.2': 0.778,
-    'mistralai/mistral-medium-3.5-128b': 0.776,
-    'qwen/qwen3.5-397b-a17b': 0.764,
-    'stepfun-ai/step-3.7-flash': 0.744,
-    'qwen/qwen3.5-122b-a10b': 0.734,
-    'bytedance/seed-oss-36b-instruct': 0.735,
-    'mistralai/mistral-large-3-675b-instruct-2512': 0.720,
-    'mistralai/mistral-nemotron': 0.720,
-    'qwen/qwen3-next-80b-a3b-instruct': 0.720,
-    'openai/gpt-oss-120b': 0.720,
-    'moonshotai/kimi-k2-instruct': 0.802,
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1': 0.700,
-    'mistralai/mistral-large': 0.700,
-    'mistralai/mistral-large-2-instruct': 0.700,
-    'nvidia/nemotron-3-ultra-550b-a55b': 0.700,
-    'nvidia/nemotron-3-super-120b-a12b': 0.680,
-    'mistralai/mistral-small-4-119b-2603': 0.680,
-    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 0.660,
-    'nvidia/llama-3.3-nemotron-super-49b-v1': 0.650,
-    'nvidia/nemotron-4-340b-instruct': 0.650,
-    'openai/gpt-oss-20b': 0.650,
-    'meta/llama-4-maverick-17b-128e-instruct': 0.650,
-    'thinkingmachines/inkling': 0.650,
-    'meta/llama-3.3-70b-instruct': 0.620,
-    'llama-3.3-70b-versatile': 0.620,
-    'nvidia/llama-3.1-nemotron-70b-instruct': 0.620,
-    'nvidia/llama-3.1-nemotron-51b-instruct': 0.620,
-    'meta/llama-3.1-70b-instruct': 0.600,
-    'poolside/laguna-xs-2.1': 0.600,
-    'abacusai/dracarys-llama-3.1-70b-instruct': 0.600,
-    'microsoft/phi-3.5-moe-instruct': 0.580,
-    'databricks/dbrx-instruct': 0.550,
-    'ai21labs/jamba-1.5-large-instruct': 0.550,
-    // Direct Mistral API model IDs
-    'mistral-medium-3.5': 0.776,
-    'mistral-medium-latest': 0.776,
-    'mistral-large-2512': 0.720,
-    'mistral-large-latest': 0.720,
-    'mistral-small-2603': 0.680,
-    'mistral-small-latest': 0.680,
-    'codestral-2508': 0.650,
-    'codestral-latest': 0.650,
-    // OpenRouter free-tier models (estimated scores)
-    'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
-    'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
-    'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
-    // Kilo free-tier models (estimated scores)
-    'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
-    'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
-};
-/**
- * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
- * If fetchedScores is provided, checks it before the hardcoded table.
- */
-function getSweBenchScore(model, fetchedScores) {
-    return fetchedScores?.get(model) ?? SWE_BENCH_SCORES[model] ?? 0.5;
-}
-/**
- * Effective score = SWE-bench score × latency multiplier.
- * - Under 60s: no penalty (1.0)
- * - 60-120s: linear penalty (1.0 → 0.7)
- * - Over 120s: heavy penalty (0.5)
- */
-const DEFAULT_MAX_LATENCY_MS = 60_000;
-function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_MS, fetchedScores) {
-    const swe = getSweBenchScore(model, fetchedScores);
-    if (!latencies || !(model in latencies))
-        return swe;
-    const lat = latencies[model];
-    if (lat <= maxLatencyMs)
-        return swe;
-    if (lat <= maxLatencyMs * 2) {
-        const ratio = (lat - maxLatencyMs) / maxLatencyMs;
-        return swe * (1.0 - 0.3 * ratio);
-    }
-    return swe * 0.5;
-}
-/**
- * Rank models by effective score (SWE-bench + latency penalty).
- * Only includes models that worked today (tokensPerSec > 0).
- */
-function rankModels(rows, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
-    return alive
-        .map(r => r.model)
-        .sort((a, b) => {
-        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
-        if (effB !== effA)
-            return effB - effA;
-        // Tiebreaker: faster today wins
-        const latA = latencies?.[a] ?? Infinity;
-        const latB = latencies?.[b] ?? Infinity;
-        return latA - latB;
-    });
-}
-function buildTargetPattern(targetKey) {
-    return new RegExp(`(${targetKey}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*')([^']*)(')`);
-}
-const TARGET_CONFIG = {
-    nim_models: { pattern: buildTargetPattern('nim_models'), label: 'nim_models' },
-    mistral_models: { pattern: buildTargetPattern('mistral_models'), label: 'mistral_models' },
-    groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
-    openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
-    kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
-};
-/**
- * Update action.yml with new model order for the given target.
- */
-function updateActionYml(actionPath, orderedModels, target = 'nim_models') {
-    const content = (0,external_node_fs_.readFileSync)(actionPath, 'utf-8');
-    const modelString = orderedModels.join(',');
-    const config = TARGET_CONFIG[target];
-    console.log(`Reading ${actionPath} for ${config.label} (${content.length} bytes)`);
-    if (!config.pattern.test(content)) {
-        // Show context around the target key for debugging
-        const key = config.label + ':';
-        const idx = content.indexOf(key);
-        if (idx === -1) {
-            console.warn(`Warning: '${key}' not found in ${actionPath}`);
-        }
-        else {
-            const snippet = content.substring(idx, idx + 200);
-            console.warn(`Warning: could not match ${config.label} pattern in ${actionPath}`);
-            console.warn(`Content around '${key}':\n${snippet}`);
-        }
-        return;
-    }
-    const updated = content.replace(config.pattern, (_, p1, _p2, p3) => p1 + modelString + p3);
-    if (updated === content) {
-        console.log(`${config.label} models already in desired order, no changes needed`);
-        return;
-    }
-    (0,external_node_fs_.writeFileSync)(actionPath, updated, 'utf-8');
-}
-function updateActionYmlMistral(actionPath, orderedModels) {
-    updateActionYml(actionPath, orderedModels, 'mistral_models');
-}
-function updateActionYmlOpenRouter(actionPath, orderedModels) {
-    updateActionYml(actionPath, orderedModels, 'openrouter_models');
-}
-function updateActionYmlKilocode(actionPath, orderedModels) {
-    updateActionYml(actionPath, orderedModels, 'kilocode_models');
-}
-/**
- * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
- * Returns the parsed scores map (empty if neither source yields a value).
- * Exported for testability.
- */
-function readFetchedScores(rawInput, scoresFile) {
-    const fetchedScores = new Map();
-    if (scoresFile && (0,external_node_fs_.existsSync)(scoresFile)) {
-        try {
-            const fileContent = (0,external_node_fs_.readFileSync)(scoresFile, 'utf-8').trim();
-            const scoresObj = JSON.parse(fileContent);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch (err) {
-            console.warn(`Warning: could not parse ${scoresFile}: ${err}`);
-        }
-        return fetchedScores;
-    }
-    // Fallback: HTML comment on its own line. Anchored with ^…$ and `m` flag
-    // so we never accidentally match a fragment in the markdown table body.
-    const scoresMatch = rawInput.match(/^<!-- FETCHED_SCORES: (\{[\s\S]*?\}) -->$/m);
-    if (scoresMatch) {
-        try {
-            const scoresObj = JSON.parse(scoresMatch[1]);
-            for (const [k, v] of Object.entries(scoresObj)) {
-                fetchedScores.set(k, v);
-            }
-        }
-        catch {
-            console.warn('Warning: could not parse FETCHED_SCORES comment');
-        }
-    }
-    return fetchedScores;
-}
-/**
- * Strip FETCHED_SCORES HTML-comment lines from the stdin text so the remainder
- * is a clean markdown table. No-op when scores came from BENCH_SCORES_FILE.
- */
-function stripFetchedScoresComment(rawInput, scoresFile) {
-    if (scoresFile)
-        return rawInput;
-    return rawInput.replace(/^<!-- FETCHED_SCORES: [\s\S]*? -->$\n?/gm, '');
-}
-/**
- * Main entry point — reads table from stdin, ranks, updates action.yml.
- */
-async function main() {
-    const actionPath = process.env.ACTION_PATH || 'action.yml';
-    const target = (process.env.ACTION_TARGET || 'nim_models');
-    if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
-        process.exit(1);
-    }
-    // Read benchmark table from stdin
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-    }
-    const rawInput = Buffer.concat(chunks).toString('utf-8');
-    // Extract fetched scores from BENCH_SCORES_FILE (preferred) or stdin comment.
-    const scoresFile = process.env.BENCH_SCORES_FILE;
-    const fetchedScores = readFetchedScores(rawInput, scoresFile);
-    if (fetchedScores.size > 0) {
-        const source = scoresFile && (0,external_node_fs_.existsSync)(scoresFile) ? scoresFile : 'stdin comment';
-        console.log(`Parsed ${fetchedScores.size} fetched score(s) from ${source}`);
-    }
-    const table = stripFetchedScoresComment(rawInput, scoresFile);
-    if (!table.trim()) {
-        console.error('No benchmark output received on stdin');
-        process.exit(1);
-    }
-    const rows = parseMarkdownTable(table);
-    if (rows.length === 0) {
-        console.warn('No benchmark data rows found — all models may have failed. Skipping reorder.');
-        process.exit(0);
-    }
-    // Extract latencies
-    const latencies = {};
-    for (const row of rows) {
-        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
-            latencies[row.model] = row.latencyMs;
-        }
-    }
-    const fetchedScoresMap = fetchedScores.size > 0 ? fetchedScores : undefined;
-    const ranked = rankModels(rows, latencies, fetchedScoresMap);
-    console.log(`Model ranking for ${target} (SWE-bench × latency):`);
-    const summaryLines = [
-        `\n## Model Ranking (${target})\n`,
-        '| # | Model | SWE | Effective | Latency |',
-        '|---|-------|-----|-----------|---------|',
-    ];
-    ranked.forEach((model, index) => {
-        const lat = latencies[model] ? `${Math.round(latencies[model])}ms` : 'N/A';
-        const swe = getSweBenchScore(model, fetchedScoresMap).toFixed(3);
-        const eff = getEffectiveScore(model, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScoresMap).toFixed(3);
-        console.log(`  ${model}: SWE=${swe} eff=${eff} lat=${lat}`);
-        summaryLines.push(`| ${index + 1} | \`${model}\` | ${swe} | ${eff} | ${lat} |`);
-    });
-    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-    if (summaryPath) {
-        try {
-            (0,external_node_fs_.appendFileSync)(summaryPath, summaryLines.join('\n') + '\n');
-        }
-        catch (err) {
-            console.warn(`Warning: could not write to GITHUB_STEP_SUMMARY: ${err}`);
-        }
-    }
-    updateActionYml(actionPath, ranked, target);
-    console.log(`\naction.yml updated (${target}) with ${ranked.length} models.`);
-}
-// Only run when executed directly
-const isMainModule = process.argv[1]?.endsWith('bench-reorder.js');
-if (isMainModule) {
-    main().catch(err => {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
-    });
-}
-
-;// CONCATENATED MODULE: ./src/model-chain.ts
-
-/**
- * Build the model fallback chain.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * Custom models (no SWE-bench score) are always first — never sorted
- * alongside provider models.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  *
- * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
- * and sorted by SWE-bench score descending as the fallback chain.
- *
- * Free-tier models (IDs ending with :free) are forced to rank last within
- * the provider group, after all non-free models.
- *
- * Only includes models whose provider key is available.
+ * Based heavily on the Streaming Boyer-Moore-Horspool C++ implementation
+ * by Hongli Lai at: https://github.com/FooBarWidget/boyer-moore-horspool
  */
-function buildCombinedChain(opts) {
-    const providerModels = [];
-    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
-    if (opts.hasNimKey) {
-        for (const id of opts.nimModels) {
-            providerModels.push({ id, provider: 'nim' });
-        }
-    }
-    if (opts.hasMistralKey) {
-        for (const id of opts.mistralModels) {
-            providerModels.push({ id, provider: 'mistral' });
-        }
-    }
-    if (hasGroqKey) {
-        for (const id of groqModels) {
-            providerModels.push({ id, provider: 'groq' });
-        }
-    }
-    if (hasOpenRouterKey) {
-        for (const id of openrouterModels) {
-            providerModels.push({ id, provider: 'openrouter' });
-        }
-    }
-    if (hasKiloKey) {
-        for (const id of kiloModels) {
-            providerModels.push({ id, provider: 'kilocode' });
-        }
-    }
-    providerModels.sort((a, b) => {
-        const scoreA = getSweBenchScore(a.id);
-        const scoreB = getSweBenchScore(b.id);
-        return scoreB - scoreA;
-    });
-    const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
-    const free = providerModels.filter(m => m.id.endsWith(':free'));
-    const sortedProviderModels = [...nonFree, ...free];
-    const customModels = [];
-    if (opts.hasCustomModels && opts.customModels) {
-        for (const id of opts.customModels) {
-            customModels.push({ id, provider: 'custom' });
-        }
-    }
-    if (opts.customModel && opts.hasCustomConfig) {
-        customModels.push({ id: opts.customModel, provider: 'custom' });
-    }
-    return [...customModels, ...sortedProviderModels];
+const EventEmitter = (__nccwpck_require__(8474).EventEmitter)
+const inherits = (__nccwpck_require__(7975).inherits)
+
+function SBMH (needle) {
+  if (typeof needle === 'string') {
+    needle = Buffer.from(needle)
+  }
+
+  if (!Buffer.isBuffer(needle)) {
+    throw new TypeError('The needle has to be a String or a Buffer.')
+  }
+
+  const needleLength = needle.length
+
+  if (needleLength === 0) {
+    throw new Error('The needle cannot be an empty String/Buffer.')
+  }
+
+  if (needleLength > 256) {
+    throw new Error('The needle cannot have a length bigger than 256.')
+  }
+
+  this.maxMatches = Infinity
+  this.matches = 0
+
+  this._occ = new Array(256)
+    .fill(needleLength) // Initialize occurrence table.
+  this._lookbehind_size = 0
+  this._needle = needle
+  this._bufpos = 0
+
+  this._lookbehind = Buffer.alloc(needleLength)
+
+  // Populate occurrence table with analysis of the needle,
+  // ignoring last letter.
+  for (var i = 0; i < needleLength - 1; ++i) { // eslint-disable-line no-var
+    this._occ[needle[i]] = needleLength - 1 - i
+  }
 }
-const PROBE_TIMEOUT_MS = 10_000;
-const PROBE_CONCURRENCY = 3;
-async function probeModels(chain, clients) {
-    const available = [];
-    for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
-        const batch = chain.slice(i, i + PROBE_CONCURRENCY);
-        const probes = batch.map(async (tagged) => {
-            const client = clients[tagged.provider];
-            if (!client)
-                return null;
-            let timer;
-            try {
-                const start = Date.now();
-                const ok = await Promise.race([
-                    client.probeModel(tagged.id),
-                    new Promise((_, reject) => {
-                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-                    }),
-                ]);
-                if (ok)
-                    return { model: tagged, latency: Date.now() - start };
-                return null;
+inherits(SBMH, EventEmitter)
+
+SBMH.prototype.reset = function () {
+  this._lookbehind_size = 0
+  this.matches = 0
+  this._bufpos = 0
+}
+
+SBMH.prototype.push = function (chunk, pos) {
+  if (!Buffer.isBuffer(chunk)) {
+    chunk = Buffer.from(chunk, 'binary')
+  }
+  const chlen = chunk.length
+  this._bufpos = pos || 0
+  let r
+  while (r !== chlen && this.matches < this.maxMatches) { r = this._sbmh_feed(chunk) }
+  return r
+}
+
+SBMH.prototype._sbmh_feed = function (data) {
+  const len = data.length
+  const needle = this._needle
+  const needleLength = needle.length
+  const lastNeedleChar = needle[needleLength - 1]
+
+  // Positive: points to a position in `data`
+  //           pos == 3 points to data[3]
+  // Negative: points to a position in the lookbehind buffer
+  //           pos == -2 points to lookbehind[lookbehind_size - 2]
+  let pos = -this._lookbehind_size
+  let ch
+
+  if (pos < 0) {
+    // Lookbehind buffer is not empty. Perform Boyer-Moore-Horspool
+    // search with character lookup code that considers both the
+    // lookbehind buffer and the current round's haystack data.
+    //
+    // Loop until
+    //   there is a match.
+    // or until
+    //   we've moved past the position that requires the
+    //   lookbehind buffer. In this case we switch to the
+    //   optimized loop.
+    // or until
+    //   the character to look at lies outside the haystack.
+    while (pos < 0 && pos <= len - needleLength) {
+      ch = this._sbmh_lookup_char(data, pos + needleLength - 1)
+
+      if (
+        ch === lastNeedleChar &&
+        this._sbmh_memcmp(data, pos, needleLength - 1)
+      ) {
+        this._lookbehind_size = 0
+        ++this.matches
+        this.emit('info', true)
+
+        return (this._bufpos = pos + needleLength)
+      }
+      pos += this._occ[ch]
+    }
+
+    // No match.
+
+    if (pos < 0) {
+      // There's too few data for Boyer-Moore-Horspool to run,
+      // so let's use a different algorithm to skip as much as
+      // we can.
+      // Forward pos until
+      //   the trailing part of lookbehind + data
+      //   looks like the beginning of the needle
+      // or until
+      //   pos == 0
+      while (pos < 0 && !this._sbmh_memcmp(data, pos, len - pos)) { ++pos }
+    }
+
+    if (pos >= 0) {
+      // Discard lookbehind buffer.
+      this.emit('info', false, this._lookbehind, 0, this._lookbehind_size)
+      this._lookbehind_size = 0
+    } else {
+      // Cut off part of the lookbehind buffer that has
+      // been processed and append the entire haystack
+      // into it.
+      const bytesToCutOff = this._lookbehind_size + pos
+      if (bytesToCutOff > 0) {
+        // The cut off data is guaranteed not to contain the needle.
+        this.emit('info', false, this._lookbehind, 0, bytesToCutOff)
+      }
+
+      this._lookbehind.copy(this._lookbehind, 0, bytesToCutOff,
+        this._lookbehind_size - bytesToCutOff)
+      this._lookbehind_size -= bytesToCutOff
+
+      data.copy(this._lookbehind, this._lookbehind_size)
+      this._lookbehind_size += len
+
+      this._bufpos = len
+      return len
+    }
+  }
+
+  pos += (pos >= 0) * this._bufpos
+
+  // Lookbehind buffer is now empty. We only need to check if the
+  // needle is in the haystack.
+  if (data.indexOf(needle, pos) !== -1) {
+    pos = data.indexOf(needle, pos)
+    ++this.matches
+    if (pos > 0) { this.emit('info', true, data, this._bufpos, pos) } else { this.emit('info', true) }
+
+    return (this._bufpos = pos + needleLength)
+  } else {
+    pos = len - needleLength
+  }
+
+  // There was no match. If there's trailing haystack data that we cannot
+  // match yet using the Boyer-Moore-Horspool algorithm (because the trailing
+  // data is less than the needle size) then match using a modified
+  // algorithm that starts matching from the beginning instead of the end.
+  // Whatever trailing data is left after running this algorithm is added to
+  // the lookbehind buffer.
+  while (
+    pos < len &&
+    (
+      data[pos] !== needle[0] ||
+      (
+        (Buffer.compare(
+          data.subarray(pos, pos + len - pos),
+          needle.subarray(0, len - pos)
+        ) !== 0)
+      )
+    )
+  ) {
+    ++pos
+  }
+  if (pos < len) {
+    data.copy(this._lookbehind, 0, pos, pos + (len - pos))
+    this._lookbehind_size = len - pos
+  }
+
+  // Everything until pos is guaranteed not to contain needle data.
+  if (pos > 0) { this.emit('info', false, data, this._bufpos, pos < len ? pos : len) }
+
+  this._bufpos = len
+  return len
+}
+
+SBMH.prototype._sbmh_lookup_char = function (data, pos) {
+  return (pos < 0)
+    ? this._lookbehind[this._lookbehind_size + pos]
+    : data[pos]
+}
+
+SBMH.prototype._sbmh_memcmp = function (data, pos, len) {
+  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
+    if (this._sbmh_lookup_char(data, pos + i) !== this._needle[i]) { return false }
+  }
+  return true
+}
+
+module.exports = SBMH
+
+
+/***/ }),
+
+/***/ 9581:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const WritableStream = (__nccwpck_require__(7075).Writable)
+const { inherits } = __nccwpck_require__(7975)
+const Dicer = __nccwpck_require__(7182)
+
+const MultipartParser = __nccwpck_require__(1192)
+const UrlencodedParser = __nccwpck_require__(855)
+const parseParams = __nccwpck_require__(8929)
+
+function Busboy (opts) {
+  if (!(this instanceof Busboy)) { return new Busboy(opts) }
+
+  if (typeof opts !== 'object') {
+    throw new TypeError('Busboy expected an options-Object.')
+  }
+  if (typeof opts.headers !== 'object') {
+    throw new TypeError('Busboy expected an options-Object with headers-attribute.')
+  }
+  if (typeof opts.headers['content-type'] !== 'string') {
+    throw new TypeError('Missing Content-Type-header.')
+  }
+
+  const {
+    headers,
+    ...streamOptions
+  } = opts
+
+  this.opts = {
+    autoDestroy: false,
+    ...streamOptions
+  }
+  WritableStream.call(this, this.opts)
+
+  this._done = false
+  this._parser = this.getParserByHeaders(headers)
+  this._finished = false
+}
+inherits(Busboy, WritableStream)
+
+Busboy.prototype.emit = function (ev) {
+  if (ev === 'finish') {
+    if (!this._done) {
+      this._parser?.end()
+      return
+    } else if (this._finished) {
+      return
+    }
+    this._finished = true
+  }
+  WritableStream.prototype.emit.apply(this, arguments)
+}
+
+Busboy.prototype.getParserByHeaders = function (headers) {
+  const parsed = parseParams(headers['content-type'])
+
+  const cfg = {
+    defCharset: this.opts.defCharset,
+    fileHwm: this.opts.fileHwm,
+    headers,
+    highWaterMark: this.opts.highWaterMark,
+    isPartAFile: this.opts.isPartAFile,
+    limits: this.opts.limits,
+    parsedConType: parsed,
+    preservePath: this.opts.preservePath
+  }
+
+  if (MultipartParser.detect.test(parsed[0])) {
+    return new MultipartParser(this, cfg)
+  }
+  if (UrlencodedParser.detect.test(parsed[0])) {
+    return new UrlencodedParser(this, cfg)
+  }
+  throw new Error('Unsupported Content-Type.')
+}
+
+Busboy.prototype._write = function (chunk, encoding, cb) {
+  this._parser.write(chunk, cb)
+}
+
+module.exports = Busboy
+module.exports["default"] = Busboy
+module.exports.Busboy = Busboy
+
+module.exports.Dicer = Dicer
+
+
+/***/ }),
+
+/***/ 1192:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+// TODO:
+//  * support 1 nested multipart level
+//    (see second multipart example here:
+//     http://www.w3.org/TR/html401/interact/forms.html#didx-multipartform-data)
+//  * support limits.fieldNameSize
+//     -- this will require modifications to utils.parseParams
+
+const { Readable } = __nccwpck_require__(7075)
+const { inherits } = __nccwpck_require__(7975)
+
+const Dicer = __nccwpck_require__(7182)
+
+const parseParams = __nccwpck_require__(8929)
+const decodeText = __nccwpck_require__(2747)
+const basename = __nccwpck_require__(692)
+const getLimit = __nccwpck_require__(2393)
+
+const RE_BOUNDARY = /^boundary$/i
+const RE_FIELD = /^form-data$/i
+const RE_CHARSET = /^charset$/i
+const RE_FILENAME = /^filename$/i
+const RE_NAME = /^name$/i
+
+Multipart.detect = /^multipart\/form-data/i
+function Multipart (boy, cfg) {
+  let i
+  let len
+  const self = this
+  let boundary
+  const limits = cfg.limits
+  const isPartAFile = cfg.isPartAFile || ((fieldName, contentType, fileName) => (contentType === 'application/octet-stream' || fileName !== undefined))
+  const parsedConType = cfg.parsedConType || []
+  const defCharset = cfg.defCharset || 'utf8'
+  const preservePath = cfg.preservePath
+  const fileOpts = { highWaterMark: cfg.fileHwm }
+
+  for (i = 0, len = parsedConType.length; i < len; ++i) {
+    if (Array.isArray(parsedConType[i]) &&
+      RE_BOUNDARY.test(parsedConType[i][0])) {
+      boundary = parsedConType[i][1]
+      break
+    }
+  }
+
+  function checkFinished () {
+    if (nends === 0 && finished && !boy._done) {
+      finished = false
+      self.end()
+    }
+  }
+
+  if (typeof boundary !== 'string') { throw new Error('Multipart: Boundary not found') }
+
+  const fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024)
+  const fileSizeLimit = getLimit(limits, 'fileSize', Infinity)
+  const filesLimit = getLimit(limits, 'files', Infinity)
+  const fieldsLimit = getLimit(limits, 'fields', Infinity)
+  const partsLimit = getLimit(limits, 'parts', Infinity)
+  const headerPairsLimit = getLimit(limits, 'headerPairs', 2000)
+  const headerSizeLimit = getLimit(limits, 'headerSize', 80 * 1024)
+
+  let nfiles = 0
+  let nfields = 0
+  let nends = 0
+  let curFile
+  let curField
+  let finished = false
+
+  this._needDrain = false
+  this._pause = false
+  this._cb = undefined
+  this._nparts = 0
+  this._boy = boy
+
+  const parserCfg = {
+    boundary,
+    maxHeaderPairs: headerPairsLimit,
+    maxHeaderSize: headerSizeLimit,
+    partHwm: fileOpts.highWaterMark,
+    highWaterMark: cfg.highWaterMark
+  }
+
+  this.parser = new Dicer(parserCfg)
+  this.parser.on('drain', function () {
+    self._needDrain = false
+    if (self._cb && !self._pause) {
+      const cb = self._cb
+      self._cb = undefined
+      cb()
+    }
+  }).on('part', function onPart (part) {
+    if (++self._nparts > partsLimit) {
+      self.parser.removeListener('part', onPart)
+      self.parser.on('part', skipPart)
+      boy.hitPartsLimit = true
+      boy.emit('partsLimit')
+      return skipPart(part)
+    }
+
+    // hack because streams2 _always_ doesn't emit 'end' until nextTick, so let
+    // us emit 'end' early since we know the part has ended if we are already
+    // seeing the next part
+    if (curField) {
+      const field = curField
+      field.emit('end')
+      field.removeAllListeners('end')
+    }
+
+    part.on('header', function (header) {
+      let contype
+      let fieldname
+      let parsed
+      let charset
+      let encoding
+      let filename
+      let nsize = 0
+
+      if (header['content-type']) {
+        parsed = parseParams(header['content-type'][0])
+        if (parsed[0]) {
+          contype = parsed[0].toLowerCase()
+          for (i = 0, len = parsed.length; i < len; ++i) {
+            if (RE_CHARSET.test(parsed[i][0])) {
+              charset = parsed[i][1].toLowerCase()
+              break
             }
-            catch {
-                return null;
-            }
-            finally {
-                if (timer)
-                    clearTimeout(timer);
-            }
-        });
-        const results = await Promise.all(probes);
-        for (const r of results) {
-            if (r !== null)
-                available.push(r);
+          }
         }
-    }
-    if (available.length === 0)
-        return null;
-    available.sort((a, b) => a.latency - b.latency);
-    return available[0].model;
-}
+      }
 
-;// CONCATENATED MODULE: ./src/metrics.ts
-function formatMetrics(metrics) {
-    const duration = metrics.review_duration_ms > 0
-        ? `${(metrics.review_duration_ms / 1000).toFixed(1)}s`
-        : 'N/A';
-    const totalFindings = metrics.findings_count.critical
-        + metrics.findings_count.warning
-        + metrics.findings_count.suggestion;
-    const lines = [
-        '## Review Metrics',
-        '',
-        '| Metric | Value |',
-        '|--------|-------|',
-        `| Model | \`${metrics.model_used}\` |`,
-        `| Files reviewed | ${metrics.files_reviewed} |`,
-        `| Duration | ${duration} |`,
-        `| Total findings | ${totalFindings} |`,
-        '',
-        '### Severity Breakdown',
-        '',
-        '| Severity | Count |',
-        '|----------|-------|',
-        `| 🚨 Critical | ${metrics.findings_count.critical} |`,
-        `| ⚠️ Warning | ${metrics.findings_count.warning} |`,
-        `| 💡 Suggestion | ${metrics.findings_count.suggestion} |`,
-    ];
-    if (metrics.validation_dropped > 0) {
-        lines.push('');
-        lines.push(`**Validation:** ${metrics.validation_dropped} finding(s) dropped by validation`);
-    }
-    if (metrics.batch_count > 1) {
-        lines.push('');
-        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.round(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
-    }
-    return lines.join('\n');
-}
+      if (contype === undefined) { contype = 'text/plain' }
+      if (charset === undefined) { charset = defCharset }
 
-;// CONCATENATED MODULE: ./src/batching.ts
-function batchFiles(filesDiff, batchSize = 50) {
-    if (batchSize <= 0) {
-        throw new Error('batchSize must be a positive integer');
-    }
-    const sortedFiles = Object.keys(filesDiff).sort();
-    const batches = [];
-    for (let i = 0; i < sortedFiles.length; i += batchSize) {
-        const batchFiles = sortedFiles.slice(i, i + batchSize);
-        const batchDiffs = {};
-        for (const file of batchFiles) {
-            batchDiffs[file] = filesDiff[file];
+      if (header['content-disposition']) {
+        parsed = parseParams(header['content-disposition'][0])
+        if (!RE_FIELD.test(parsed[0])) { return skipPart(part) }
+        for (i = 0, len = parsed.length; i < len; ++i) {
+          if (RE_NAME.test(parsed[i][0])) {
+            fieldname = parsed[i][1]
+          } else if (RE_FILENAME.test(parsed[i][0])) {
+            filename = parsed[i][1]
+            if (!preservePath) { filename = basename(filename) }
+          }
         }
-        batches.push({ files: batchFiles, diffs: batchDiffs });
-    }
-    return batches;
-}
-function mergeFindings(batchResults) {
-    const seen = new Set();
-    const merged = [];
-    const summaries = [];
-    for (const result of batchResults) {
-        if (result.summary) {
-            summaries.push(result.summary);
+      } else { return skipPart(part) }
+
+      if (header['content-transfer-encoding']) { encoding = header['content-transfer-encoding'][0].toLowerCase() } else { encoding = '7bit' }
+
+      let onData,
+        onEnd
+
+      if (isPartAFile(fieldname, contype, filename)) {
+        // file/binary field
+        if (nfiles === filesLimit) {
+          if (!boy.hitFilesLimit) {
+            boy.hitFilesLimit = true
+            boy.emit('filesLimit')
+          }
+          return skipPart(part)
         }
-        for (const finding of result.findings) {
-            const key = finding.line_start != null
-                ? `${finding.file}:${finding.line_start}:${finding.line_end ?? 'none'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`
-                : `${finding.file}:file:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                merged.push(finding);
-            }
+
+        ++nfiles
+
+        if (boy.listenerCount('file') === 0) {
+          self.parser._ignore()
+          return
         }
-    }
-    return { findings: merged, summary: summaries.length > 0 ? summaries.join('\n\n') : null };
-}
 
-;// CONCATENATED MODULE: ./src/index.ts
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const CHAIN_TIMEOUT_MS = 120_000;
-async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
-    let timer;
-    try {
-        return await Promise.race([
-            operation(),
-            new Promise(resolve => {
-                timer = setTimeout(() => {
-                    lib_core.warning(`Model chain timed out after ${timeoutMs}ms`);
-                    resolve(null);
-                }, timeoutMs);
-            }),
-        ]);
-    }
-    finally {
-        if (timer)
-            clearTimeout(timer);
-    }
-}
-async function cleanupPreviousOutput(repo, prNumber, token) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
-    }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
-    }
-}
-function providerToFormat(provider, responseFormat) {
-    return provider === 'mistral' ? 'tools' : responseFormat;
-}
-async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config) {
-    const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
-    const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
-    let batchReview = null;
-    let batchUsedModel = '';
-    let batchLastRawContent = '';
-    let batchDropped = 0;
-    for (const tagged of chain) {
-        const client = clients[tagged.provider];
-        if (!client)
-            continue;
-        try {
-            lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
-            const result = await client.chat(tagged.id, [
-                { role: 'system', content: systemMessage },
-                { role: 'user', content: userMsg },
-            ], {
-                temperature: 0.2,
-                maxTokens: 4096,
-                schema: ReviewJsonSchema,
-                format: providerToFormat(tagged.provider, responseFormat),
-            });
-            if (result.finishReason === 'length') {
-                lib_core.info(`${tagged.id} response truncated, trying next...`);
-                continue;
-            }
-            if (!result.content || !result.content.trim()) {
-                lib_core.info(`${tagged.id} returned empty, trying next...`);
-                continue;
-            }
-            let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
-            if (!parsed.success) {
-                lib_core.info(`${tagged.id} schema validation failed, retrying...`);
-                const truncatedContent = result.content.length > 500
-                    ? '...' + result.content.slice(-500)
-                    : result.content;
-                const errorSummary = parsed.error.issues.slice(0, 3)
-                    .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
-                    .join('\n');
-                const retryResult = await client.chat(tagged.id, [
-                    { role: 'system', content: systemMessage },
-                    { role: 'user', content: userMsg },
-                    { role: 'assistant', content: truncatedContent },
-                    { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
-                ], {
-                    temperature: 0.2,
-                    maxTokens: 4096,
-                    schema: ReviewJsonSchema,
-                    format: providerToFormat(tagged.provider, responseFormat),
-                });
-                if (retryResult.finishReason === 'length') {
-                    lib_core.info(`${tagged.id} retry truncated, trying next...`);
-                    continue;
-                }
-                parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
-                if (!parsed.success) {
-                    batchLastRawContent = retryResult.content;
-                    lib_core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                    continue;
-                }
-            }
-            batchReview = parsed.data;
-            const changedFiles = new Set(batch.files);
-            const validated = await validateFindings(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
-            for (const warning of validated.warnings)
-                lib_core.warning(warning);
-            batchReview = validated.valid;
-            batchDropped = validated.dropped;
-            batchUsedModel = tagged.id;
-            lib_core.info(`Done with ${tagged.id} (${tagged.provider})`);
-            break;
+        ++nends
+        const file = new FileStream(fileOpts)
+        curFile = file
+        file.on('end', function () {
+          --nends
+          self._pause = false
+          checkFinished()
+          if (self._cb && !self._needDrain) {
+            const cb = self._cb
+            self._cb = undefined
+            cb()
+          }
+        })
+        file._read = function (n) {
+          if (!self._pause) { return }
+          self._pause = false
+          if (self._cb && !self._needDrain) {
+            const cb = self._cb
+            self._cb = undefined
+            cb()
+          }
         }
-        catch (err) {
-            lib_core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+        boy.emit('file', fieldname, file, filename, encoding, contype)
+
+        onData = function (data) {
+          if ((nsize += data.length) > fileSizeLimit) {
+            const extralen = fileSizeLimit - nsize + data.length
+            if (extralen > 0) { file.push(data.slice(0, extralen)) }
+            file.truncated = true
+            file.bytesRead = fileSizeLimit
+            part.removeAllListeners('data')
+            file.emit('limit')
+            return
+          } else if (!file.push(data)) { self._pause = true }
+
+          file.bytesRead = nsize
         }
-    }
-    return {
-        findings: batchReview?.findings ?? [],
-        summary: batchReview?.summary ?? '',
-        usedModel: batchUsedModel,
-        lastRawContent: batchLastRawContent,
-        dropped: batchDropped,
-    };
-}
-function validateConfig(config) {
-    const hasCustom = !!(config.customApiUrl && config.customModel);
-    const hasCustomModels = !!(config.customApiUrl && config.customModels.length > 0);
-    if (config.apiKey)
-        lib_core.setSecret(config.apiKey);
-    if (config.mistralApiKey)
-        lib_core.setSecret(config.mistralApiKey);
-    if (config.groqApiKey)
-        lib_core.setSecret(config.groqApiKey);
-    if (config.openRouterApiKey)
-        lib_core.setSecret(config.openRouterApiKey);
-    if (config.kiloApiKey)
-        lib_core.setSecret(config.kiloApiKey);
-    if (config.customApiKey)
-        lib_core.setSecret(config.customApiKey);
-    if (config.customApiUrl) {
-        const url = new URL(config.customApiUrl);
-        const isLoopback = url.hostname === 'localhost'
-            || url.hostname === '127.0.0.1'
-            || url.hostname === '::1'
-            || url.hostname === '0.0.0.0';
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
-            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
+
+        onEnd = function () {
+          curFile = undefined
+          file.push(null)
         }
-        validateProviderUrl(config.customApiUrl, 'custom_api_url');
-    }
-    if (config.openRouterBaseUrl)
-        validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
-    if (config.kiloBaseUrl)
-        validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
-    if (config.baseURL)
-        validateProviderUrl(config.baseURL, 'nim_base_url');
-    if (config.mistralBaseUrl)
-        validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
-    if (config.groqBaseUrl)
-        validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
-    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
-    }
-    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
-        lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
-    }
-    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
-        lib_core.info('Running with only custom API configured — no fallback chain available if custom model fails');
-    }
-}
-function buildClients(config) {
-    const hasCustom = !!(config.customApiUrl && config.customModel);
-    return {
-        nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
-        mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
-        groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
-        openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
-        kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
-        custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
-    };
-}
-function detectLanguage(files) {
-    const langCounts = {};
-    for (const filePath of files) {
-        const language = languageForFile(filePath);
-        langCounts[language] = (langCounts[language] || 0) + 1;
-    }
-    return Object.entries(langCounts)
-        .filter(([language]) => language !== 'generic')
-        .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
-}
-async function prioritizeChain(chain, clients) {
-    try {
-        const fastest = await probeModels(chain, clients);
-        if (fastest) {
-            const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
-            if (fastestIndex > 0) {
-                const [fastestModel] = chain.splice(fastestIndex, 1);
-                chain.unshift(fastestModel);
-                lib_core.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
-            }
+      } else {
+        // non-file field
+        if (nfields === fieldsLimit) {
+          if (!boy.hitFieldsLimit) {
+            boy.hitFieldsLimit = true
+            boy.emit('fieldsLimit')
+          }
+          return skipPart(part)
         }
-    }
-    catch (probeErr) {
-        lib_core.warning(`Model probing failed, using original chain order: ${probeErr}`);
-    }
-}
-async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
-    const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
-    const batchResults = [];
-    for (const batch of work) {
-        if (batches.length > 1) {
-            lib_core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
+
+        ++nfields
+        ++nends
+        let buffer = ''
+        let truncated = false
+        curField = part
+
+        onData = function (data) {
+          if ((nsize += data.length) > fieldSizeLimit) {
+            const extralen = (fieldSizeLimit - (nsize - data.length))
+            buffer += data.toString('binary', 0, extralen)
+            truncated = true
+            part.removeAllListeners('data')
+          } else { buffer += data.toString('binary') }
         }
-        const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
-        if (result === null) {
-            lib_core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
+
+        onEnd = function () {
+          curField = undefined
+          if (buffer.length) { buffer = decodeText(buffer, 'binary', charset) }
+          boy.emit('field', fieldname, buffer, false, truncated, encoding, contype)
+          --nends
+          checkFinished()
         }
-        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
-    }
-    if (batches.length > 1) {
-        const merged = mergeFindings(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
-        return {
-            review: { findings: merged.findings, summary: merged.summary },
-            usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
-            lastRawContent: batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
-            validationDropped: batchResults.reduce((sum, result) => sum + result.dropped, 0),
-            batchCount: batches.length,
-        };
-    }
-    const result = batchResults[0];
-    return {
-        review: { findings: result.findings, summary: result.summary },
-        usedModel: result.usedModel,
-        lastRawContent: result.lastRawContent,
-        validationDropped: result.dropped,
-        batchCount: 1,
-    };
-}
-async function safeCleanup(repo, prNumber, token) {
-    try {
-        await cleanupPreviousOutput(repo, prNumber, token);
-    }
-    catch (err) {
-        lib_core.warning(`Failed to clean up previous review output: ${err}`);
-    }
-}
-async function dispatchOutput(context) {
-    const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
-    const modelShort = usedModel.split('/').pop() || usedModel;
-    const { critical, warning, suggestion } = severityTally(review);
-    const tally = [
-        critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
-        warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
-        suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
-    ].filter(Boolean).join(' · ');
-    const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
-    if (review.findings.length === 0) {
-        await safeCleanup(repo, prNumber, token);
-        try {
-            await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
-            lib_core.info('Posted LGTM comment (no issues found)');
-        }
-        catch (err) {
-            lib_core.warning(`Failed to post LGTM comment: ${err}`);
-        }
-        return { critical, warning, suggestion };
-    }
-    await safeCleanup(repo, prNumber, token);
-    const sections = [summaryBody, `\n${renderReview(review)}\n`];
-    if (truncated) {
-        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
-    }
-    try {
-        await postComment(repo, prNumber, token, sections.join('\n'));
-        lib_core.info(`Posted summary comment with ${review.findings.length} findings`);
-    }
-    catch (err) {
-        lib_core.warning(`Failed to post summary comment: ${err}`);
-    }
-    if (!usedModel) {
-        await safeCleanup(repo, prNumber, token);
-        try {
-            await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
-        }
-        catch (err) {
-            lib_core.warning(`Failed to post no-content comment: ${err}`);
-        }
-    }
-    else if (config.promptMode === 'replace' && lastRawContent) {
-        await safeCleanup(repo, prNumber, token);
-        try {
-            await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
-        }
-        catch (err) {
-            lib_core.warning(`Failed to post raw output comment: ${err}`);
-        }
-    }
-    return { critical, warning, suggestion };
-}
-async function writeMetrics(metrics) {
-    const stepSummary = process.env.GITHUB_STEP_SUMMARY;
-    if (!stepSummary)
-        return;
-    try {
-        const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
-        fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
-        lib_core.info('Metrics written to step summary');
-    }
-    catch (err) {
-        lib_core.warning(`Failed to write metrics to step summary: ${err}`);
-    }
-}
-async function run() {
-    const config = await loadConfig();
-    validateConfig(config);
-    const clients = buildClients(config);
-    const hasCustom = !!(config.customApiUrl && config.customModel);
-    const chain = buildCombinedChain({
-        nimModels: config.models,
-        mistralModels: config.mistralModels,
-        groqModels: config.groqModels,
-        hasNimKey: !!config.apiKey,
-        hasMistralKey: !!config.mistralApiKey,
-        hasGroqKey: !!config.groqApiKey,
-        openrouterModels: config.openRouterModels,
-        hasOpenRouterKey: !!config.openRouterApiKey,
-        kiloModels: config.kiloModels,
-        hasKiloKey: !!config.kiloApiKey,
-        customModel: config.customModel,
-        hasCustomConfig: hasCustom,
-        customModels: config.customModels,
-        hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
-    });
-    const event = loadEvent();
-    const prNumber = event.pull_request.number;
-    const repo = process.env.GITHUB_REPOSITORY;
-    if (!repo)
-        throw new Error('GITHUB_REPOSITORY not set');
-    const token = process.env.GITHUB_TOKEN;
-    if (!token)
-        throw new Error('GITHUB_TOKEN not set');
-    lib_core.info(`Reviewing PR #${prNumber} in ${repo}`);
-    lib_core.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
-    const rules = parseRules(config.customRules);
-    const rulesValidation = validateRules(rules);
-    if (!rulesValidation.valid)
-        for (const err of rulesValidation.errors)
-            lib_core.warning(err);
-    if (rules.length > 0)
-        lib_core.info(`Loaded ${rules.length} custom rule(s)`);
-    const reviewStartTime = Date.now();
-    let filesDiff;
-    try {
-        filesDiff = await fetchDiff(repo, prNumber, token);
-    }
-    catch (err) {
-        if (err instanceof DiffTooLargeError) {
-            try {
-                await postComment(repo, prNumber, token, `### AI Code Review\n\n${err.message}`);
-            }
-            catch (postErr) {
-                lib_core.warning(`Failed to post diff-too-large comment: ${postErr}`);
-            }
-            return;
-        }
-        throw err;
-    }
-    const reviewableFiles = Object.keys(filesDiff).sort().filter(file => !shouldExclude(file, config.excludePatterns));
-    if (reviewableFiles.length === 0) {
-        await postComment(repo, prNumber, token, '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).');
-        return;
-    }
-    const filesToReview = reviewableFiles.slice(0, config.maxFiles);
-    const truncated = reviewableFiles.length > config.maxFiles;
-    lib_core.info(`Reviewing ${filesToReview.length} files...`);
-    const detectedLanguage = detectLanguage(filesToReview);
-    if (detectedLanguage)
-        lib_core.info(`Detected language: ${detectedLanguage}`);
-    await prioritizeChain(chain, clients);
-    const filesDiffMap = {};
-    for (const file of filesToReview)
-        filesDiffMap[file] = filesDiff[file] || '';
-    const batches = filesToReview.length > 50 ? batchFiles(filesDiffMap, 50) : [];
-    const useBatching = batches.length > 1;
-    lib_core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
-    const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules);
-    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
-    const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
-    await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
-}
-const inTest = process.argv.includes('--test') || !!process.env.NODE_TEST_CONTEXT;
-if (!inTest) {
-    run().catch(err => {
-        lib_core.setFailed(err instanceof Error ? err.message : String(err));
-    });
+      }
+
+      /* As of node@2efe4ab761666 (v0.10.29+/v0.11.14+), busboy had become
+         broken. Streams2/streams3 is a huge black box of confusion, but
+         somehow overriding the sync state seems to fix things again (and still
+         seems to work for previous node versions).
+      */
+      part._readableState.sync = false
+
+      part.on('data', onData)
+      part.on('end', onEnd)
+    }).on('error', function (err) {
+      if (curFile) { curFile.emit('error', err) }
+    })
+  }).on('error', function (err) {
+    boy.emit('error', err)
+  }).on('finish', function () {
+    finished = true
+    checkFinished()
+  })
 }
 
-var __webpack_exports__detectLanguage = __webpack_exports__.od;
-var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
-var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
-export { __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+Multipart.prototype.write = function (chunk, cb) {
+  const r = this.parser.write(chunk)
+  if (r && !this._pause) {
+    cb()
+  } else {
+    this._needDrain = !r
+    this._cb = cb
+  }
+}
+
+Multipart.prototype.end = function () {
+  const self = this
+
+  if (self.parser.writable) {
+    self.parser.end()
+  } else if (!self._boy._done) {
+    process.nextTick(function () {
+      self._boy._done = true
+      self._boy.emit('finish')
+    })
+  }
+}
+
+function skipPart (part) {
+  part.resume()
+}
+
+function FileStream (opts) {
+  Readable.call(this, opts)
+
+  this.bytesRead = 0
+
+  this.truncated = false
+}
+
+inherits(FileStream, Readable)
+
+FileStream.prototype._read = function (n) {}
+
+module.exports = Multipart
+
+
+/***/ }),
+
+/***/ 855:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const Decoder = __nccwpck_require__(1496)
+const decodeText = __nccwpck_require__(2747)
+const getLimit = __nccwpck_require__(2393)
+
+const RE_CHARSET = /^charset$/i
+
+UrlEncoded.detect = /^application\/x-www-form-urlencoded/i
+function UrlEncoded (boy, cfg) {
+  const limits = cfg.limits
+  const parsedConType = cfg.parsedConType
+  this.boy = boy
+
+  this.fieldSizeLimit = getLimit(limits, 'fieldSize', 1 * 1024 * 1024)
+  this.fieldNameSizeLimit = getLimit(limits, 'fieldNameSize', 100)
+  this.fieldsLimit = getLimit(limits, 'fields', Infinity)
+
+  let charset
+  for (var i = 0, len = parsedConType.length; i < len; ++i) { // eslint-disable-line no-var
+    if (Array.isArray(parsedConType[i]) &&
+        RE_CHARSET.test(parsedConType[i][0])) {
+      charset = parsedConType[i][1].toLowerCase()
+      break
+    }
+  }
+
+  if (charset === undefined) { charset = cfg.defCharset || 'utf8' }
+
+  this.decoder = new Decoder()
+  this.charset = charset
+  this._fields = 0
+  this._state = 'key'
+  this._checkingBytes = true
+  this._bytesKey = 0
+  this._bytesVal = 0
+  this._key = ''
+  this._val = ''
+  this._keyTrunc = false
+  this._valTrunc = false
+  this._hitLimit = false
+}
+
+UrlEncoded.prototype.write = function (data, cb) {
+  if (this._fields === this.fieldsLimit) {
+    if (!this.boy.hitFieldsLimit) {
+      this.boy.hitFieldsLimit = true
+      this.boy.emit('fieldsLimit')
+    }
+    return cb()
+  }
+
+  let idxeq; let idxamp; let i; let p = 0; const len = data.length
+
+  while (p < len) {
+    if (this._state === 'key') {
+      idxeq = idxamp = undefined
+      for (i = p; i < len; ++i) {
+        if (!this._checkingBytes) { ++p }
+        if (data[i] === 0x3D/* = */) {
+          idxeq = i
+          break
+        } else if (data[i] === 0x26/* & */) {
+          idxamp = i
+          break
+        }
+        if (this._checkingBytes && this._bytesKey === this.fieldNameSizeLimit) {
+          this._hitLimit = true
+          break
+        } else if (this._checkingBytes) { ++this._bytesKey }
+      }
+
+      if (idxeq !== undefined) {
+        // key with assignment
+        if (idxeq > p) { this._key += this.decoder.write(data.toString('binary', p, idxeq)) }
+        this._state = 'val'
+
+        this._hitLimit = false
+        this._checkingBytes = true
+        this._val = ''
+        this._bytesVal = 0
+        this._valTrunc = false
+        this.decoder.reset()
+
+        p = idxeq + 1
+      } else if (idxamp !== undefined) {
+        // key with no assignment
+        ++this._fields
+        let key; const keyTrunc = this._keyTrunc
+        if (idxamp > p) { key = (this._key += this.decoder.write(data.toString('binary', p, idxamp))) } else { key = this._key }
+
+        this._hitLimit = false
+        this._checkingBytes = true
+        this._key = ''
+        this._bytesKey = 0
+        this._keyTrunc = false
+        this.decoder.reset()
+
+        if (key.length) {
+          this.boy.emit('field', decodeText(key, 'binary', this.charset),
+            '',
+            keyTrunc,
+            false)
+        }
+
+        p = idxamp + 1
+        if (this._fields === this.fieldsLimit) { return cb() }
+      } else if (this._hitLimit) {
+        // we may not have hit the actual limit if there are encoded bytes...
+        if (i > p) { this._key += this.decoder.write(data.toString('binary', p, i)) }
+        p = i
+        if ((this._bytesKey = this._key.length) === this.fieldNameSizeLimit) {
+          // yep, we actually did hit the limit
+          this._checkingBytes = false
+          this._keyTrunc = true
+        }
+      } else {
+        if (p < len) { this._key += this.decoder.write(data.toString('binary', p)) }
+        p = len
+      }
+    } else {
+      idxamp = undefined
+      for (i = p; i < len; ++i) {
+        if (!this._checkingBytes) { ++p }
+        if (data[i] === 0x26/* & */) {
+          idxamp = i
+          break
+        }
+        if (this._checkingBytes && this._bytesVal === this.fieldSizeLimit) {
+          this._hitLimit = true
+          break
+        } else if (this._checkingBytes) { ++this._bytesVal }
+      }
+
+      if (idxamp !== undefined) {
+        ++this._fields
+        if (idxamp > p) { this._val += this.decoder.write(data.toString('binary', p, idxamp)) }
+        this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
+          decodeText(this._val, 'binary', this.charset),
+          this._keyTrunc,
+          this._valTrunc)
+        this._state = 'key'
+
+        this._hitLimit = false
+        this._checkingBytes = true
+        this._key = ''
+        this._bytesKey = 0
+        this._keyTrunc = false
+        this.decoder.reset()
+
+        p = idxamp + 1
+        if (this._fields === this.fieldsLimit) { return cb() }
+      } else if (this._hitLimit) {
+        // we may not have hit the actual limit if there are encoded bytes...
+        if (i > p) { this._val += this.decoder.write(data.toString('binary', p, i)) }
+        p = i
+        if ((this._val === '' && this.fieldSizeLimit === 0) ||
+            (this._bytesVal = this._val.length) === this.fieldSizeLimit) {
+          // yep, we actually did hit the limit
+          this._checkingBytes = false
+          this._valTrunc = true
+        }
+      } else {
+        if (p < len) { this._val += this.decoder.write(data.toString('binary', p)) }
+        p = len
+      }
+    }
+  }
+  cb()
+}
+
+UrlEncoded.prototype.end = function () {
+  if (this.boy._done) { return }
+
+  if (this._state === 'key' && this._key.length > 0) {
+    this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
+      '',
+      this._keyTrunc,
+      false)
+  } else if (this._state === 'val') {
+    this.boy.emit('field', decodeText(this._key, 'binary', this.charset),
+      decodeText(this._val, 'binary', this.charset),
+      this._keyTrunc,
+      this._valTrunc)
+  }
+  this.boy._done = true
+  this.boy.emit('finish')
+}
+
+module.exports = UrlEncoded
+
+
+/***/ }),
+
+/***/ 1496:
+/***/ ((module) => {
+
+
+
+const RE_PLUS = /\+/g
+
+const HEX = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+  0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+]
+
+function Decoder () {
+  this.buffer = undefined
+}
+Decoder.prototype.write = function (str) {
+  // Replace '+' with ' ' before decoding
+  str = str.replace(RE_PLUS, ' ')
+  let res = ''
+  let i = 0; let p = 0; const len = str.length
+  for (; i < len; ++i) {
+    if (this.buffer !== undefined) {
+      if (!HEX[str.charCodeAt(i)]) {
+        res += '%' + this.buffer
+        this.buffer = undefined
+        --i // retry character
+      } else {
+        this.buffer += str[i]
+        ++p
+        if (this.buffer.length === 2) {
+          res += String.fromCharCode(parseInt(this.buffer, 16))
+          this.buffer = undefined
+        }
+      }
+    } else if (str[i] === '%') {
+      if (i > p) {
+        res += str.substring(p, i)
+        p = i
+      }
+      this.buffer = ''
+      ++p
+    }
+  }
+  if (p < len && this.buffer === undefined) { res += str.substring(p) }
+  return res
+}
+Decoder.prototype.reset = function () {
+  this.buffer = undefined
+}
+
+module.exports = Decoder
+
+
+/***/ }),
+
+/***/ 692:
+/***/ ((module) => {
+
+
+
+module.exports = function basename (path) {
+  if (typeof path !== 'string') { return '' }
+  for (var i = path.length - 1; i >= 0; --i) { // eslint-disable-line no-var
+    switch (path.charCodeAt(i)) {
+      case 0x2F: // '/'
+      case 0x5C: // '\'
+        path = path.slice(i + 1)
+        return (path === '..' || path === '.' ? '' : path)
+    }
+  }
+  return (path === '..' || path === '.' ? '' : path)
+}
+
+
+/***/ }),
+
+/***/ 2747:
+/***/ (function(module) {
+
+
+
+// Node has always utf-8
+const utf8Decoder = new TextDecoder('utf-8')
+const textDecoders = new Map([
+  ['utf-8', utf8Decoder],
+  ['utf8', utf8Decoder]
+])
+
+function getDecoder (charset) {
+  let lc
+  while (true) {
+    switch (charset) {
+      case 'utf-8':
+      case 'utf8':
+        return decoders.utf8
+      case 'latin1':
+      case 'ascii': // TODO: Make these a separate, strict decoder?
+      case 'us-ascii':
+      case 'iso-8859-1':
+      case 'iso8859-1':
+      case 'iso88591':
+      case 'iso_8859-1':
+      case 'windows-1252':
+      case 'iso_8859-1:1987':
+      case 'cp1252':
+      case 'x-cp1252':
+        return decoders.latin1
+      case 'utf16le':
+      case 'utf-16le':
+      case 'ucs2':
+      case 'ucs-2':
+        return decoders.utf16le
+      case 'base64':
+        return decoders.base64
+      default:
+        if (lc === undefined) {
+          lc = true
+          charset = charset.toLowerCase()
+          continue
+        }
+        return decoders.other.bind(charset)
+    }
+  }
+}
+
+const decoders = {
+  utf8: (data, sourceEncoding) => {
+    if (data.length === 0) {
+      return ''
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding)
+    }
+    return data.utf8Slice(0, data.length)
+  },
+
+  latin1: (data, sourceEncoding) => {
+    if (data.length === 0) {
+      return ''
+    }
+    if (typeof data === 'string') {
+      return data
+    }
+    return data.latin1Slice(0, data.length)
+  },
+
+  utf16le: (data, sourceEncoding) => {
+    if (data.length === 0) {
+      return ''
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding)
+    }
+    return data.ucs2Slice(0, data.length)
+  },
+
+  base64: (data, sourceEncoding) => {
+    if (data.length === 0) {
+      return ''
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding)
+    }
+    return data.base64Slice(0, data.length)
+  },
+
+  other: (data, sourceEncoding) => {
+    if (data.length === 0) {
+      return ''
+    }
+    if (typeof data === 'string') {
+      data = Buffer.from(data, sourceEncoding)
+    }
+
+    if (textDecoders.has(this.toString())) {
+      try {
+        return textDecoders.get(this).decode(data)
+      } catch {}
+    }
+    return typeof data === 'string'
+      ? data
+      : data.toString()
+  }
+}
+
+function decodeText (text, sourceEncoding, destEncoding) {
+  if (text) {
+    return getDecoder(destEncoding)(text, sourceEncoding)
+  }
+  return text
+}
+
+module.exports = decodeText
+
+
+/***/ }),
+
+/***/ 2393:
+/***/ ((module) => {
+
+
+
+module.exports = function getLimit (limits, name, defaultLimit) {
+  if (
+    !limits ||
+    limits[name] === undefined ||
+    limits[name] === null
+  ) { return defaultLimit }
+
+  if (
+    typeof limits[name] !== 'number' ||
+    isNaN(limits[name])
+  ) { throw new TypeError('Limit ' + name + ' is not a valid number') }
+
+  return limits[name]
+}
+
+
+/***/ }),
+
+/***/ 8929:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/* eslint-disable object-property-newline */
+
+
+const decodeText = __nccwpck_require__(2747)
+
+const RE_ENCODED = /%[a-fA-F0-9][a-fA-F0-9]/g
+
+const EncodedLookup = {
+  '%00': '\x00', '%01': '\x01', '%02': '\x02', '%03': '\x03', '%04': '\x04',
+  '%05': '\x05', '%06': '\x06', '%07': '\x07', '%08': '\x08', '%09': '\x09',
+  '%0a': '\x0a', '%0A': '\x0a', '%0b': '\x0b', '%0B': '\x0b', '%0c': '\x0c',
+  '%0C': '\x0c', '%0d': '\x0d', '%0D': '\x0d', '%0e': '\x0e', '%0E': '\x0e',
+  '%0f': '\x0f', '%0F': '\x0f', '%10': '\x10', '%11': '\x11', '%12': '\x12',
+  '%13': '\x13', '%14': '\x14', '%15': '\x15', '%16': '\x16', '%17': '\x17',
+  '%18': '\x18', '%19': '\x19', '%1a': '\x1a', '%1A': '\x1a', '%1b': '\x1b',
+  '%1B': '\x1b', '%1c': '\x1c', '%1C': '\x1c', '%1d': '\x1d', '%1D': '\x1d',
+  '%1e': '\x1e', '%1E': '\x1e', '%1f': '\x1f', '%1F': '\x1f', '%20': '\x20',
+  '%21': '\x21', '%22': '\x22', '%23': '\x23', '%24': '\x24', '%25': '\x25',
+  '%26': '\x26', '%27': '\x27', '%28': '\x28', '%29': '\x29', '%2a': '\x2a',
+  '%2A': '\x2a', '%2b': '\x2b', '%2B': '\x2b', '%2c': '\x2c', '%2C': '\x2c',
+  '%2d': '\x2d', '%2D': '\x2d', '%2e': '\x2e', '%2E': '\x2e', '%2f': '\x2f',
+  '%2F': '\x2f', '%30': '\x30', '%31': '\x31', '%32': '\x32', '%33': '\x33',
+  '%34': '\x34', '%35': '\x35', '%36': '\x36', '%37': '\x37', '%38': '\x38',
+  '%39': '\x39', '%3a': '\x3a', '%3A': '\x3a', '%3b': '\x3b', '%3B': '\x3b',
+  '%3c': '\x3c', '%3C': '\x3c', '%3d': '\x3d', '%3D': '\x3d', '%3e': '\x3e',
+  '%3E': '\x3e', '%3f': '\x3f', '%3F': '\x3f', '%40': '\x40', '%41': '\x41',
+  '%42': '\x42', '%43': '\x43', '%44': '\x44', '%45': '\x45', '%46': '\x46',
+  '%47': '\x47', '%48': '\x48', '%49': '\x49', '%4a': '\x4a', '%4A': '\x4a',
+  '%4b': '\x4b', '%4B': '\x4b', '%4c': '\x4c', '%4C': '\x4c', '%4d': '\x4d',
+  '%4D': '\x4d', '%4e': '\x4e', '%4E': '\x4e', '%4f': '\x4f', '%4F': '\x4f',
+  '%50': '\x50', '%51': '\x51', '%52': '\x52', '%53': '\x53', '%54': '\x54',
+  '%55': '\x55', '%56': '\x56', '%57': '\x57', '%58': '\x58', '%59': '\x59',
+  '%5a': '\x5a', '%5A': '\x5a', '%5b': '\x5b', '%5B': '\x5b', '%5c': '\x5c',
+  '%5C': '\x5c', '%5d': '\x5d', '%5D': '\x5d', '%5e': '\x5e', '%5E': '\x5e',
+  '%5f': '\x5f', '%5F': '\x5f', '%60': '\x60', '%61': '\x61', '%62': '\x62',
+  '%63': '\x63', '%64': '\x64', '%65': '\x65', '%66': '\x66', '%67': '\x67',
+  '%68': '\x68', '%69': '\x69', '%6a': '\x6a', '%6A': '\x6a', '%6b': '\x6b',
+  '%6B': '\x6b', '%6c': '\x6c', '%6C': '\x6c', '%6d': '\x6d', '%6D': '\x6d',
+  '%6e': '\x6e', '%6E': '\x6e', '%6f': '\x6f', '%6F': '\x6f', '%70': '\x70',
+  '%71': '\x71', '%72': '\x72', '%73': '\x73', '%74': '\x74', '%75': '\x75',
+  '%76': '\x76', '%77': '\x77', '%78': '\x78', '%79': '\x79', '%7a': '\x7a',
+  '%7A': '\x7a', '%7b': '\x7b', '%7B': '\x7b', '%7c': '\x7c', '%7C': '\x7c',
+  '%7d': '\x7d', '%7D': '\x7d', '%7e': '\x7e', '%7E': '\x7e', '%7f': '\x7f',
+  '%7F': '\x7f', '%80': '\x80', '%81': '\x81', '%82': '\x82', '%83': '\x83',
+  '%84': '\x84', '%85': '\x85', '%86': '\x86', '%87': '\x87', '%88': '\x88',
+  '%89': '\x89', '%8a': '\x8a', '%8A': '\x8a', '%8b': '\x8b', '%8B': '\x8b',
+  '%8c': '\x8c', '%8C': '\x8c', '%8d': '\x8d', '%8D': '\x8d', '%8e': '\x8e',
+  '%8E': '\x8e', '%8f': '\x8f', '%8F': '\x8f', '%90': '\x90', '%91': '\x91',
+  '%92': '\x92', '%93': '\x93', '%94': '\x94', '%95': '\x95', '%96': '\x96',
+  '%97': '\x97', '%98': '\x98', '%99': '\x99', '%9a': '\x9a', '%9A': '\x9a',
+  '%9b': '\x9b', '%9B': '\x9b', '%9c': '\x9c', '%9C': '\x9c', '%9d': '\x9d',
+  '%9D': '\x9d', '%9e': '\x9e', '%9E': '\x9e', '%9f': '\x9f', '%9F': '\x9f',
+  '%a0': '\xa0', '%A0': '\xa0', '%a1': '\xa1', '%A1': '\xa1', '%a2': '\xa2',
+  '%A2': '\xa2', '%a3': '\xa3', '%A3': '\xa3', '%a4': '\xa4', '%A4': '\xa4',
+  '%a5': '\xa5', '%A5': '\xa5', '%a6': '\xa6', '%A6': '\xa6', '%a7': '\xa7',
+  '%A7': '\xa7', '%a8': '\xa8', '%A8': '\xa8', '%a9': '\xa9', '%A9': '\xa9',
+  '%aa': '\xaa', '%Aa': '\xaa', '%aA': '\xaa', '%AA': '\xaa', '%ab': '\xab',
+  '%Ab': '\xab', '%aB': '\xab', '%AB': '\xab', '%ac': '\xac', '%Ac': '\xac',
+  '%aC': '\xac', '%AC': '\xac', '%ad': '\xad', '%Ad': '\xad', '%aD': '\xad',
+  '%AD': '\xad', '%ae': '\xae', '%Ae': '\xae', '%aE': '\xae', '%AE': '\xae',
+  '%af': '\xaf', '%Af': '\xaf', '%aF': '\xaf', '%AF': '\xaf', '%b0': '\xb0',
+  '%B0': '\xb0', '%b1': '\xb1', '%B1': '\xb1', '%b2': '\xb2', '%B2': '\xb2',
+  '%b3': '\xb3', '%B3': '\xb3', '%b4': '\xb4', '%B4': '\xb4', '%b5': '\xb5',
+  '%B5': '\xb5', '%b6': '\xb6', '%B6': '\xb6', '%b7': '\xb7', '%B7': '\xb7',
+  '%b8': '\xb8', '%B8': '\xb8', '%b9': '\xb9', '%B9': '\xb9', '%ba': '\xba',
+  '%Ba': '\xba', '%bA': '\xba', '%BA': '\xba', '%bb': '\xbb', '%Bb': '\xbb',
+  '%bB': '\xbb', '%BB': '\xbb', '%bc': '\xbc', '%Bc': '\xbc', '%bC': '\xbc',
+  '%BC': '\xbc', '%bd': '\xbd', '%Bd': '\xbd', '%bD': '\xbd', '%BD': '\xbd',
+  '%be': '\xbe', '%Be': '\xbe', '%bE': '\xbe', '%BE': '\xbe', '%bf': '\xbf',
+  '%Bf': '\xbf', '%bF': '\xbf', '%BF': '\xbf', '%c0': '\xc0', '%C0': '\xc0',
+  '%c1': '\xc1', '%C1': '\xc1', '%c2': '\xc2', '%C2': '\xc2', '%c3': '\xc3',
+  '%C3': '\xc3', '%c4': '\xc4', '%C4': '\xc4', '%c5': '\xc5', '%C5': '\xc5',
+  '%c6': '\xc6', '%C6': '\xc6', '%c7': '\xc7', '%C7': '\xc7', '%c8': '\xc8',
+  '%C8': '\xc8', '%c9': '\xc9', '%C9': '\xc9', '%ca': '\xca', '%Ca': '\xca',
+  '%cA': '\xca', '%CA': '\xca', '%cb': '\xcb', '%Cb': '\xcb', '%cB': '\xcb',
+  '%CB': '\xcb', '%cc': '\xcc', '%Cc': '\xcc', '%cC': '\xcc', '%CC': '\xcc',
+  '%cd': '\xcd', '%Cd': '\xcd', '%cD': '\xcd', '%CD': '\xcd', '%ce': '\xce',
+  '%Ce': '\xce', '%cE': '\xce', '%CE': '\xce', '%cf': '\xcf', '%Cf': '\xcf',
+  '%cF': '\xcf', '%CF': '\xcf', '%d0': '\xd0', '%D0': '\xd0', '%d1': '\xd1',
+  '%D1': '\xd1', '%d2': '\xd2', '%D2': '\xd2', '%d3': '\xd3', '%D3': '\xd3',
+  '%d4': '\xd4', '%D4': '\xd4', '%d5': '\xd5', '%D5': '\xd5', '%d6': '\xd6',
+  '%D6': '\xd6', '%d7': '\xd7', '%D7': '\xd7', '%d8': '\xd8', '%D8': '\xd8',
+  '%d9': '\xd9', '%D9': '\xd9', '%da': '\xda', '%Da': '\xda', '%dA': '\xda',
+  '%DA': '\xda', '%db': '\xdb', '%Db': '\xdb', '%dB': '\xdb', '%DB': '\xdb',
+  '%dc': '\xdc', '%Dc': '\xdc', '%dC': '\xdc', '%DC': '\xdc', '%dd': '\xdd',
+  '%Dd': '\xdd', '%dD': '\xdd', '%DD': '\xdd', '%de': '\xde', '%De': '\xde',
+  '%dE': '\xde', '%DE': '\xde', '%df': '\xdf', '%Df': '\xdf', '%dF': '\xdf',
+  '%DF': '\xdf', '%e0': '\xe0', '%E0': '\xe0', '%e1': '\xe1', '%E1': '\xe1',
+  '%e2': '\xe2', '%E2': '\xe2', '%e3': '\xe3', '%E3': '\xe3', '%e4': '\xe4',
+  '%E4': '\xe4', '%e5': '\xe5', '%E5': '\xe5', '%e6': '\xe6', '%E6': '\xe6',
+  '%e7': '\xe7', '%E7': '\xe7', '%e8': '\xe8', '%E8': '\xe8', '%e9': '\xe9',
+  '%E9': '\xe9', '%ea': '\xea', '%Ea': '\xea', '%eA': '\xea', '%EA': '\xea',
+  '%eb': '\xeb', '%Eb': '\xeb', '%eB': '\xeb', '%EB': '\xeb', '%ec': '\xec',
+  '%Ec': '\xec', '%eC': '\xec', '%EC': '\xec', '%ed': '\xed', '%Ed': '\xed',
+  '%eD': '\xed', '%ED': '\xed', '%ee': '\xee', '%Ee': '\xee', '%eE': '\xee',
+  '%EE': '\xee', '%ef': '\xef', '%Ef': '\xef', '%eF': '\xef', '%EF': '\xef',
+  '%f0': '\xf0', '%F0': '\xf0', '%f1': '\xf1', '%F1': '\xf1', '%f2': '\xf2',
+  '%F2': '\xf2', '%f3': '\xf3', '%F3': '\xf3', '%f4': '\xf4', '%F4': '\xf4',
+  '%f5': '\xf5', '%F5': '\xf5', '%f6': '\xf6', '%F6': '\xf6', '%f7': '\xf7',
+  '%F7': '\xf7', '%f8': '\xf8', '%F8': '\xf8', '%f9': '\xf9', '%F9': '\xf9',
+  '%fa': '\xfa', '%Fa': '\xfa', '%fA': '\xfa', '%FA': '\xfa', '%fb': '\xfb',
+  '%Fb': '\xfb', '%fB': '\xfb', '%FB': '\xfb', '%fc': '\xfc', '%Fc': '\xfc',
+  '%fC': '\xfc', '%FC': '\xfc', '%fd': '\xfd', '%Fd': '\xfd', '%fD': '\xfd',
+  '%FD': '\xfd', '%fe': '\xfe', '%Fe': '\xfe', '%fE': '\xfe', '%FE': '\xfe',
+  '%ff': '\xff', '%Ff': '\xff', '%fF': '\xff', '%FF': '\xff'
+}
+
+function encodedReplacer (match) {
+  return EncodedLookup[match]
+}
+
+const STATE_KEY = 0
+const STATE_VALUE = 1
+const STATE_CHARSET = 2
+const STATE_LANG = 3
+
+function parseParams (str) {
+  const res = []
+  let state = STATE_KEY
+  let charset = ''
+  let inquote = false
+  let escaping = false
+  let p = 0
+  let tmp = ''
+  const len = str.length
+
+  for (var i = 0; i < len; ++i) { // eslint-disable-line no-var
+    const char = str[i]
+    if (char === '\\' && inquote) {
+      if (escaping) { escaping = false } else {
+        escaping = true
+        continue
+      }
+    } else if (char === '"') {
+      if (!escaping) {
+        if (inquote) {
+          inquote = false
+          state = STATE_KEY
+        } else { inquote = true }
+        continue
+      } else { escaping = false }
+    } else {
+      if (escaping && inquote) { tmp += '\\' }
+      escaping = false
+      if ((state === STATE_CHARSET || state === STATE_LANG) && char === "'") {
+        if (state === STATE_CHARSET) {
+          state = STATE_LANG
+          charset = tmp.substring(1)
+        } else { state = STATE_VALUE }
+        tmp = ''
+        continue
+      } else if (state === STATE_KEY &&
+        (char === '*' || char === '=') &&
+        res.length) {
+        state = char === '*'
+          ? STATE_CHARSET
+          : STATE_VALUE
+        res[p] = [tmp, undefined]
+        tmp = ''
+        continue
+      } else if (!inquote && char === ';') {
+        state = STATE_KEY
+        if (charset) {
+          if (tmp.length) {
+            tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer),
+              'binary',
+              charset)
+          }
+          charset = ''
+        } else if (tmp.length) {
+          tmp = decodeText(tmp, 'binary', 'utf8')
+        }
+        if (res[p] === undefined) { res[p] = tmp } else { res[p][1] = tmp }
+        tmp = ''
+        ++p
+        continue
+      } else if (!inquote && (char === ' ' || char === '\t')) { continue }
+    }
+    tmp += char
+  }
+  if (charset && tmp.length) {
+    tmp = decodeText(tmp.replace(RE_ENCODED, encodedReplacer),
+      'binary',
+      charset)
+  } else if (tmp) {
+    tmp = decodeText(tmp, 'binary', 'utf8')
+  }
+
+  if (res[p] === undefined) {
+    if (tmp) { res[p] = tmp }
+  } else { res[p][1] = tmp }
+
+  return res
+}
+
+module.exports = parseParams
+
+
+/***/ })
+
+/******/ });
+/************************************************************************/
+/******/ // The module cache
+/******/ var __webpack_module_cache__ = {};
+/******/ 
+/******/ // The require function
+/******/ function __nccwpck_require__(moduleId) {
+/******/ 	// Check if module is in cache
+/******/ 	var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 	if (cachedModule !== undefined) {
+/******/ 		return cachedModule.exports;
+/******/ 	}
+/******/ 	// Create a new module (and put it into the cache)
+/******/ 	var module = __webpack_module_cache__[moduleId] = {
+/******/ 		// no module.id needed
+/******/ 		// no module.loaded needed
+/******/ 		exports: {}
+/******/ 	};
+/******/ 
+/******/ 	// Execute the module function
+/******/ 	var threw = true;
+/******/ 	try {
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __nccwpck_require__);
+/******/ 		threw = false;
+/******/ 	} finally {
+/******/ 		if(threw) delete __webpack_module_cache__[moduleId];
+/******/ 	}
+/******/ 
+/******/ 	// Return the exports of the module
+/******/ 	return module.exports;
+/******/ }
+/******/ 
+/************************************************************************/
+/******/ /* webpack/runtime/async module */
+/******/ (() => {
+/******/ 	var webpackQueues = typeof Symbol === "function" ? Symbol("webpack queues") : "__webpack_queues__";
+/******/ 	var webpackExports = typeof Symbol === "function" ? Symbol("webpack exports") : "__webpack_exports__";
+/******/ 	var webpackError = typeof Symbol === "function" ? Symbol("webpack error") : "__webpack_error__";
+/******/ 	var resolveQueue = (queue) => {
+/******/ 		if(queue && queue.d < 1) {
+/******/ 			queue.d = 1;
+/******/ 			queue.forEach((fn) => (fn.r--));
+/******/ 			queue.forEach((fn) => (fn.r-- ? fn.r++ : fn()));
+/******/ 		}
+/******/ 	}
+/******/ 	var wrapDeps = (deps) => (deps.map((dep) => {
+/******/ 		if(dep !== null && typeof dep === "object") {
+/******/ 			if(dep[webpackQueues]) return dep;
+/******/ 			if(dep.then) {
+/******/ 				var queue = [];
+/******/ 				queue.d = 0;
+/******/ 				dep.then((r) => {
+/******/ 					obj[webpackExports] = r;
+/******/ 					resolveQueue(queue);
+/******/ 				}, (e) => {
+/******/ 					obj[webpackError] = e;
+/******/ 					resolveQueue(queue);
+/******/ 				});
+/******/ 				var obj = {};
+/******/ 				obj[webpackQueues] = (fn) => (fn(queue));
+/******/ 				return obj;
+/******/ 			}
+/******/ 		}
+/******/ 		var ret = {};
+/******/ 		ret[webpackQueues] = x => {};
+/******/ 		ret[webpackExports] = dep;
+/******/ 		return ret;
+/******/ 	}));
+/******/ 	__nccwpck_require__.a = (module, body, hasAwait) => {
+/******/ 		var queue;
+/******/ 		hasAwait && ((queue = []).d = -1);
+/******/ 		var depQueues = new Set();
+/******/ 		var exports = module.exports;
+/******/ 		var currentDeps;
+/******/ 		var outerResolve;
+/******/ 		var reject;
+/******/ 		var promise = new Promise((resolve, rej) => {
+/******/ 			reject = rej;
+/******/ 			outerResolve = resolve;
+/******/ 		});
+/******/ 		promise[webpackExports] = exports;
+/******/ 		promise[webpackQueues] = (fn) => (queue && fn(queue), depQueues.forEach(fn), promise["catch"](x => {}));
+/******/ 		module.exports = promise;
+/******/ 		body((deps) => {
+/******/ 			currentDeps = wrapDeps(deps);
+/******/ 			var fn;
+/******/ 			var getResult = () => (currentDeps.map((d) => {
+/******/ 				if(d[webpackError]) throw d[webpackError];
+/******/ 				return d[webpackExports];
+/******/ 			}))
+/******/ 			var promise = new Promise((resolve) => {
+/******/ 				fn = () => (resolve(getResult));
+/******/ 				fn.r = 0;
+/******/ 				var fnQueue = (q) => (q !== queue && !depQueues.has(q) && (depQueues.add(q), q && !q.d && (fn.r++, q.push(fn))));
+/******/ 				currentDeps.map((dep) => (dep[webpackQueues](fnQueue)));
+/******/ 			});
+/******/ 			return fn.r ? promise : getResult();
+/******/ 		}, (err) => ((err ? reject(promise[webpackError] = err) : outerResolve(exports)), resolveQueue(queue)));
+/******/ 		queue && queue.d < 0 && (queue.d = 0);
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/compat get default export */
+/******/ (() => {
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__nccwpck_require__.n = (module) => {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			() => (module['default']) :
+/******/ 			() => (module);
+/******/ 		__nccwpck_require__.d(getter, { a: getter });
+/******/ 		return getter;
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/create fake namespace object */
+/******/ (() => {
+/******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
+/******/ 	var leafPrototypes;
+/******/ 	// create a fake namespace object
+/******/ 	// mode & 1: value is a module id, require it
+/******/ 	// mode & 2: merge all properties of value into the ns
+/******/ 	// mode & 4: return value when already ns object
+/******/ 	// mode & 16: return value when it's Promise-like
+/******/ 	// mode & 8|1: behave like require
+/******/ 	__nccwpck_require__.t = function(value, mode) {
+/******/ 		if(mode & 1) value = this(value);
+/******/ 		if(mode & 8) return value;
+/******/ 		if(typeof value === 'object' && value) {
+/******/ 			if((mode & 4) && value.__esModule) return value;
+/******/ 			if((mode & 16) && typeof value.then === 'function') return value;
+/******/ 		}
+/******/ 		var ns = Object.create(null);
+/******/ 		__nccwpck_require__.r(ns);
+/******/ 		var def = {};
+/******/ 		leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
+/******/ 		for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
+/******/ 			Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
+/******/ 		}
+/******/ 		def['default'] = () => (value);
+/******/ 		__nccwpck_require__.d(ns, def);
+/******/ 		return ns;
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__nccwpck_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/make namespace object */
+/******/ (() => {
+/******/ 	// define __esModule on exports
+/******/ 	__nccwpck_require__.r = (exports) => {
+/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 		}
+/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/compat */
+/******/ 
+/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
+/******/ 
+/************************************************************************/
+/******/ 
+/******/ // startup
+/******/ // Load entry module and return exports
+/******/ // This entry module used 'module' so it can't be inlined
+/******/ var __webpack_exports__ = __nccwpck_require__(9407);
+/******/ __webpack_exports__ = await __webpack_exports__;
+/******/ var __webpack_exports__detectLanguage = __webpack_exports__.od;
+/******/ var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
+/******/ var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
+/******/ export { __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+/******/ 

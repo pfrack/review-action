@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, type ParsedRow } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable, type ParsedRow } from './bench-reorder.js';
 
 describe('updateActionYml groq target', () => {
   it('correctly replaces groq_models default', () => {
@@ -561,5 +561,53 @@ describe('stripFetchedScoresComment', () => {
     const input = '| Model |\n|-------|\n| `x` |';
     const result = stripFetchedScoresComment(input, undefined);
     assert.strictEqual(result, input);
+  });
+});
+
+describe('discoverNewModels', () => {
+  it('returns models not in SWE_BENCH_SCORES with 0.5 score', () => {
+    const result = discoverNewModels(['deepseek-ai/deepseek-v4-pro', 'brand-new/model-free']);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].model, 'brand-new/model-free');
+    assert.strictEqual(result[0].score, 0.5);
+  });
+
+  it('returns empty when all models are known', () => {
+    const result = discoverNewModels(['deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']);
+    assert.strictEqual(result.length, 0);
+  });
+});
+
+describe('patchScoresTable', () => {
+  it('inserts new entries into the scores table', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+    try {
+      const srcPath = join(tmpDir, 'test.ts');
+      const content = `export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  // OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+};`;
+      writeFileSync(srcPath, content, 'utf-8');
+      const count = patchScoresTable(srcPath, [{ model: 'new/model:free', score: 0.5 }]);
+      assert.strictEqual(count, 1);
+      const result = readFileSync(srcPath, 'utf-8');
+      assert.ok(result.includes("'new/model:free': 0.5"));
+      assert.ok(result.includes("'deepseek/deepseek-r1:free': 0.65"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 0 when marker not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+    try {
+      const srcPath = join(tmpDir, 'test.ts');
+      writeFileSync(srcPath, 'const x = {};', 'utf-8');
+      const count = patchScoresTable(srcPath, [{ model: 'new/model', score: 0.5 }]);
+      assert.strictEqual(count, 0);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

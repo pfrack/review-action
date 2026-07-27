@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment } from './github-review.js';
 import type { ReviewFinding } from './review-schema.js';
 
 function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
@@ -244,6 +244,49 @@ describe('postComment', () => {
       await postComment('owner/repo', 42, 'my-token', 'test body');
       assert.strictEqual(capturedHeaders['Authorization'], 'Bearer my-token');
       assert.strictEqual(capturedHeaders['Content-Type'], 'application/json');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('updates existing comment instead of delete+create', async () => {
+    const calls: Array<{ method: string; body: any }> = [];
+    globalThis.fetch = (async (url: string, init?: any) => {
+      if (init?.method === 'PATCH') {
+        calls.push({ method: 'PATCH', body: JSON.parse(init?.body || '{}') });
+        return { ok: true } as any;
+      }
+      return { ok: true, json: async () => [{ id: 123, body: '### AI Code Review\nold' }] } as any;
+    }) as any;
+    try {
+      await postComment('owner/repo', 42, 'token', '### AI Code Review\nnew');
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'PATCH');
+      assert.ok(calls[0].body.body.includes('new'));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('updateComment', () => {
+  const originalFetch = globalThis.fetch;
+
+  it('sends PATCH request with body', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody: any;
+    globalThis.fetch = (async (url: string, init?: any) => {
+      capturedUrl = url;
+      capturedMethod = init?.method || '';
+      capturedBody = JSON.parse(init?.body || '{}');
+      return { ok: true } as any;
+    }) as any;
+    try {
+      await updateComment('owner/repo', 99, 'token', 'updated body');
+      assert.ok(capturedUrl.includes('/issues/comments/99'));
+      assert.strictEqual(capturedMethod, 'PATCH');
+      assert.strictEqual(capturedBody.body, 'updated body');
     } finally {
       globalThis.fetch = originalFetch;
     }

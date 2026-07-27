@@ -137,9 +137,30 @@ export function shouldUseInlineComments(findings) {
 export async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
-        await deleteComment(repo, existingId, token);
+        await updateComment(repo, existingId, token, body);
     }
-    await createComment(repo, prNumber, token, body);
+    else {
+        await createComment(repo, prNumber, token, body);
+    }
+}
+export async function updateComment(repo, commentId, token, body) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    await withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const responseBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+        }
+    });
 }
 export async function deleteComment(repo, commentId, token) {
     const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;

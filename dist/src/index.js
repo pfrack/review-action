@@ -33,13 +33,15 @@ export async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_
     }
 }
 async function cleanupPreviousOutput(repo, prNumber, token) {
-    const existingReviewId = await findExistingReview(repo, prNumber, token);
-    if (existingReviewId) {
-        await deleteReview(repo, prNumber, existingReviewId, token);
+    // Delete ALL AI-generated comments (not just the first one)
+    let commentId;
+    while ((commentId = await findExistingComment(repo, prNumber, token)) !== null) {
+        await deleteComment(repo, commentId, token);
     }
-    const existingCommentId = await findExistingComment(repo, prNumber, token);
-    if (existingCommentId) {
-        await deleteComment(repo, existingCommentId, token);
+    // Delete ALL AI-generated reviews (deleting the review removes its inline comments)
+    let reviewId;
+    while ((reviewId = await findExistingReview(repo, prNumber, token)) !== null) {
+        await deleteReview(repo, prNumber, reviewId, token);
     }
 }
 function providerToFormat(provider, responseFormat) {
@@ -262,8 +264,9 @@ async function dispatchOutput(context) {
         suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
     const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+    // Single cleanup at the start — removes ALL previous AI comments and reviews
+    await safeCleanup(repo, prNumber, token);
     if (review.findings.length === 0) {
-        await safeCleanup(repo, prNumber, token);
         try {
             await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
             core.info('Posted LGTM comment (no issues found)');
@@ -273,35 +276,26 @@ async function dispatchOutput(context) {
         }
         return { critical, warning, suggestion };
     }
-    await safeCleanup(repo, prNumber, token);
-    const sections = [summaryBody, `\n${renderReview(review)}\n`];
-    if (truncated) {
-        sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+    let body = summaryBody;
+    if (usedModel) {
+        const sections = [summaryBody, `\n${renderReview(review)}\n`];
+        if (truncated) {
+            sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
+        }
+        body = sections.join('\n');
+    }
+    else {
+        body = `${summaryBody}\nNo review content returned from any model.`;
+    }
+    if (config.promptMode === 'replace' && lastRawContent) {
+        body = `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``;
     }
     try {
-        await postComment(repo, prNumber, token, sections.join('\n'));
-        core.info(`Posted summary comment with ${review.findings.length} findings`);
+        await postComment(repo, prNumber, token, body);
+        core.info(`Posted comment with ${review.findings.length} findings`);
     }
     catch (err) {
-        core.warning(`Failed to post summary comment: ${err}`);
-    }
-    if (!usedModel) {
-        await safeCleanup(repo, prNumber, token);
-        try {
-            await postComment(repo, prNumber, token, `${summaryBody}\nNo review content returned from any model.`);
-        }
-        catch (err) {
-            core.warning(`Failed to post no-content comment: ${err}`);
-        }
-    }
-    else if (config.promptMode === 'replace' && lastRawContent) {
-        await safeCleanup(repo, prNumber, token);
-        try {
-            await postComment(repo, prNumber, token, `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``);
-        }
-        catch (err) {
-            core.warning(`Failed to post raw output comment: ${err}`);
-        }
+        core.warning(`Failed to post comment: ${err}`);
     }
     return { critical, warning, suggestion };
 }
