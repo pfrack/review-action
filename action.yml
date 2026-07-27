@@ -41,7 +41,7 @@ inputs:
     default: 'https://openrouter.ai/api/v1'
   openrouter_models:
     description: 'Comma-separated OpenRouter model fallback chain'
-    default: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'
+    default: 'openai/gpt-oss-20b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free'
   openrouter_free_only:
     description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
     default: 'false'

@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { OpenAIClient } from './openai-client.js';
 
 export interface Config {
   baseURL: string;
@@ -35,13 +36,14 @@ export function splitCSV(s: string): string[] {
   return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
 
-export function loadConfig(): Config {
+export async function loadConfig(): Promise<Config> {
   const rawPromptMode = core.getInput('nim_prompt_mode') || 'append';
   if (rawPromptMode !== 'append' && rawPromptMode !== 'replace') {
     core.warning(`Invalid nim_prompt_mode "${rawPromptMode}", defaulting to "append"`);
   }
   const promptMode: 'append' | 'replace' = rawPromptMode === 'replace' ? 'replace' : 'append';
-  return {
+
+  const config: Config = {
     baseURL: core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
     apiKey: core.getInput('nim_api_key'),
     models: splitCSV(core.getInput('nim_models')),
@@ -55,15 +57,11 @@ export function loadConfig(): Config {
     groqBaseUrl: core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
     openRouterApiKey: core.getInput('openrouter_api_key') || '',
     openRouterBaseUrl: core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
-    openRouterModels: filterFreeOnly(splitCSV(core.getInput('openrouter_models') ||
-      'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'),
-      core.getInput('openrouter_free_only') === 'true', 'OpenRouter'),
+    openRouterModels: [],
     openRouterFreeOnly: core.getInput('openrouter_free_only') === 'true',
     kiloApiKey: core.getInput('kilocode_api_key') || '',
     kiloBaseUrl: core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
-    kiloModels: filterFreeOnly(splitCSV(core.getInput('kilocode_models') ||
-      'kilo-auto/balanced:free,kilo-auto/frontier:free'),
-      core.getInput('kilocode_free_only') === 'true', 'Kilo'),
+    kiloModels: [],
     kiloFreeOnly: core.getInput('kilocode_free_only') === 'true',
     customApiUrl: core.getInput('custom_api_url') || '',
     customModel: core.getInput('custom_model') || '',
@@ -85,14 +83,47 @@ export function loadConfig(): Config {
     customRules: core.getInput('custom_rules') || '',
     revalidateFindings: core.getInput('revalidate_findings') === 'true',
   };
+
+  const openRouterInput = splitCSV(core.getInput('openrouter_models'));
+  if (openRouterInput.length > 0) {
+    config.openRouterModels = filterFreeOnly(openRouterInput, config.openRouterFreeOnly, 'OpenRouter');
+  } else if (config.openRouterApiKey) {
+    config.openRouterModels = await fetchFreeModels(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter');
+  }
+
+  const kiloInput = splitCSV(core.getInput('kilocode_models'));
+  if (kiloInput.length > 0) {
+    config.kiloModels = filterFreeOnly(kiloInput, config.kiloFreeOnly, 'Kilo');
+  } else if (config.kiloApiKey) {
+    config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
+  }
+
+  return config;
+}
+
+export function isFreeModel(model: string): boolean {
+  return model.toLowerCase().includes('free');
 }
 
 export function filterFreeOnly(models: string[], enabled: boolean, providerLabel: string): string[] {
   if (!enabled) return models;
-  const free = models.filter(m => m.endsWith(':free'));
+  const free = models.filter(isFreeModel);
   const dropped = models.length - free.length;
   if (dropped > 0) {
     core.info(`${providerLabel}: filtered out ${dropped} non-free model(s), keeping ${free.length} free-tier model(s)`);
   }
   return free;
+}
+
+export async function fetchFreeModels(baseURL: string, apiKey: string, providerLabel: string): Promise<string[]> {
+  try {
+    const client = new OpenAIClient(baseURL, apiKey, providerLabel);
+    const models = await client.listModels();
+    const free = models.filter(isFreeModel);
+    core.info(`${providerLabel}: fetched ${models.length} models, ${free.length} free-tier`);
+    return free;
+  } catch (err) {
+    core.warning(`${providerLabel}: could not fetch model list: ${err}`);
+    return [];
+  }
 }

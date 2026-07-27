@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { loadConfig, filterFreeOnly } from './config.js';
+import { loadConfig, filterFreeOnly, isFreeModel } from './config.js';
 
 describe('loadConfig — OpenRouter fields', () => {
   const ENV_KEYS = [
@@ -11,7 +11,7 @@ describe('loadConfig — OpenRouter fields', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('reads OpenRouter API key and models', () => {
+  it('reads OpenRouter API key and models', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_OPENROUTER_API_KEY'] = 'sk-or-v1-key';
@@ -25,7 +25,7 @@ describe('loadConfig — OpenRouter fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.openRouterApiKey, 'sk-or-v1-key');
     assert.strictEqual(config.openRouterBaseUrl, 'https://openrouter.ai/api/v1');
@@ -37,7 +37,7 @@ describe('loadConfig — OpenRouter fields', () => {
     }
   });
 
-  it('defaults OpenRouter fields to empty when not provided', () => {
+  it('defaults OpenRouter models to empty when no key and no models provided', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_OPENROUTER_API_KEY'] = '';
@@ -50,10 +50,10 @@ describe('loadConfig — OpenRouter fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.openRouterApiKey, '');
-    assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick:free', 'google/gemini-2.0-flash-exp:free']);
+    assert.deepStrictEqual(config.openRouterModels, []);
 
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
@@ -71,11 +71,11 @@ describe('loadConfig — Kilo fields', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('reads Kilo API key and models', () => {
+  it('reads Kilo API key and models', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/balanced:free';
+    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free';
     process.env['INPUT_KILOCODE_BASE_URL'] = 'https://api.kilo.ai/api/gateway';
     process.env['INPUT_NIM_API_KEY'] = '';
     process.env['INPUT_NIM_BASE_URL'] = '';
@@ -85,11 +85,11 @@ describe('loadConfig — Kilo fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.kiloApiKey, 'kilo-key');
     assert.strictEqual(config.kiloBaseUrl, 'https://api.kilo.ai/api/gateway');
-    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/balanced:free']);
+    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
 
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
@@ -97,7 +97,7 @@ describe('loadConfig — Kilo fields', () => {
     }
   });
 
-  it('defaults Kilo fields to empty when not provided', () => {
+  it('defaults Kilo models to empty when no key and no models provided', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_KILOCODE_API_KEY'] = '';
@@ -110,10 +110,10 @@ describe('loadConfig — Kilo fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.kiloApiKey, '');
-    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/balanced:free', 'kilo-auto/frontier:free']);
+    assert.deepStrictEqual(config.kiloModels, []);
 
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
@@ -131,7 +131,7 @@ describe('loadConfig — custom_models CSV', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('parses custom_models CSV and defaults base URL to custom_api_url', () => {
+  it('parses custom_models CSV and defaults base URL to custom_api_url', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_CUSTOM_MODELS'] = 'model-a, model-b';
@@ -145,7 +145,7 @@ describe('loadConfig — custom_models CSV', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.deepStrictEqual(config.customModels, ['model-a', 'model-b']);
     assert.strictEqual(config.customModelsBaseUrl, 'https://api.example.com/v1');
@@ -156,7 +156,7 @@ describe('loadConfig — custom_models CSV', () => {
     }
   });
 
-  it('custom_models empty when not provided', () => {
+  it('custom_models empty when not provided', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_CUSTOM_MODELS'] = '';
@@ -170,7 +170,7 @@ describe('loadConfig — custom_models CSV', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.deepStrictEqual(config.customModels, []);
     assert.strictEqual(config.customModelsBaseUrl, '');
@@ -179,6 +179,27 @@ describe('loadConfig — custom_models CSV', () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
+  });
+});
+
+describe('isFreeModel', () => {
+  it('matches :free suffix', () => {
+    assert.ok(isFreeModel('model:free'));
+    assert.ok(isFreeModel('org/model:free'));
+  });
+
+  it('matches free without colon', () => {
+    assert.ok(isFreeModel('kilo-auto/free'));
+  });
+
+  it('is case-insensitive', () => {
+    assert.ok(isFreeModel('model:Free'));
+    assert.ok(isFreeModel('model:FREE'));
+  });
+
+  it('rejects non-free models', () => {
+    assert.ok(!isFreeModel('model-pro'));
+    assert.ok(!isFreeModel('gpt-4'));
   });
 });
 
@@ -199,8 +220,8 @@ describe('filterFreeOnly', () => {
   });
 
   it('returns all models when all are free', () => {
-    const models = ['model-a:free', 'model-b:free'];
-    assert.deepStrictEqual(filterFreeOnly(models, true, 'Test'), ['model-a:free', 'model-b:free']);
+    const models = ['model-a:free', 'model-b:free', 'kilo-auto/free'];
+    assert.deepStrictEqual(filterFreeOnly(models, true, 'Test'), ['model-a:free', 'model-b:free', 'kilo-auto/free']);
   });
 
   it('handles empty model list', () => {
@@ -219,7 +240,7 @@ describe('loadConfig — free-only filter', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('filters OpenRouter models to free-only when openrouter_free_only is true', () => {
+  it('filters OpenRouter models to free-only when openrouter_free_only is true', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_OPENROUTER_API_KEY'] = 'or-key';
@@ -236,7 +257,7 @@ describe('loadConfig — free-only filter', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.openRouterFreeOnly, true);
     assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'google/gemini-2.0-flash-exp:free']);
@@ -247,7 +268,7 @@ describe('loadConfig — free-only filter', () => {
     }
   });
 
-  it('does not filter OpenRouter models when openrouter_free_only is false', () => {
+  it('does not filter OpenRouter models when openrouter_free_only is false', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_OPENROUTER_API_KEY'] = 'or-key';
@@ -264,7 +285,7 @@ describe('loadConfig — free-only filter', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.openRouterFreeOnly, false);
     assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick', 'google/gemini-2.0-flash-exp:free']);
@@ -275,11 +296,11 @@ describe('loadConfig — free-only filter', () => {
     }
   });
 
-  it('filters Kilo models to free-only when kilocode_free_only is true', () => {
+  it('filters Kilo models to free-only when kilocode_free_only is true', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/balanced:free,kilo-auto/frontier:free,kilo-auto/premium';
+    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free,kilo-auto/premium';
     process.env['INPUT_KILOCODE_FREE_ONLY'] = 'true';
     process.env['INPUT_OPENROUTER_API_KEY'] = '';
     process.env['INPUT_OPENROUTER_MODELS'] = '';
@@ -292,10 +313,10 @@ describe('loadConfig — free-only filter', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.kiloFreeOnly, true);
-    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/balanced:free', 'kilo-auto/frontier:free']);
+    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
 
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
@@ -303,11 +324,11 @@ describe('loadConfig — free-only filter', () => {
     }
   });
 
-  it('does not filter Kilo models when kilocode_free_only is false', () => {
+  it('does not filter Kilo models when kilocode_free_only is false', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/balanced:free,kilo-auto/frontier:free,kilo-auto/premium';
+    process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free,kilo-auto/premium';
     process.env['INPUT_KILOCODE_FREE_ONLY'] = 'false';
     process.env['INPUT_OPENROUTER_API_KEY'] = '';
     process.env['INPUT_OPENROUTER_MODELS'] = '';
@@ -320,10 +341,10 @@ describe('loadConfig — free-only filter', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.kiloFreeOnly, false);
-    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/balanced:free', 'kilo-auto/frontier:free', 'kilo-auto/premium']);
+    assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free', 'kilo-auto/premium']);
 
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];

@@ -319,7 +319,7 @@ async function writeMetrics(metrics) {
     }
 }
 async function run() {
-    const config = loadConfig();
+    const config = await loadConfig();
     validateConfig(config);
     const clients = buildClients(config);
     const hasCustom = !!(config.customApiUrl && config.customModel);

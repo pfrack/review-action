@@ -27753,16 +27753,17 @@ class OpenAIClient {
 
 ;// CONCATENATED MODULE: ./src/config.ts
 
+
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
-function loadConfig() {
+async function loadConfig() {
     const rawPromptMode = lib_core.getInput('nim_prompt_mode') || 'append';
     if (rawPromptMode !== 'append' && rawPromptMode !== 'replace') {
         lib_core.warning(`Invalid nim_prompt_mode "${rawPromptMode}", defaulting to "append"`);
     }
     const promptMode = rawPromptMode === 'replace' ? 'replace' : 'append';
-    return {
+    const config = {
         baseURL: lib_core.getInput('nim_base_url') || 'https://integrate.api.nvidia.com/v1',
         apiKey: lib_core.getInput('nim_api_key'),
         models: splitCSV(lib_core.getInput('nim_models')),
@@ -27776,13 +27777,11 @@ function loadConfig() {
         groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
         openRouterApiKey: lib_core.getInput('openrouter_api_key') || '',
         openRouterBaseUrl: lib_core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
-        openRouterModels: filterFreeOnly(splitCSV(lib_core.getInput('openrouter_models') ||
-            'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'), lib_core.getInput('openrouter_free_only') === 'true', 'OpenRouter'),
+        openRouterModels: [],
         openRouterFreeOnly: lib_core.getInput('openrouter_free_only') === 'true',
         kiloApiKey: lib_core.getInput('kilocode_api_key') || '',
         kiloBaseUrl: lib_core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
-        kiloModels: filterFreeOnly(splitCSV(lib_core.getInput('kilocode_models') ||
-            'kilo-auto/balanced:free,kilo-auto/frontier:free'), lib_core.getInput('kilocode_free_only') === 'true', 'Kilo'),
+        kiloModels: [],
         kiloFreeOnly: lib_core.getInput('kilocode_free_only') === 'true',
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
@@ -27804,16 +27803,47 @@ function loadConfig() {
         customRules: lib_core.getInput('custom_rules') || '',
         revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
     };
+    const openRouterInput = splitCSV(lib_core.getInput('openrouter_models'));
+    if (openRouterInput.length > 0) {
+        config.openRouterModels = filterFreeOnly(openRouterInput, config.openRouterFreeOnly, 'OpenRouter');
+    }
+    else if (config.openRouterApiKey) {
+        config.openRouterModels = await fetchFreeModels(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter');
+    }
+    const kiloInput = splitCSV(lib_core.getInput('kilocode_models'));
+    if (kiloInput.length > 0) {
+        config.kiloModels = filterFreeOnly(kiloInput, config.kiloFreeOnly, 'Kilo');
+    }
+    else if (config.kiloApiKey) {
+        config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
+    }
+    return config;
+}
+function isFreeModel(model) {
+    return model.toLowerCase().includes('free');
 }
 function filterFreeOnly(models, enabled, providerLabel) {
     if (!enabled)
         return models;
-    const free = models.filter(m => m.endsWith(':free'));
+    const free = models.filter(isFreeModel);
     const dropped = models.length - free.length;
     if (dropped > 0) {
         lib_core.info(`${providerLabel}: filtered out ${dropped} non-free model(s), keeping ${free.length} free-tier model(s)`);
     }
     return free;
+}
+async function fetchFreeModels(baseURL, apiKey, providerLabel) {
+    try {
+        const client = new OpenAIClient(baseURL, apiKey, providerLabel);
+        const models = await client.listModels();
+        const free = models.filter(isFreeModel);
+        lib_core.info(`${providerLabel}: fetched ${models.length} models, ${free.length} free-tier`);
+        return free;
+    }
+    catch (err) {
+        lib_core.warning(`${providerLabel}: could not fetch model list: ${err}`);
+        return [];
+    }
 }
 
 ;// CONCATENATED MODULE: ./src/validation.ts
@@ -37351,7 +37381,7 @@ async function writeMetrics(metrics) {
     }
 }
 async function run() {
-    const config = loadConfig();
+    const config = await loadConfig();
     validateConfig(config);
     const clients = buildClients(config);
     const hasCustom = !!(config.customApiUrl && config.customModel);

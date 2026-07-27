@@ -369,7 +369,7 @@ async function writeMetrics(metrics: ReviewMetrics): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  const config = loadConfig();
+  const config = await loadConfig();
   validateConfig(config);
   const clients = buildClients(config);
   const hasCustom = !!(config.customApiUrl && config.customModel);

@@ -61,7 +61,7 @@ describe('loadConfig — mistral fields', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('reads mistralApiKey and mistralModels from inputs', () => {
+  it('reads mistralApiKey and mistralModels from inputs', async () => {
     // Save original values
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
@@ -75,7 +75,7 @@ describe('loadConfig — mistral fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = 'append';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.mistralApiKey, 'test-mistral-key');
     assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'codestral-2508']);
@@ -89,7 +89,7 @@ describe('loadConfig — mistral fields', () => {
     }
   });
 
-  it('defaults mistral fields to empty when not provided', () => {
+  it('defaults mistral fields to empty when not provided', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_MISTRAL_API_KEY'] = '';
@@ -102,7 +102,7 @@ describe('loadConfig — mistral fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.mistralApiKey, '');
     assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
@@ -123,7 +123,7 @@ describe('loadConfig — custom fields', () => {
   ];
   const saved: Record<string, string | undefined> = {};
 
-  it('reads customApiUrl, customModel, customApiKey from inputs', () => {
+  it('reads customApiUrl, customModel, customApiKey from inputs', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_CUSTOM_API_URL'] = 'https://openrouter.ai/api/v1';
@@ -137,7 +137,7 @@ describe('loadConfig — custom fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.customApiUrl, 'https://openrouter.ai/api/v1');
     assert.strictEqual(config.customModel, 'openai/gpt-4o');
@@ -149,7 +149,7 @@ describe('loadConfig — custom fields', () => {
     }
   });
 
-  it('defaults custom fields to empty when not provided', () => {
+  it('defaults custom fields to empty when not provided', async () => {
     for (const key of ENV_KEYS) saved[key] = process.env[key];
 
     process.env['INPUT_CUSTOM_API_URL'] = '';
@@ -163,7 +163,7 @@ describe('loadConfig — custom fields', () => {
     process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
     process.env['INPUT_NIM_PROMPT_MODE'] = '';
 
-    const config = loadConfig();
+    const config = await loadConfig();
 
     assert.strictEqual(config.customApiUrl, '');
     assert.strictEqual(config.customModel, '');
@@ -434,12 +434,12 @@ describe('severityTally', () => {
 });
 
 describe('loadConfig — prompt mode validation', () => {
-  it('coerces invalid prompt mode to append', () => {
+  it('coerces invalid prompt mode to append', async () => {
     const key = 'INPUT_NIM_PROMPT_MODE';
     const saved = process.env[key];
     process.env[key] = 'invalid-mode';
     try {
-      const config = loadConfig();
+      const config = await loadConfig();
       assert.strictEqual(config.promptMode, 'append');
     } finally {
       if (saved === undefined) delete process.env[key];
