@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable } from './bench-reorder.js';
 describe('updateActionYml groq target', () => {
     it('correctly replaces groq_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
@@ -518,6 +518,129 @@ describe('patchScoresTable', () => {
             writeFileSync(srcPath, 'const x = {};', 'utf-8');
             const count = patchScoresTable(srcPath, [{ model: 'new/model', score: 0.5 }]);
             assert.strictEqual(count, 0);
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+describe('rankModelsTwoTier', () => {
+    it('ranks known models above new models', () => {
+        const rows = [
+            { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+            { model: 'brand-new/model-a', ttftMs: 200, latencyMs: 2000, tokensPerSec: 80, errors: 0 },
+        ];
+        const known = new Set(['deepseek-ai/deepseek-v4-pro']);
+        const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'brand-new/model-a': 2000 };
+        const ranked = rankModelsTwoTier(rows, known, latencies);
+        assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+        assert.strictEqual(ranked[1], 'brand-new/model-a');
+    });
+    it('sorts known tier by SWE score descending', () => {
+        const rows = [
+            { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+            { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+        ];
+        const known = new Set(['meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-v4-pro']);
+        const latencies = { 'meta/llama-3.3-70b-instruct': 5000, 'deepseek-ai/deepseek-v4-pro': 5000 };
+        const ranked = rankModelsTwoTier(rows, known, latencies);
+        assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+        assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+    });
+    it('sorts new tier by latency ascending', () => {
+        const rows = [
+            { model: 'new/slow', ttftMs: 200, latencyMs: 10000, tokensPerSec: 80, errors: 0 },
+            { model: 'new/fast', ttftMs: 200, latencyMs: 1000, tokensPerSec: 80, errors: 0 },
+        ];
+        const known = new Set();
+        const latencies = { 'new/slow': 10000, 'new/fast': 1000 };
+        const ranked = rankModelsTwoTier(rows, known, latencies);
+        assert.strictEqual(ranked[0], 'new/fast');
+        assert.strictEqual(ranked[1], 'new/slow');
+    });
+    it('uses latency as tiebreaker within known tier', () => {
+        const rows = [
+            { model: 'unknown/a', ttftMs: 200, latencyMs: 8000, tokensPerSec: 80, errors: 0 },
+            { model: 'unknown/b', ttftMs: 200, latencyMs: 2000, tokensPerSec: 80, errors: 0 },
+        ];
+        const known = new Set(['unknown/a', 'unknown/b']);
+        const latencies = { 'unknown/a': 8000, 'unknown/b': 2000 };
+        const ranked = rankModelsTwoTier(rows, known, latencies);
+        assert.strictEqual(ranked[0], 'unknown/b');
+        assert.strictEqual(ranked[1], 'unknown/a');
+    });
+    it('excludes fully failed models', () => {
+        const rows = [
+            { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+            { model: 'dead/model', ttftMs: 0, latencyMs: 0, tokensPerSec: 0, errors: 5 },
+        ];
+        const known = new Set(['deepseek-ai/deepseek-v4-pro']);
+        const ranked = rankModelsTwoTier(rows, known);
+        assert.strictEqual(ranked.length, 1);
+        assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    });
+    it('respects fetched scores for known tier sorting', () => {
+        const rows = [
+            { model: 'new-vendor/model-x', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+            { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+        ];
+        const known = new Set(['new-vendor/model-x', 'meta/llama-3.3-70b-instruct']);
+        const fetched = new Map([['new-vendor/model-x', 0.9]]);
+        const ranked = rankModelsTwoTier(rows, known, undefined, fetched);
+        assert.strictEqual(ranked[0], 'new-vendor/model-x');
+        assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+    });
+});
+describe('integration: discover → patch scores → rank two-tier → update action.yml', () => {
+    it('full pipeline: new models added to scores table and ranked below known', () => {
+        const tmpDir = mkdtempSync(join(tmpdir(), 'integration-test-'));
+        try {
+            const srcPath = join(tmpDir, 'bench-reorder.ts');
+            const actionPath = join(tmpDir, 'action.yml');
+            const sourceContent = `export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  'z-ai/glm-5.2': 0.778,
+// OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+};`;
+            writeFileSync(srcPath, sourceContent, 'utf-8');
+            const actionContent = `name: 'NIM Code Review'
+inputs:
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free'
+`;
+            writeFileSync(actionPath, actionContent, 'utf-8');
+            const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
+|-------|---------------|------------------|---------------------|--------|
+| \`deepseek-ai/deepseek-v4-pro\` | 180ms | 1.80s | 62.1 | 0 |
+| \`brand-new/model-free\` | 200ms | 2.00s | 50.0 | 0 |
+| \`deepseek/deepseek-r1:free\` | 250ms | 2.50s | 40.0 | 0 |`;
+            const rows = parseMarkdownTable(table);
+            const newEntries = discoverNewModels(rows.map(r => r.model));
+            assert.strictEqual(newEntries.length, 1);
+            assert.strictEqual(newEntries[0].model, 'brand-new/model-free');
+            assert.strictEqual(newEntries[0].score, 0.5);
+            const patched = patchScoresTable(srcPath, newEntries);
+            assert.strictEqual(patched, 1);
+            const updatedSource = readFileSync(srcPath, 'utf-8');
+            assert.ok(updatedSource.includes("'brand-new/model-free': 0.5"));
+            const knownModels = new Set(['deepseek/deepseek-r1:free', 'deepseek-ai/deepseek-v4-pro']);
+            assert.ok(knownModels.has('deepseek/deepseek-r1:free'));
+            assert.ok(knownModels.has('deepseek-ai/deepseek-v4-pro'));
+            assert.ok(!knownModels.has('brand-new/model-free'));
+            const latencies = {};
+            for (const row of rows) {
+                if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+                    latencies[row.model] = row.latencyMs;
+                }
+            }
+            const ranked = rankModelsTwoTier(rows, knownModels, latencies);
+            assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+            assert.ok(ranked.indexOf('deepseek/deepseek-r1:free') < ranked.indexOf('brand-new/model-free'));
+            updateActionYml(actionPath, ranked, 'openrouter_models');
+            const updatedAction = readFileSync(actionPath, 'utf-8');
+            assert.ok(updatedAction.includes('deepseek-ai/deepseek-v4-pro,deepseek/deepseek-r1:free,brand-new/model-free'));
         }
         finally {
             rmSync(tmpDir, { recursive: true, force: true });
