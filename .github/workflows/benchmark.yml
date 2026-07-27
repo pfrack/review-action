@@ -31,8 +31,8 @@ jobs:
 
       - name: Run benchmark
         env:
-          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
-          NIM_BENCH_ITERATIONS: '1'
+          BENCH_API_KEY: ${{ secrets.NIM_API_KEY }}
+          BENCH_ITERATIONS: '1'
           REMOVED_MODELS_PATH: 'removed-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
@@ -106,10 +106,10 @@ jobs:
 
       - name: Run Mistral benchmark
         env:
-          NIM_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-          NIM_BASE_URL: 'https://api.mistral.ai/v1'
-          NIM_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
-          NIM_BENCH_ITERATIONS: '1'
+          BENCH_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          BENCH_BASE_URL: 'https://api.mistral.ai/v1'
+          BENCH_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+          BENCH_ITERATIONS: '1'
           REMOVED_MODELS_PATH: 'removed-mistral-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
@@ -184,10 +184,10 @@ jobs:
 
       - name: Run Groq benchmark
         env:
-          NIM_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          NIM_BASE_URL: 'https://api.groq.com/openai/v1'
-          NIM_MODELS: 'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'
-          NIM_BENCH_ITERATIONS: '1'
+          BENCH_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          BENCH_BASE_URL: 'https://api.groq.com/openai/v1'
+          BENCH_MODELS: 'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'
+          BENCH_ITERATIONS: '1'
           REMOVED_MODELS_PATH: 'removed-groq-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
@@ -262,10 +262,10 @@ jobs:
 
       - name: Run OpenRouter benchmark
         env:
-          NIM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          NIM_BASE_URL: 'https://openrouter.ai/api/v1'
-          NIM_MODELS: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'
-          NIM_BENCH_ITERATIONS: '1'
+          BENCH_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BENCH_BASE_URL: 'https://openrouter.ai/api/v1'
+          BENCH_AUTO_FREE: 'true'
+          BENCH_ITERATIONS: '1'
           REMOVED_MODELS_PATH: 'removed-openrouter-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
@@ -339,10 +339,10 @@ jobs:
 
       - name: Run Kilo benchmark
         env:
-          NIM_API_KEY: ${{ secrets.KILO_API_KEY }}
-          NIM_BASE_URL: 'https://api.kilo.ai/api/gateway'
-          NIM_MODELS: 'kilo-auto/balanced:free,kilo-auto/frontier:free'
-          NIM_BENCH_ITERATIONS: '1'
+          BENCH_API_KEY: ${{ secrets.KILO_API_KEY }}
+          BENCH_BASE_URL: 'https://api.kilo.ai/api/gateway'
+          BENCH_AUTO_FREE: 'true'
+          BENCH_ITERATIONS: '1'
           REMOVED_MODELS_PATH: 'removed-kilocode-models.txt'
         run: node dist/src/bench-entry.js > benchmark-output.txt
 
