@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { deterministicMatch } from './bench-entry.js';
+import { deterministicMatch, normalizeModelId } from './bench-entry.js';
 import type { SweBenchEntry } from './bench-reorder.js';
 
 const LEADERBOARD: SweBenchEntry[] = [
@@ -38,11 +38,9 @@ describe('deterministicMatch', () => {
     assert.strictEqual(r!.score, 0.62);
   });
 
-  it('matches by unique substring on normalized id', () => {
+  it('does not match ambiguous short names', () => {
     const r = deterministicMatch('deepseek-v4', LEADERBOARD);
-    assert.ok(r);
-    assert.strictEqual(r!.strategy, 'substring');
-    assert.strictEqual(r!.matchedId, 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(r, null);
   });
 
   it('returns null when no match is plausible', () => {
@@ -60,6 +58,33 @@ describe('deterministicMatch', () => {
     const r = deterministicMatch('meta/llama-3.3-70b-it', LEADERBOARD);
     assert.ok(r);
     assert.strictEqual(r!.matchedId, 'meta/llama-3.3-70b-instruct');
+  });
+});
+
+describe('normalizeModelId — free-tier variants', () => {
+  it('strips :free suffix', () => {
+    assert.strictEqual(normalizeModelId('nvidia/nemotron-3-super-120b-a12b:free'), 'nemotron3super120ba12b');
+  });
+
+  it('strips -free suffix', () => {
+    assert.strictEqual(normalizeModelId('some/model-free'), 'model');
+  });
+
+  it('strips org prefix and :free together', () => {
+    assert.strictEqual(normalizeModelId('poolside/laguna-s-2.1:free'), 'lagunas21');
+  });
+
+  it('matches free-tier model to leaderboard entry', () => {
+    const r = deterministicMatch('nvidia/nemotron-3-super-120b-a12b:free', LEADERBOARD);
+    assert.ok(r);
+    assert.strictEqual(r!.strategy, 'normalized');
+    assert.strictEqual(r!.matchedId, 'nvidia/nemotron-3-super-120b-a12b');
+    assert.strictEqual(r!.score, 0.68);
+  });
+
+  it('does not match models not on leaderboard', () => {
+    const r = deterministicMatch('inclusionai/ling-3.0-flash:free', LEADERBOARD);
+    assert.strictEqual(r, null);
   });
 });
 

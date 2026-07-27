@@ -68,11 +68,12 @@ function getReplacements(activeModels: string[], availableModels?: Set<string>):
  * Normalize a model id for comparison: lowercase, strip org prefix, strip
  * common suffixes (instruct, chat, base, etc.) and non-alphanumerics.
  */
-function normalizeModelId(id: string): string {
+export function normalizeModelId(id: string): string {
   return id
     .toLowerCase()
+    .replace(/:free$/i, '')
     .replace(/^[^/]+\//, '')
-    .replace(/-(instruct|chat|base|it|bf16|fp8|fp16|preview)$/i, '')
+    .replace(/-(instruct|chat|base|it|bf16|fp8|fp16|preview|free)$/i, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
@@ -108,10 +109,14 @@ export function deterministicMatch(
     return { score: m.score, strategy: 'normalized', matchedId: m.modelId };
   }
 
-  // 4. unique substring match on normalized forms
+  // 4. unique substring match on normalized forms (require near-equal length)
   const substrMatches = leaderboard.filter(e => {
     const a = normalizeModelId(e.modelId);
-    return a.includes(norm) || norm.includes(a);
+    if (a === norm) return false;
+    const shorter = a.length < norm.length ? a : norm;
+    const longer = a.length < norm.length ? norm : a;
+    if (!longer.includes(shorter)) return false;
+    return longer.length - shorter.length <= 2;
   });
   if (substrMatches.length === 1) {
     const m = substrMatches[0];
