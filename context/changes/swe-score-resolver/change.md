@@ -1,7 +1,7 @@
 ---
 id: swe-score-resolver
 title: "SWE Score Resolver — auto-map 0.5 models to real scores"
-status: implemented
+status: impl_reviewed
 created: 2026-07-28
 updated: 2026-07-28
 type: tooling
