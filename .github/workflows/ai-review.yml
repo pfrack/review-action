@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: pfrack/review-action@v1
         with:
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
           kilocode_api_key: ${{ secrets.KILO_API_KEY }}
           custom_api_url: ${{ secrets.CUSTOM_API_URL }}
           custom_model: ${{ secrets.CUSTOM_MODEL }}
