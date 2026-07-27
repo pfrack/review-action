@@ -27776,12 +27776,14 @@ function loadConfig() {
         groqBaseUrl: lib_core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
         openRouterApiKey: lib_core.getInput('openrouter_api_key') || '',
         openRouterBaseUrl: lib_core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
-        openRouterModels: splitCSV(lib_core.getInput('openrouter_models') ||
-            'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'),
+        openRouterModels: filterFreeOnly(splitCSV(lib_core.getInput('openrouter_models') ||
+            'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free,google/gemini-2.0-flash-exp:free'), lib_core.getInput('openrouter_free_only') === 'true', 'OpenRouter'),
+        openRouterFreeOnly: lib_core.getInput('openrouter_free_only') === 'true',
         kiloApiKey: lib_core.getInput('kilocode_api_key') || '',
         kiloBaseUrl: lib_core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
-        kiloModels: splitCSV(lib_core.getInput('kilocode_models') ||
-            'kilo-auto/balanced:free,kilo-auto/frontier:free'),
+        kiloModels: filterFreeOnly(splitCSV(lib_core.getInput('kilocode_models') ||
+            'kilo-auto/balanced:free,kilo-auto/frontier:free'), lib_core.getInput('kilocode_free_only') === 'true', 'Kilo'),
+        kiloFreeOnly: lib_core.getInput('kilocode_free_only') === 'true',
         customApiUrl: lib_core.getInput('custom_api_url') || '',
         customModel: lib_core.getInput('custom_model') || '',
         customApiKey: lib_core.getInput('custom_api_key') || '',
@@ -27802,6 +27804,16 @@ function loadConfig() {
         customRules: lib_core.getInput('custom_rules') || '',
         revalidateFindings: lib_core.getInput('revalidate_findings') === 'true',
     };
+}
+function filterFreeOnly(models, enabled, providerLabel) {
+    if (!enabled)
+        return models;
+    const free = models.filter(m => m.endsWith(':free'));
+    const dropped = models.length - free.length;
+    if (dropped > 0) {
+        lib_core.info(`${providerLabel}: filtered out ${dropped} non-free model(s), keeping ${free.length} free-tier model(s)`);
+    }
+    return free;
 }
 
 ;// CONCATENATED MODULE: ./src/validation.ts
