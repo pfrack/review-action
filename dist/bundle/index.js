@@ -25821,7 +25821,7 @@ function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_
  * Only includes models that worked today (tokensPerSec > 0).
  */
 function rankModels(rows, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
     return alive
         .map(r => r.model)
         .sort((a, b) => {
@@ -25841,7 +25841,7 @@ function rankModels(rows, latencies, fetchedScores) {
  * ascending. Known models always rank above new models.
  */
 function rankModelsTwoTier(rows, knownModels, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+    const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
     const known = [];
     const unknown = [];
     for (const model of alive.map(r => r.model)) {

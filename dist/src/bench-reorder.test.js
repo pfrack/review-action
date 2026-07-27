@@ -625,8 +625,9 @@ inputs:
             assert.strictEqual(patched, 1);
             const updatedSource = readFileSync(srcPath, 'utf-8');
             assert.ok(updatedSource.includes("'brand-new/model-free': 0.5"));
-            const knownModels = new Set(['deepseek/deepseek-r1:free']);
+            const knownModels = new Set(['deepseek/deepseek-r1:free', 'deepseek-ai/deepseek-v4-pro']);
             assert.ok(knownModels.has('deepseek/deepseek-r1:free'));
+            assert.ok(knownModels.has('deepseek-ai/deepseek-v4-pro'));
             assert.ok(!knownModels.has('brand-new/model-free'));
             const latencies = {};
             for (const row of rows) {

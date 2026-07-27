@@ -239,7 +239,7 @@ export function rankModels(
   latencies?: Record<string, number>,
   fetchedScores?: Map<string, number>,
 ): string[] {
-  const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+  const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
 
   return alive
     .map(r => r.model)
@@ -265,7 +265,7 @@ export function rankModelsTwoTier(
   latencies?: Record<string, number>,
   fetchedScores?: Map<string, number>,
 ): string[] {
-  const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+  const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
 
   const known: string[] = [];
   const unknown: string[] = [];
