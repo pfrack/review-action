@@ -254,6 +254,47 @@ export function rankModels(
     });
 }
 
+/**
+ * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by SWE score
+ * descending, then new models (not in SWE_BENCH_SCORES) sorted by latency
+ * ascending. Known models always rank above new models.
+ */
+export function rankModelsTwoTier(
+  rows: ParsedRow[],
+  knownModels: Set<string>,
+  latencies?: Record<string, number>,
+  fetchedScores?: Map<string, number>,
+): string[] {
+  const alive = rows.filter(r => r.tokensPerSec > 0 || r.errors === 0);
+
+  const known: string[] = [];
+  const unknown: string[] = [];
+  for (const model of alive.map(r => r.model)) {
+    if (knownModels.has(model)) {
+      known.push(model);
+    } else {
+      unknown.push(model);
+    }
+  }
+
+  known.sort((a, b) => {
+    const sweA = getSweBenchScore(a, fetchedScores);
+    const sweB = getSweBenchScore(b, fetchedScores);
+    if (sweB !== sweA) return sweB - sweA;
+    const latA = latencies?.[a] ?? Infinity;
+    const latB = latencies?.[b] ?? Infinity;
+    return latA - latB;
+  });
+
+  unknown.sort((a, b) => {
+    const latA = latencies?.[a] ?? Infinity;
+    const latB = latencies?.[b] ?? Infinity;
+    return latA - latB;
+  });
+
+  return [...known, ...unknown];
+}
+
 type ActionTarget = 'nim_models' | 'mistral_models' | 'groq_models' | 'openrouter_models' | 'kilocode_models';
 
 function buildTargetPattern(targetKey: string): RegExp {
