@@ -247,7 +247,7 @@ Models are tried in order. On error (rate limit, 500, timeout, network failure),
 ## Setup
 
 1. Get an API key from [build.nvidia.com](https://build.nvidia.com) and/or [console.mistral.ai](https://console.mistral.ai)
-2. Add `NIM_API_KEY` and/or `MISTRAL_API_KEY` as repository secrets
+2. Add `NIM_API_KEY` (NVIDIA), `MISTRAL_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `KILO_API_KEY` as repository secrets
 3. Add the workflow file above
 
 ## Local Development
@@ -292,27 +292,35 @@ Use the benchmark tool to compare model speeds:
 
 ```bash
 npm run build
-export NIM_API_KEY=your-key
-export NIM_BENCH_ITERATIONS=5        # default: 5
-export NIM_BENCH_PROMPT="..."        # optional custom prompt
+export BENCH_API_KEY=your-key
+export BENCH_ITERATIONS=5              # default: 2
+export BENCH_PROMPT="..."              # optional custom prompt
 node dist/bench-entry.js
 ```
 
-For OpenRouter models:
+For OpenRouter models (auto-discover free models):
 
 ```bash
-export NIM_API_KEY=your-openrouter-key
-export NIM_BASE_URL='https://openrouter.ai/api/v1'
-export NIM_MODELS='deepseek/deepseek-r1:free,google/gemini-2.0-flash-exp:free'
+export BENCH_API_KEY=your-openrouter-key
+export BENCH_BASE_URL='https://openrouter.ai/api/v1'
+export BENCH_AUTO_FREE=true
 node dist/bench-entry.js
 ```
 
-For Kilo models:
+For Kilo models (auto-discover free models):
 
 ```bash
-export NIM_API_KEY=your-kilo-key
-export NIM_BASE_URL='https://api.kilo.ai/api/gateway'
-export NIM_MODELS='kilo-auto/balanced:free,kilo-auto/frontier:free'
+export BENCH_API_KEY=your-kilo-key
+export BENCH_BASE_URL='https://api.kilo.ai/api/gateway'
+export BENCH_AUTO_FREE=true
+node dist/bench-entry.js
+```
+
+Or specify models explicitly:
+
+```bash
+export BENCH_API_KEY=your-key
+export BENCH_MODELS='model-a,model-b,model-c'
 node dist/bench-entry.js
 ```
 
