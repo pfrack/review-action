@@ -41,12 +41,15 @@ function readCurrentModels(actionPath: string): string[] {
 }
 
 /**
- * Get SWE-bench ranked candidates not already in the active list
+ * Get SWE-bench ranked candidates not already in the active list.
+ * When availableModels is provided, only returns candidates present
+ * in the provider catalog (avoids cross-provider mismatches).
  */
-function getReplacements(activeModels: string[]): string[] {
+function getReplacements(activeModels: string[], availableModels?: Set<string>): string[] {
   const activeSet = new Set(activeModels);
   return Object.entries(SWE_BENCH_SCORES)
     .filter(([model]) => !activeSet.has(model))
+    .filter(([model]) => !availableModels || availableModels.has(model))
     .sort((a, b) => b[1] - a[1])
     .map(([model]) => model);
 }
@@ -314,7 +317,7 @@ async function main(): Promise<void> {
   // Replace failed models with next best from SWE-bench
   if (failed.length > 0) {
     process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
-    const replacements = getReplacements(models);
+    const replacements = getReplacements(models, availableModels ?? undefined);
 
     for (const deadModel of failed) {
       let replaced = false;

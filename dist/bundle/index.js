@@ -36802,8 +36802,8 @@ async function main() {
     }
     const rows = parseMarkdownTable(table);
     if (rows.length === 0) {
-        console.error('Could not parse any rows from benchmark output');
-        process.exit(1);
+        console.warn('No benchmark data rows found — all models may have failed. Skipping reorder.');
+        process.exit(0);
     }
     // Extract latencies
     const latencies = {};

@@ -37,12 +37,15 @@ function readCurrentModels(actionPath) {
     return splitCSV(match[1]);
 }
 /**
- * Get SWE-bench ranked candidates not already in the active list
+ * Get SWE-bench ranked candidates not already in the active list.
+ * When availableModels is provided, only returns candidates present
+ * in the provider catalog (avoids cross-provider mismatches).
  */
-function getReplacements(activeModels) {
+function getReplacements(activeModels, availableModels) {
     const activeSet = new Set(activeModels);
     return Object.entries(SWE_BENCH_SCORES)
         .filter(([model]) => !activeSet.has(model))
+        .filter(([model]) => !availableModels || availableModels.has(model))
         .sort((a, b) => b[1] - a[1])
         .map(([model]) => model);
 }
@@ -279,7 +282,7 @@ async function main() {
     // Replace failed models with next best from SWE-bench
     if (failed.length > 0) {
         process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
-        const replacements = getReplacements(models);
+        const replacements = getReplacements(models, availableModels ?? undefined);
         for (const deadModel of failed) {
             let replaced = false;
             for (const candidate of replacements) {
