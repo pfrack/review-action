@@ -182,6 +182,11 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'codestral-2508': 0.650,
   'codestral-latest': 0.650,
   // OpenRouter free-tier models (estimated scores)
+  'google/gemma-4-26b-a4b-it:free': 0.5,
+  'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
+  'nvidia/nemotron-nano-12b-v2-vl:free': 0.5,
+  'nvidia/nemotron-nano-9b-v2:free': 0.5,
+  'openai/gpt-oss-20b:free': 0.5,
   'cohere/north-mini-code:free': 0.5,
   'kilo-auto/free': 0.5,
   'stepfun/step-3.7-flash:free': 0.5,
