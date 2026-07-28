@@ -1,5 +1,2 @@
-deepseek-ai/deepseek-v4-flash
-stepfun-ai/step-3.7-flash
-openai/gpt-oss-120b
-mistralai/mistral-nemotron
 mistralai/mistral-medium-3.5-128b
+minimaxai/minimax-m3
