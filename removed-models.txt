@@ -1,2 +1,2 @@
-mistralai/mistral-medium-3.5-128b
-minimaxai/minimax-m3
+deepseek-ai/deepseek-v4-pro
+openai/gpt-oss-120b
