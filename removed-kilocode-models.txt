@@ -1,2 +1,1 @@
 cohere/north-mini-code:free
-poolside/laguna-s-2.1:free
