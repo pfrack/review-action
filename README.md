@@ -60,6 +60,8 @@ jobs:
 | `nim_prompt_mode` | `append` | How to use custom prompt: `append` or `replace` |
 | `custom_rules` | `''` | Custom review rules (one per line, supports severity prefixes) |
 | `revalidate_findings` | `false` | Re-validate findings with LLM before posting (reduces false positives, adds latency) |
+| `model_timeout` | `60` | Timeout in seconds for each individual model call (0 = no per-model limit) |
+| `chain_timeout` | `0` | Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models) |
 
 At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_api_key`, `kilocode_api_key`, or `custom_api_url` + `custom_model`/`custom_models` is required. When multiple providers are configured, models are merged into a single fallback chain sorted by SWE-bench Verified score. Free-tier models (`:free` suffix) rank last in the chain.
 
@@ -68,7 +70,7 @@ At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_ap
 1. **Diff fetch** — Downloads the PR diff from GitHub. Skips reviews for diffs >5 MB.
 2. **Model probing** — Probes models in the chain (batches of 3, 10s timeout) and moves the fastest-responding model to the front.
 3. **Batching** — If the PR has >50 files, splits them into batches of 50 and reviews each batch independently.
-4. **Model chain** — Tries each model in the combined fallback chain (custom → providers sorted by SWE-bench score, free-tier forced last). Each batch gets a 120s aggregate timeout.
+4. **Model chain** — Tries each model in the combined fallback chain (custom → providers sorted by SWE-bench score, free-tier forced last). Each individual model call has a 60s timeout (`model_timeout`); if a model doesn't respond in time, it's skipped immediately. By default, the chain runs until a model succeeds or all models are exhausted (no aggregate limit). Set `chain_timeout` to impose a hard cap.
 5. **Structured output** — Each model is prompted to respond in JSON matching a Zod-validated `Review` schema with typed `Finding` objects (file, severity, line range, issue, suggestion, plus per-severity action fields).
 6. **Parse + retry** — Responses are validated via `safeParse()`. On failure, the action retries once with the validation error appended. Parse failures cause a model skip (next model in chain).
 7. **Diff validation** — Each finding is checked: `file` must exist in the PR's changed files, `line_start..line_end` must overlap a changed hunk (with adaptive tolerance). Hallucinated findings are dropped with a warning.
