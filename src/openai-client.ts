@@ -27,6 +27,7 @@ export interface ChatOptions {
   stream?: boolean;
   schema?: object;
   format?: ResponseFormat;
+  signal?: AbortSignal;
 }
 
 export type ResponseFormat = 'json_schema' | 'tools' | 'text';
@@ -97,6 +98,7 @@ export class OpenAIClient {
   }
 
   async chat(model: string, messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
+    const outerSignal = opts.signal;
     const payload: ChatRequest = {
       model,
       messages,
@@ -133,6 +135,7 @@ export class OpenAIClient {
 
     const start = Date.now();
     const resp = await withRetry(async () => {
+      if (outerSignal?.aborted) throw new Error('Request aborted by caller');
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -140,7 +143,9 @@ export class OpenAIClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(180_000),
+        signal: outerSignal
+          ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+          : AbortSignal.timeout(180_000),
       });
 
       if (!response.ok) {

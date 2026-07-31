@@ -65,6 +65,7 @@ export async function runModelChainForBatch(
   systemMessage: string,
   responseFormat: ResponseFormat,
   config: Config,
+  modelTimeoutMs = 60_000,
 ): Promise<BatchResult> {
   const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
@@ -80,6 +81,7 @@ export async function runModelChainForBatch(
 
     try {
       core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+      const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
       const result = await client.chat(tagged.id, [
         { role: 'system', content: systemMessage },
         { role: 'user', content: userMsg },
@@ -88,6 +90,7 @@ export async function runModelChainForBatch(
         maxTokens: 4096,
         schema: ReviewJsonSchema,
         format: providerToFormat(tagged.provider, responseFormat),
+        signal: attemptSignal,
       });
 
       if (result.finishReason === 'length') {
@@ -108,6 +111,7 @@ export async function runModelChainForBatch(
         const errorSummary = parsed.error.issues.slice(0, 3)
           .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
           .join('\n');
+        const retrySignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
         const retryResult = await client.chat(tagged.id, [
           { role: 'system', content: systemMessage },
           { role: 'user', content: userMsg },
@@ -118,6 +122,7 @@ export async function runModelChainForBatch(
           maxTokens: 4096,
           schema: ReviewJsonSchema,
           format: providerToFormat(tagged.provider, responseFormat),
+          signal: retrySignal,
         });
 
         if (retryResult.finishReason === 'length') {

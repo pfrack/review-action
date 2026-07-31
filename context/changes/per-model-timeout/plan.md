@@ -254,10 +254,10 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [ ] 1.1 TypeScript compiles with new signal parameter
-- [ ] 1.2 Existing tests pass unchanged
-- [ ] 1.3 New test: chat() aborts when signal fires before response
-- [ ] 1.4 New test: chat() works normally without signal
+- [x] 1.1 TypeScript compiles with new signal parameter
+- [x] 1.2 Existing tests pass unchanged
+- [x] 1.3 New test: chat() aborts when signal fires before response
+- [x] 1.4 New test: chat() works normally without signal
 
 #### Manual
 
