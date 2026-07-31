@@ -254,10 +254,10 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [x] 1.1 TypeScript compiles with new signal parameter
-- [x] 1.2 Existing tests pass unchanged
-- [x] 1.3 New test: chat() aborts when signal fires before response
-- [x] 1.4 New test: chat() works normally without signal
+- [x] 1.1 TypeScript compiles with new signal parameter — ed5603a
+- [x] 1.2 Existing tests pass unchanged — ed5603a
+- [x] 1.3 New test: chat() aborts when signal fires before response — ed5603a
+- [x] 1.4 New test: chat() works normally without signal — ed5603a
 
 #### Manual
 
@@ -267,10 +267,10 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [ ] 2.1 TypeScript compiles with new config fields
-- [ ] 2.2 Existing tests pass
-- [ ] 2.3 Config test: default values (modelTimeout=60, chainTimeout=0)
-- [ ] 2.4 Config test: invalid values warn and fallback
+- [x] 2.1 TypeScript compiles with new config fields
+- [x] 2.2 Existing tests pass
+- [x] 2.3 Config test: default values (modelTimeout=60, chainTimeout=0)
+- [x] 2.4 Config test: invalid values warn and fallback
 
 #### Manual
 

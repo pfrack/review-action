@@ -97,6 +97,14 @@ inputs:
     description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
     required: false
     default: 'false'
+  model_timeout:
+    description: 'Timeout in seconds for each individual model call (0 = no per-model limit)'
+    required: false
+    default: '60'
+  chain_timeout:
+    description: 'Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models)'
+    required: false
+    default: '0'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'

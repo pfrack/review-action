@@ -30,6 +30,8 @@ export interface Config {
   promptMode: 'append' | 'replace';
   customRules: string;
   revalidateFindings: boolean;
+  modelTimeout: number;
+  chainTimeout: number;
 }
 
 export function splitCSV(s: string): string[] {
@@ -82,6 +84,24 @@ export async function loadConfig(): Promise<Config> {
     promptMode,
     customRules: core.getInput('custom_rules') || '',
     revalidateFindings: core.getInput('revalidate_findings') === 'true',
+    modelTimeout: (() => {
+      const raw = core.getInput('model_timeout') || '60';
+      const parsed = Number.parseInt(raw, 10);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        core.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 60.`);
+        return 60;
+      }
+      return parsed;
+    })(),
+    chainTimeout: (() => {
+      const raw = core.getInput('chain_timeout') || '0';
+      const parsed = Number.parseInt(raw, 10);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        core.warning(`Invalid chain_timeout "${raw}", must be >= 0. Defaulting to 0 (unlimited).`);
+        return 0;
+      }
+      return parsed;
+    })(),
   };
 
   const openRouterInput = splitCSV(core.getInput('openrouter_models'));

@@ -14,9 +14,7 @@ import { parseRules, validateRules, type Rule } from './rules.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
 
-const CHAIN_TIMEOUT_MS = 120_000;
-
-export async function withAggregateTimeout<T>(operation: () => Promise<T>, timeoutMs = CHAIN_TIMEOUT_MS): Promise<T | null> {
+export async function withAggregateTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T | null> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
@@ -255,13 +253,17 @@ async function executeReview(
 ): Promise<{ review: ReviewType; usedModel: string; lastRawContent: string; validationDropped: number; batchCount: number }> {
   const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
   const batchResults: BatchResult[] = [];
+  const modelTimeoutMs = config.modelTimeout * 1000;
   for (const batch of work) {
     if (batches.length > 1) {
       core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
     }
-    const result = await withAggregateTimeout(() => runModelChainForBatch(
-      chain, clients, batch, systemMessage, 'json_schema', config,
-    ));
+    const runBatch = () => runModelChainForBatch(
+      chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs,
+    );
+    const result = config.chainTimeout > 0
+      ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+      : await runBatch();
     if (result === null) {
       core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
     }
