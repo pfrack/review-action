@@ -168,3 +168,65 @@ describe('OpenAIClient response validation', () => {
         }
     });
 });
+describe('OpenAIClient signal/timeout', () => {
+    it('chat() aborts when signal fires before response', async () => {
+        const mock = await startMockServer((_req, res) => {
+            // Delay 2 seconds before responding
+            setTimeout(() => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    choices: [{ message: { content: 'late response' } }],
+                    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                }));
+            }, 2000);
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            await assert.rejects(() => client.chat('model', [{ role: 'user', content: 'hi' }], {
+                signal: AbortSignal.timeout(100),
+            }), (err) => {
+                assert.ok(err.name === 'TimeoutError' || err.name === 'AbortError' || err.message.includes('abort'), `Expected abort/timeout error, got: ${err.name}: ${err.message}`);
+                return true;
+            });
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('chat() works normally without signal', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                choices: [{ message: { content: 'ok' } }],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.chat('model', [{ role: 'user', content: 'hi' }]);
+            assert.strictEqual(result.content, 'ok');
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('chat() succeeds when signal has not expired', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                choices: [{ message: { content: 'fast' } }],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.chat('model', [{ role: 'user', content: 'hi' }], {
+                signal: AbortSignal.timeout(5000),
+            });
+            assert.strictEqual(result.content, 'fast');
+        }
+        finally {
+            mock.close();
+        }
+    });
+});

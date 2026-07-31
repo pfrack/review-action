@@ -13,8 +13,7 @@ import { safeParseJson, validateProviderUrl } from './utils.js';
 import { parseRules, validateRules } from './rules.js';
 import { formatMetrics } from './metrics.js';
 import { batchFiles, mergeFindings } from './batching.js';
-const CHAIN_TIMEOUT_MS = 120_000;
-export async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
+export async function withAggregateTimeout(operation, timeoutMs) {
     let timer;
     try {
         return await Promise.race([
@@ -47,7 +46,7 @@ async function cleanupPreviousOutput(repo, prNumber, token) {
 function providerToFormat(provider, responseFormat) {
     return provider === 'mistral' ? 'tools' : responseFormat;
 }
-export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config) {
+export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     let batchReview = null;
@@ -60,6 +59,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
             continue;
         try {
             core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
             const result = await client.chat(tagged.id, [
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: userMsg },
@@ -68,6 +68,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                 maxTokens: 4096,
                 schema: ReviewJsonSchema,
                 format: providerToFormat(tagged.provider, responseFormat),
+                signal: attemptSignal,
             });
             if (result.finishReason === 'length') {
                 core.info(`${tagged.id} response truncated, trying next...`);
@@ -86,6 +87,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                 const errorSummary = parsed.error.issues.slice(0, 3)
                     .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
                     .join('\n');
+                const retrySignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
                 const retryResult = await client.chat(tagged.id, [
                     { role: 'system', content: systemMessage },
                     { role: 'user', content: userMsg },
@@ -96,6 +98,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                     maxTokens: 4096,
                     schema: ReviewJsonSchema,
                     format: providerToFormat(tagged.provider, responseFormat),
+                    signal: retrySignal,
                 });
                 if (retryResult.finishReason === 'length') {
                     core.info(`${tagged.id} retry truncated, trying next...`);
@@ -217,11 +220,15 @@ async function prioritizeChain(chain, clients) {
 async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
     const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
     const batchResults = [];
+    const modelTimeoutMs = config.modelTimeout * 1000;
     for (const batch of work) {
         if (batches.length > 1) {
             core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
+        const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
+        const result = config.chainTimeout > 0
+            ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+            : await runBatch();
         if (result === null) {
             core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }

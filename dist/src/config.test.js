@@ -319,3 +319,91 @@ describe('loadConfig — free-only filter', () => {
         }
     });
 });
+describe('loadConfig — timeout fields', () => {
+    const ENV_KEYS = [
+        'INPUT_MODEL_TIMEOUT', 'INPUT_CHAIN_TIMEOUT',
+        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
+        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
+        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
+        'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_MODELS',
+    ];
+    const saved = {};
+    function setupEnv(overrides = {}) {
+        for (const key of ENV_KEYS)
+            saved[key] = process.env[key];
+        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
+        process.env['INPUT_NIM_BASE_URL'] = '';
+        process.env['INPUT_NIM_MODELS'] = '';
+        process.env['INPUT_MAX_FILES'] = '';
+        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
+        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+        process.env['INPUT_NIM_PROMPT_MODE'] = '';
+        process.env['INPUT_OPENROUTER_API_KEY'] = '';
+        process.env['INPUT_OPENROUTER_MODELS'] = '';
+        process.env['INPUT_MODEL_TIMEOUT'] = '';
+        process.env['INPUT_CHAIN_TIMEOUT'] = '';
+        for (const [k, v] of Object.entries(overrides))
+            process.env[k] = v;
+    }
+    function restoreEnv() {
+        for (const key of ENV_KEYS) {
+            if (saved[key] === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = saved[key];
+        }
+    }
+    it('defaults modelTimeout to 60 and chainTimeout to 0', async () => {
+        setupEnv();
+        try {
+            const config = await loadConfig();
+            assert.strictEqual(config.modelTimeout, 60);
+            assert.strictEqual(config.chainTimeout, 0);
+        }
+        finally {
+            restoreEnv();
+        }
+    });
+    it('reads custom valid values', async () => {
+        setupEnv({ 'INPUT_MODEL_TIMEOUT': '90', 'INPUT_CHAIN_TIMEOUT': '300' });
+        try {
+            const config = await loadConfig();
+            assert.strictEqual(config.modelTimeout, 90);
+            assert.strictEqual(config.chainTimeout, 300);
+        }
+        finally {
+            restoreEnv();
+        }
+    });
+    it('accepts 0 as valid for both fields', async () => {
+        setupEnv({ 'INPUT_MODEL_TIMEOUT': '0', 'INPUT_CHAIN_TIMEOUT': '0' });
+        try {
+            const config = await loadConfig();
+            assert.strictEqual(config.modelTimeout, 0);
+            assert.strictEqual(config.chainTimeout, 0);
+        }
+        finally {
+            restoreEnv();
+        }
+    });
+    it('warns and falls back on invalid model_timeout', async () => {
+        setupEnv({ 'INPUT_MODEL_TIMEOUT': '-5' });
+        try {
+            const config = await loadConfig();
+            assert.strictEqual(config.modelTimeout, 60);
+        }
+        finally {
+            restoreEnv();
+        }
+    });
+    it('warns and falls back on invalid chain_timeout', async () => {
+        setupEnv({ 'INPUT_CHAIN_TIMEOUT': 'abc' });
+        try {
+            const config = await loadConfig();
+            assert.strictEqual(config.chainTimeout, 0);
+        }
+        finally {
+            restoreEnv();
+        }
+    });
+});
