@@ -26820,13 +26820,17 @@ async function dispatchOutput(context) {
         warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
         suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
-    const summaryBody = `${_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .AI_REVIEW_MARKER */ .Vp}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+    const modelLabel = modelShort || 'Unavailable (no model completed)';
+    const summaryBody = `${_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .AI_REVIEW_MARKER */ .Vp}\n\n<sub>Model: ${modelLabel}</sub>\n\n${tally || 'No findings'}\n`;
     // Single cleanup at the start — removes ALL previous AI comments and reviews
     await safeCleanup(repo, prNumber, token);
     if (review.findings.length === 0) {
         try {
-            await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Posted LGTM comment (no issues found)');
+            const message = usedModel
+                ? 'No issues found. LGTM!'
+                : 'No review content returned from any model.';
+            await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, `${summaryBody}\n${message}`);
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(usedModel ? 'Posted LGTM comment (no issues found)' : 'Posted no-review-content comment');
         }
         catch (err) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to post LGTM comment: ${err}`);

@@ -314,15 +314,19 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
     warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
     suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
   ].filter(Boolean).join(' · ');
-  const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelShort}</sub>\n\n${tally || 'No findings'}\n`;
+  const modelLabel = modelShort || 'Unavailable (no model completed)';
+  const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelLabel}</sub>\n\n${tally || 'No findings'}\n`;
 
   // Single cleanup at the start — removes ALL previous AI comments and reviews
   await safeCleanup(repo, prNumber, token);
 
   if (review.findings.length === 0) {
     try {
-      await postComment(repo, prNumber, token, `${summaryBody}\nNo issues found. LGTM!`);
-      core.info('Posted LGTM comment (no issues found)');
+      const message = usedModel
+        ? 'No issues found. LGTM!'
+        : 'No review content returned from any model.';
+      await postComment(repo, prNumber, token, `${summaryBody}\n${message}`);
+      core.info(usedModel ? 'Posted LGTM comment (no issues found)' : 'Posted no-review-content comment');
     } catch (err) {
       core.warning(`Failed to post LGTM comment: ${err}`);
     }
