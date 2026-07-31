@@ -281,6 +281,6 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [x] 3.1 All new timeout tests pass
-- [x] 3.2 No type errors in full codebase
-- [x] 3.3 Full test suite green
+- [x] 3.1 All new timeout tests pass — 8d23669
+- [x] 3.2 No type errors in full codebase — 8d23669
+- [x] 3.3 Full test suite green — 8d23669
