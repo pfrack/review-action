@@ -267,10 +267,10 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [x] 2.1 TypeScript compiles with new config fields
-- [x] 2.2 Existing tests pass
-- [x] 2.3 Config test: default values (modelTimeout=60, chainTimeout=0)
-- [x] 2.4 Config test: invalid values warn and fallback
+- [x] 2.1 TypeScript compiles with new config fields — 4e88113
+- [x] 2.2 Existing tests pass — 4e88113
+- [x] 2.3 Config test: default values (modelTimeout=60, chainTimeout=0) — 4e88113
+- [x] 2.4 Config test: invalid values warn and fallback — 4e88113
 
 #### Manual
 
@@ -281,6 +281,6 @@ Add targeted test cases for the new timeout behavior. Update any existing tests 
 
 #### Automated
 
-- [ ] 3.1 All new timeout tests pass
-- [ ] 3.2 No type errors in full codebase
-- [ ] 3.3 Full test suite green
+- [x] 3.1 All new timeout tests pass
+- [x] 3.2 No type errors in full codebase
+- [x] 3.3 Full test suite green
