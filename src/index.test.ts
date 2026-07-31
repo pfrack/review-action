@@ -98,3 +98,31 @@ describe('validateFindings edge cases', () => {
     assert.strictEqual(result.valid.summary, 'my summary');
   });
 });
+
+import { withAggregateTimeout } from './index.js';
+
+describe('withAggregateTimeout', () => {
+  it('returns null when timer fires before operation completes', async () => {
+    const result = await withAggregateTimeout(
+      () => new Promise(resolve => setTimeout(() => resolve('late'), 500)),
+      50,
+    );
+    assert.strictEqual(result, null);
+  });
+
+  it('returns result when operation completes before timer', async () => {
+    const result = await withAggregateTimeout(
+      () => new Promise(resolve => setTimeout(() => resolve('fast'), 10)),
+      5000,
+    );
+    assert.strictEqual(result, 'fast');
+  });
+
+  it('returns result for synchronous-resolving operations', async () => {
+    const result = await withAggregateTimeout(
+      () => Promise.resolve(42),
+      5000,
+    );
+    assert.strictEqual(result, 42);
+  });
+});

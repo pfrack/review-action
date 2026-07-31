@@ -31,6 +31,7 @@ export class OpenAIClient {
                                 baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
+        const outerSignal = opts.signal;
         const payload = {
             model,
             messages,
@@ -65,6 +66,8 @@ export class OpenAIClient {
         }
         const start = Date.now();
         const resp = await withRetry(async () => {
+            if (outerSignal?.aborted)
+                throw new Error('Request aborted by caller');
             const response = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -72,7 +75,9 @@ export class OpenAIClient {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(180_000),
+                signal: outerSignal
+                    ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+                    : AbortSignal.timeout(180_000),
             });
             if (!response.ok) {
                 const body = await response.text();
