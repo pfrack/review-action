@@ -1,3 +1,0 @@
-openai/gpt-oss-120b
-mistralai/mistral-medium-3.5-128b
-mistralai/mistral-nemotron
