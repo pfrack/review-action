@@ -26666,8 +26666,16 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 signal: attemptSignal,
             });
             if (result.finishReason === 'length') {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
-                continue;
+                // For text-mode models, extractJsonFromText (inside chat) may
+                // have pulled a complete JSON object from the response *before*
+                // the model's thinking stream hit the token cap. Don't throw
+                // that away — validate it. For non-text-mode models the JSON is
+                // definitely incomplete, so skip immediately.
+                if (!(0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content)) {
+                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
+                    continue;
+                }
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated but JSON was extractable, proceeding to validation`);
             }
             if (!result.content || !result.content.trim()) {
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} returned empty, trying next...`);
@@ -26690,7 +26698,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                     { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
                 ], {
                     temperature: 0.2,
-                    maxTokens: 4096,
+                    maxTokens: isTextModeModel ? 8192 : 4096,
                     schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
                     format: providerToFormat(tagged.provider, responseFormat),
                     signal: retrySignal,
