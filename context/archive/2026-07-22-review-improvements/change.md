@@ -1,8 +1,9 @@
 ---
 change_id: review-improvements
-status: impl_reviewed
+status: archived
+archived_at: 2026-08-01T21:33:46Z
 created: 2026-07-22
-updated: 2026-07-23
+updated: 2026-08-01
 ---
 
 # review-improvements

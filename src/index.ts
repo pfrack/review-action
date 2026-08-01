@@ -391,8 +391,8 @@ function validateConfig(config: Config): void {
   }
 }
 
-function buildClients(config: Config): Record<Provider, OpenAIClient | null> {
-  const hasCustom = !!(config.customApiUrl && config.customModel);
+export function buildClients(config: Config): Record<Provider, OpenAIClient | null> {
+  const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
   return {
     nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
     mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,

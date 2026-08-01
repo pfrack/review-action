@@ -7,7 +7,7 @@ import { severityTally } from './render.js';
 import { buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, withAggregateTimeout } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, withAggregateTimeout } from './index.js';
 describe('buildSystemMessage', () => {
     it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
         const msg = buildSystemMessage('append', '');
@@ -362,5 +362,36 @@ describe('runModelChainForBatch parallel fallback', () => {
         const result = await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 500);
         assert.strictEqual(result.usedModel, 'success-c');
         assert.strictEqual(result.findings.length, 1);
+    });
+});
+describe('buildClients — custom models plural without singular', () => {
+    it('creates custom client when custom_models is set without custom_model', () => {
+        const config = makeConfig({
+            customApiUrl: 'https://custom.example.com/v1',
+            customApiKey: 'test-key',
+            customModels: ['custom-model-1', 'custom-model-2'],
+            customModel: '',
+        });
+        const clients = buildClients(config);
+        assert.ok(clients.custom, 'custom client should be created');
+    });
+    it('creates custom client when both custom_model and custom_models are set', () => {
+        const config = makeConfig({
+            customApiUrl: 'https://custom.example.com/v1',
+            customApiKey: 'test-key',
+            customModels: ['custom-model-1'],
+            customModel: 'primary-model',
+        });
+        const clients = buildClients(config);
+        assert.ok(clients.custom);
+    });
+    it('does not create custom client when no custom URL is set', () => {
+        const config = makeConfig({
+            customApiUrl: '',
+            customModels: ['custom-model-1'],
+            customModel: '',
+        });
+        const clients = buildClients(config);
+        assert.strictEqual(clients.custom, null);
     });
 });

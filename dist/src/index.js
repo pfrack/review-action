@@ -347,8 +347,8 @@ function validateConfig(config) {
         core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
 }
-function buildClients(config) {
-    const hasCustom = !!(config.customApiUrl && config.customModel);
+export function buildClients(config) {
+    const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
     return {
         nim: config.apiKey ? new OpenAIClient(config.baseURL, config.apiKey, 'NIM') : null,
         mistral: config.mistralApiKey ? new OpenAIClient(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,

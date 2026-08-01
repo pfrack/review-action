@@ -1,10 +1,10 @@
 ---
 change_id: v1-rewrite
 title: Extend action with NIM model benchmarking, env prompt override, per-language prompt templates; retag v1
-status: impl_reviewed
+status: archived
 created: 2026-07-18
-updated: 2026-07-18
-archived_at: null
+updated: 2026-08-01
+archived_at: 2026-08-01T21:33:46Z
 ---
 
 ## Notes

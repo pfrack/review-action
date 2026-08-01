@@ -26596,6 +26596,7 @@ async function createComment(repo, prNumber, token, body) {
 
 __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Bo: () => (/* binding */ buildClients),
 /* harmony export */   cK: () => (/* binding */ computeMaxTokens),
 /* harmony export */   ni: () => (/* binding */ withAggregateTimeout),
 /* harmony export */   od: () => (/* binding */ detectLanguage),
@@ -26968,7 +26969,7 @@ function validateConfig(config) {
     }
 }
 function buildClients(config) {
-    const hasCustom = !!(config.customApiUrl && config.customModel);
+    const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
     return {
         nim: config.apiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.baseURL, config.apiKey, 'NIM') : null,
         mistral: config.mistralApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.mistralBaseUrl, config.mistralApiKey, 'Mistral') : null,
@@ -38452,9 +38453,10 @@ module.exports = parseParams
 /******/ // This entry module used 'module' so it can't be inlined
 /******/ var __webpack_exports__ = __nccwpck_require__(9407);
 /******/ __webpack_exports__ = await __webpack_exports__;
+/******/ var __webpack_exports__buildClients = __webpack_exports__.Bo;
 /******/ var __webpack_exports__computeMaxTokens = __webpack_exports__.cK;
 /******/ var __webpack_exports__detectLanguage = __webpack_exports__.od;
 /******/ var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
 /******/ var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
-/******/ export { __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+/******/ export { __webpack_exports__buildClients as buildClients, __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
 /******/ 

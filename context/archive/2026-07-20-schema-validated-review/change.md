@@ -1,9 +1,10 @@
 ---
 id: schema-validated-review
 title: Add structured-output validation to review-action
-status: impl_reviewed
+status: archived
+archived_at: 2026-08-01T21:33:46Z
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-08-01
 ---
 
 # schema-validated-review

@@ -7,7 +7,7 @@ import { severityTally } from './render.js';
 import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, type BatchResult, withAggregateTimeout } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, type BatchResult, withAggregateTimeout } from './index.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { type FileBatch } from './batching.js';
 import { type Config } from './config.js';
@@ -429,5 +429,39 @@ describe('runModelChainForBatch parallel fallback', () => {
     );
     assert.strictEqual(result.usedModel, 'success-c');
     assert.strictEqual(result.findings.length, 1);
+  });
+});
+
+describe('buildClients — custom models plural without singular', () => {
+  it('creates custom client when custom_models is set without custom_model', () => {
+    const config = makeConfig({
+      customApiUrl: 'https://custom.example.com/v1',
+      customApiKey: 'test-key',
+      customModels: ['custom-model-1', 'custom-model-2'],
+      customModel: '',
+    });
+    const clients = buildClients(config);
+    assert.ok(clients.custom, 'custom client should be created');
+  });
+
+  it('creates custom client when both custom_model and custom_models are set', () => {
+    const config = makeConfig({
+      customApiUrl: 'https://custom.example.com/v1',
+      customApiKey: 'test-key',
+      customModels: ['custom-model-1'],
+      customModel: 'primary-model',
+    });
+    const clients = buildClients(config);
+    assert.ok(clients.custom);
+  });
+
+  it('does not create custom client when no custom URL is set', () => {
+    const config = makeConfig({
+      customApiUrl: '',
+      customModels: ['custom-model-1'],
+      customModel: '',
+    });
+    const clients = buildClients(config);
+    assert.strictEqual(clients.custom, null);
   });
 });
