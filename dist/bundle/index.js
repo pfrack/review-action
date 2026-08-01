@@ -27142,7 +27142,19 @@ function buildCombinedChain(opts) {
     if (opts.customModel && opts.hasCustomConfig) {
         customModels.push({ id: opts.customModel, provider: 'custom', scoreOverride: customSweScore });
     }
-    return [...customModels, ...sortedProviderModels];
+    // Deduplicate custom models by id (preserving order). When both
+    // custom_model and custom_models are configured, the same model may
+    // appear twice (the singular value is typically the first entry in the
+    // plural CSV). Without dedup, the chain tries the same model twice.
+    const seen = new Set();
+    const dedupedCustom = [];
+    for (const m of customModels) {
+        if (!seen.has(m.id)) {
+            seen.add(m.id);
+            dedupedCustom.push(m);
+        }
+    }
+    return [...dedupedCustom, ...sortedProviderModels];
 }
 const PROBE_TIMEOUT_MS = 10_000;
 const PROBE_CONCURRENCY = 3;

@@ -308,6 +308,23 @@ describe('custom_models CSV', () => {
         assert.strictEqual(chain.length, 1);
         assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
     });
+    it('deduplicates custom_model when it also appears in custom_models', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            hasNimKey: true,
+            customModel: 'step-3.7-flash',
+            hasCustomConfig: true,
+            customModels: ['step-3.7-flash', 'step-3.5-flash'],
+            hasCustomModels: true,
+            customSweScore: 0.74,
+        });
+        const customModels = chain.filter(m => m.provider === 'custom');
+        assert.strictEqual(customModels.length, 2, 'should dedupe step-3.7-flash');
+        assert.strictEqual(customModels[0].id, 'step-3.7-flash');
+        assert.strictEqual(customModels[1].id, 'step-3.5-flash');
+    });
     it('propagates customSweScore to all custom model entries (single + CSV)', () => {
         const chain = buildCombinedChain({
             nimModels: ['deepseek-ai/deepseek-v4-pro'],
