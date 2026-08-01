@@ -25771,6 +25771,11 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'google/gemma-4-26b-a4b-it:free': 0.5,
+    'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
+    'nvidia/nemotron-nano-12b-v2-vl:free': 0.5,
+    'nvidia/nemotron-nano-9b-v2:free': 0.5,
+    'openai/gpt-oss-20b:free': 0.5,
     'cohere/north-mini-code:free': 0.5,
     'kilo-auto/free': 0.5,
     'stepfun/step-3.7-flash:free': 0.5,
@@ -26191,6 +26196,24 @@ async function loadConfig() {
         promptMode,
         customRules: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_rules') || '',
         revalidateFindings: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('revalidate_findings') === 'true',
+        modelTimeout: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('model_timeout') || '60';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 0) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 60.`);
+                return 60;
+            }
+            return parsed;
+        })(),
+        chainTimeout: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('chain_timeout') || '0';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 0) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid chain_timeout "${raw}", must be >= 0. Defaulting to 0 (unlimited).`);
+                return 0;
+            }
+            return parsed;
+        })(),
     };
     const openRouterInput = splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_models'));
     if (openRouterInput.length > 0) {
@@ -26570,8 +26593,7 @@ _model_chain_js__WEBPACK_IMPORTED_MODULE_8__ = (__webpack_async_dependencies__.t
 
 
 
-const CHAIN_TIMEOUT_MS = 120_000;
-async function withAggregateTimeout(operation, timeoutMs = CHAIN_TIMEOUT_MS) {
+async function withAggregateTimeout(operation, timeoutMs) {
     let timer;
     try {
         return await Promise.race([
@@ -26604,7 +26626,7 @@ async function cleanupPreviousOutput(repo, prNumber, token) {
 function providerToFormat(provider, responseFormat) {
     return provider === 'mistral' ? 'tools' : responseFormat;
 }
-async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config) {
+async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     let batchReview = null;
@@ -26617,6 +26639,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
             continue;
         try {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Trying ${tagged.id} (${tagged.provider})...`);
+            const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
             const result = await client.chat(tagged.id, [
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: userMsg },
@@ -26625,6 +26648,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 maxTokens: 4096,
                 schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
                 format: providerToFormat(tagged.provider, responseFormat),
+                signal: attemptSignal,
             });
             if (result.finishReason === 'length') {
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
@@ -26643,6 +26667,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 const errorSummary = parsed.error.issues.slice(0, 3)
                     .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
                     .join('\n');
+                const retrySignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
                 const retryResult = await client.chat(tagged.id, [
                     { role: 'system', content: systemMessage },
                     { role: 'user', content: userMsg },
@@ -26653,6 +26678,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                     maxTokens: 4096,
                     schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
                     format: providerToFormat(tagged.provider, responseFormat),
+                    signal: retrySignal,
                 });
                 if (retryResult.finishReason === 'length') {
                     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} retry truncated, trying next...`);
@@ -26774,11 +26800,15 @@ async function prioritizeChain(chain, clients) {
 async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
     const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
     const batchResults = [];
+    const modelTimeoutMs = config.modelTimeout * 1000;
     for (const batch of work) {
         if (batches.length > 1) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const result = await withAggregateTimeout(() => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config));
+        const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
+        const result = config.chainTimeout > 0
+            ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+            : await runBatch();
         if (result === null) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }
@@ -27170,6 +27200,7 @@ class OpenAIClient {
                                 baseURL.split('/')[2] || 'API');
     }
     async chat(model, messages, opts = {}) {
+        const outerSignal = opts.signal;
         const payload = {
             model,
             messages,
@@ -27204,6 +27235,8 @@ class OpenAIClient {
         }
         const start = Date.now();
         const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .bD)(async () => {
+            if (outerSignal?.aborted)
+                throw new Error('Request aborted by caller');
             const response = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27211,7 +27244,9 @@ class OpenAIClient {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(180_000),
+                signal: outerSignal
+                    ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+                    : AbortSignal.timeout(180_000),
             });
             if (!response.ok) {
                 const body = await response.text();
