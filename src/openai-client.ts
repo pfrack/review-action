@@ -202,7 +202,12 @@ interface ChatRequest {
 }
 
 interface ChatResponseChoice {
-  message?: { content: string | null; tool_calls?: Array<{ function: { arguments: string } }> };
+  message?: {
+    content: string | null;
+    tool_calls?: Array<{ function: { arguments: string } }>
+    /** Separate reasoning/thinking content emitted by reasoning models (StepFun, DeepSeek). Currently ignored — only `content` is parsed. */
+    reasoning_content?: string | null;
+  };
   delta?: { content: string };
   finish_reason?: string;
 }
