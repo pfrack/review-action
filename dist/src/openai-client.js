@@ -45,16 +45,96 @@ const NO_JSON_SCHEMA_MODELS = new Set([
     'mixtral-8x7b-32768',
     'gemma2-9b-it',
 ]);
+// Models that don't support ANY structured output — both `json_schema`
+// and `json_object` are rejected with messages like
+// "structured_outputs is not supported" (StepFun's wording). For these,
+// we fall through to plain text mode and parse the JSON out of the
+// model's natural response (which is usually wrapped in ```json ... ```
+// or a bare object). Without this fallback the chain would skip them
+// entirely and burn ~3s per model on the failed attempts.
+const NO_STRUCTURED_OUTPUT_MODELS = new Set([
+    // StepFun step-* models: no structured output support at all.
+    'step-3.7-flash',
+    'step-3.5-flash',
+    'step-3.5-flash-2603',
+]);
 function effectiveFormat(model, provider, requested) {
-    if (requested !== 'json_schema')
+    if (requested !== 'json_schema' && requested !== 'json_object')
         return requested;
     // 1. Provider-qualified key wins (e.g. "groq:llama-3.3-70b-versatile")
     if (NO_JSON_SCHEMA_MODELS.has(`${provider}:${model}`))
         return 'json_object';
-    // 2. Bare model id (most IDs are provider-unique already)
     if (NO_JSON_SCHEMA_MODELS.has(model))
         return 'json_object';
+    // 2. Models that reject all structured output fall through to text
+    // mode, where the response is parsed as JSON client-side.
+    if (NO_STRUCTURED_OUTPUT_MODELS.has(`${provider}:${model}`))
+        return 'text';
+    if (NO_STRUCTURED_OUTPUT_MODELS.has(model))
+        return 'text';
     return requested;
+}
+/**
+ * Extract a JSON object from a model's text response.
+ *
+ * Most models that don't support structured output still emit well-formed
+ * JSON when asked. They typically wrap it in a ```json ... ``` code
+ * block, or emit a bare object. This helper tries, in order:
+ *   1. A ```json ... ``` fenced code block (most common)
+ *   2. A fenced block with no language tag
+ *   3. The first balanced top-level { ... } object in the text
+ *
+ * Returns the extracted JSON string, or null if none could be found.
+ * The caller is responsible for parsing the string as JSON.
+ */
+export function extractJsonFromText(text) {
+    if (!text)
+        return null;
+    const trimmed = text.trim();
+    // 1. Fenced code block with `json` language tag
+    const jsonFence = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (jsonFence)
+        return jsonFence[1].trim();
+    // 2. Any fenced code block (some models omit the language tag)
+    const anyFence = trimmed.match(/```\s*([\s\S]*?)\s*```/);
+    if (anyFence)
+        return anyFence[1].trim();
+    // 3. First balanced top-level object — walk braces so embedded
+    // objects/arrays don't prematurely close the match.
+    const start = trimmed.indexOf('{');
+    if (start === -1)
+        return null;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < trimmed.length; i++) {
+        const ch = trimmed[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (inString) {
+            if (ch === '\\') {
+                escape = true;
+                continue;
+            }
+            if (ch === '"')
+                inString = false;
+            continue;
+        }
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
+        if (ch === '{')
+            depth++;
+        else if (ch === '}') {
+            depth--;
+            if (depth === 0)
+                return trimmed.slice(start, i + 1);
+        }
+    }
+    return null;
 }
 export class OpenAIClient {
     baseURL;
@@ -179,6 +259,19 @@ export class OpenAIClient {
         }
         else {
             content = (choice.message?.content ?? '').trim();
+        }
+        // Text-mode fallback: when the caller wanted structured output but
+        // we had to drop to plain text (model in NO_STRUCTURED_OUTPUT_MODELS),
+        // try to extract a JSON object from the model's natural response so
+        // the downstream schema validator can parse it.
+        const requestedStructured = opts.format === 'json_schema' || opts.format === 'json_object';
+        if (format === 'text' && requestedStructured) {
+            const extracted = extractJsonFromText(content);
+            if (extracted !== null) {
+                content = extracted;
+            }
+            // If extraction failed, return the raw text — the chain's schema
+            // validator will reject it and the chain moves on.
         }
         return {
             content,

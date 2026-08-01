@@ -60,12 +60,17 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
         try {
             core.info(`Trying ${tagged.id} (${tagged.provider})...`);
             const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
+            // Bump maxTokens to 8192 for text-mode models — StepFun's
+            // step-* family produces well-formed JSON but verbose enough
+            // to truncate at 4096. The chain's truncation handler then
+            // rejects the finding before the JSON parser sees it.
+            const isTextModeModel = /\bstep-\d/.test(tagged.id);
             const result = await client.chat(tagged.id, [
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: userMsg },
             ], {
                 temperature: 0.2,
-                maxTokens: 4096,
+                maxTokens: isTextModeModel ? 8192 : 4096,
                 schema: ReviewJsonSchema,
                 format: providerToFormat(tagged.provider, responseFormat),
                 signal: attemptSignal,

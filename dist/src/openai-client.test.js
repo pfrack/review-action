@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { OpenAIClient } from './openai-client.js';
+import { OpenAIClient, extractJsonFromText } from './openai-client.js';
 import { RetryableError } from './retry.js';
 import { startMockServer } from './test-utils.js';
 describe('OpenAIClient provider label detection', () => {
@@ -166,7 +166,9 @@ describe('OpenAIClient', () => {
         // Some providers (e.g. StepFun) use the generic feature name
         // "structured_outputs" instead of the API param "json_schema" in
         // their error body. The detector must match both.
-        const modelId = 'step-3.5-flash';
+        // NOTE: use a model id NOT in NO_STRUCTURED_OUTPUT_MODELS so the
+        // text-mode override doesn't kick in and the retry path is exercised.
+        const modelId = 'unknown-model-structured-outputs-error';
         const calls = [];
         const mock = await startMockServer((req, res) => {
             let raw = '';
@@ -233,6 +235,87 @@ describe('OpenAIClient', () => {
             // Exactly one call — override skips the json_schema round-trip
             assert.strictEqual(calls.length, 1);
             assert.strictEqual(calls[0].payload.response_format?.type, 'json_object');
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('Chat falls through to text mode for NO_STRUCTURED_OUTPUT_MODELS and parses JSON out of the response', async () => {
+        // StepFun rejects both json_schema and json_object. The action
+        // should drop to plain text and parse the JSON object the model
+        // emits in a ```json ... ``` fence (or bare, see next test).
+        const calls = [];
+        const mock = await startMockServer((req, res) => {
+            let raw = '';
+            req.on('data', (chunk) => raw += chunk);
+            req.on('end', () => {
+                const payload = JSON.parse(raw);
+                calls.push({ payload });
+                // No response_format on the wire (text mode)
+                assert.strictEqual(payload.response_format, undefined, 'text mode must not send response_format');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    choices: [{ message: { content: '```json\n{"summary":"step-fun parsed","findings":[]}\n```' } }],
+                    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                }));
+            });
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key', 'StepFun');
+            const result = await client.chat('step-3.5-flash', [{ role: 'user', content: 'hi' }], {
+                schema: { type: 'object' },
+                format: 'json_schema',
+            });
+            assert.strictEqual(calls.length, 1);
+            assert.strictEqual(calls[0].payload.response_format, undefined);
+            // Extracted JSON, not the raw fenced text
+            assert.strictEqual(result.content, '{"summary":"step-fun parsed","findings":[]}');
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('extractJsonFromText: handles ```json fence, plain fence, bare object, and prose', () => {
+        assert.strictEqual(extractJsonFromText('```json\n{"a":1}\n```'), '{"a":1}');
+        assert.strictEqual(extractJsonFromText('```\n{"a":2}\n```'), '{"a":2}');
+        assert.strictEqual(extractJsonFromText('Here is the result: {"a":3, "b":[1,2]} and some trailing prose.'), '{"a":3, "b":[1,2]}');
+        // Nested objects — brace counter must not be fooled by inner braces
+        assert.strictEqual(extractJsonFromText('noise {"a":{"b":2},"c":3} tail'), '{"a":{"b":2},"c":3}');
+        // Strings containing braces must not affect the counter
+        assert.strictEqual(extractJsonFromText('{"a":"has } brace","b":2}'), '{"a":"has } brace","b":2}');
+        // Escaped quotes inside strings
+        assert.strictEqual(extractJsonFromText('{"a":"escaped \\" quote","b":2}'), '{"a":"escaped \\" quote","b":2}');
+        // No JSON found
+        assert.strictEqual(extractJsonFromText('no json here'), null);
+        assert.strictEqual(extractJsonFromText(''), null);
+        // Unbalanced braces
+        assert.strictEqual(extractJsonFromText('{"a":1'), null);
+    });
+    it('Chat falls back to text mode without json_schema round-trip (no NO_JSON_SCHEMA_MODELS hit first)', async () => {
+        // A model in NO_STRUCTURED_OUTPUT_MODELS but NOT in NO_JSON_SCHEMA_MODELS
+        // should still go straight to text mode in one call.
+        const calls = [];
+        const mock = await startMockServer((req, res) => {
+            let raw = '';
+            req.on('data', (chunk) => raw += chunk);
+            req.on('end', () => {
+                const payload = JSON.parse(raw);
+                calls.push({ payload });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    choices: [{ message: { content: '{"a":1}' } }],
+                    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                }));
+            });
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key', 'Custom');
+            await client.chat('step-3.5-flash-2603', [{ role: 'user', content: 'hi' }], {
+                schema: { type: 'object' },
+                format: 'json_schema',
+            });
+            assert.strictEqual(calls.length, 1);
+            assert.strictEqual(calls[0].payload.response_format, undefined);
         }
         finally {
             mock.close();
