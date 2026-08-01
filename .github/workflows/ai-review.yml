@@ -23,5 +23,6 @@ jobs:
           custom_api_key: ${{ secrets.CUSTOM_API_KEY }}
           nim_api_key: ${{ secrets.NIM_API_KEY }}
           mistral_api_key: ${{ secrets.MISTRAL_API_KEY }}
+          custom_swe_score: ${{ secrets.CUSTOM_SWE_SCORE }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
