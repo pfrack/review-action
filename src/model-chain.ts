@@ -3,6 +3,14 @@ import type { OpenAIClient } from './openai-client.js';
 
 export type Provider = 'nim' | 'mistral' | 'groq' | 'openrouter' | 'kilocode' | 'custom';
 
+// Maximum SWE-bench score gap (head - fastest) for which a probed-fast
+// model is allowed to take over the head. With head=0.806 (deepseek-v4-pro)
+// and fastest=0.776 (mistral-medium-3.5) the gap is 0.030 > 0.02 → no promote.
+// With head=0.806 and fastest=0.790 (deepseek-v4-flash) the gap is 0.016
+// < 0.02 → still no promote (preserves the higher-SWE head). The margin
+// exists only to absorb rounding/fluctuation, not real score differences.
+export const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
+
 export interface TaggedModel {
   id: string;
   provider: Provider;
@@ -137,5 +145,23 @@ export async function probeModels(
 
   if (available.length === 0) return null;
   available.sort((a, b) => a.latency - b.latency);
+
+  // Cap the promotion: a lower-SWE model that happens to answer the probe
+  // faster must not be allowed to leapfrog a higher-SWE chain head. The
+  // head is already the best model the user has configured by score; probe
+  // latency is at best a tiebreaker. If the head probed successfully it
+  // already appears in `available`; if it didn't, the chain still tries
+  // it first (per the runModelChainForBatch loop) and falls through on
+  // failure, so a wrong promotion here can only hurt quality.
+  if (chain.length > 0) {
+    const head = chain[0];
+    const headScore = getSweBenchScore(head.id);
+    const fastest = available[0];
+    const fastestScore = getSweBenchScore(fastest.model.id);
+    if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
+      return null;
+    }
+  }
+
   return available[0].model;
 }

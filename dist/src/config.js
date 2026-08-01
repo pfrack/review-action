@@ -48,6 +48,7 @@ export async function loadConfig() {
         promptMode,
         customRules: core.getInput('custom_rules') || '',
         revalidateFindings: core.getInput('revalidate_findings') === 'true',
+        dropUnreferenced: core.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
             const raw = core.getInput('model_timeout') || '60';
             const parsed = Number.parseInt(raw, 10);

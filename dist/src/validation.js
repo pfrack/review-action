@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-export function validateCodeContext(finding, diff) {
+export function validateCodeContext(finding, diff, dropUnreferenced = true) {
     const issue = finding.issue;
     const warnings = [];
     function nameInDiff(name) {
@@ -37,7 +37,68 @@ export function validateCodeContext(finding, diff) {
             warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
         }
     }
-    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
+    // Check for negative claims the model makes about identifier presence —
+    // e.g. "X is used but not imported" or "Missing import for X". If the
+    // model claims X is missing/undefined but X is actually in the diff, the
+    // claim is contradicted and the finding is a hallucination. Sentence-
+    // scoped so a backtick ref in one sentence and a negative phrase in
+    // another don't get paired up.
+    for (const name of findContradictedNegativeClaims(issue, diff)) {
+        warnings.push(`Note: claim that \`${name}\` is not imported/defined is contradicted by the diff — identifier is present`);
+    }
+    if (warnings.length === 0) {
+        return { valid: true, reason: undefined };
+    }
+    return { valid: !dropUnreferenced, reason: warnings.join('; ') };
+}
+// Negative-claim patterns the model uses to assert that an identifier is
+// absent from the file/module. We deliberately exclude bare "is missing"
+// because the model also writes "X is missing retry fields" / "X is
+// missing error handling" — those are "incompleteness" claims, not
+// "absence" claims, and are not contradicted by X being in the diff.
+const NEGATIVE_CLAIM_RE = /(?:is\s+(?:used\s+but\s+)?not\s+(?:imported|defined|declared)|missing\s+(?:the\s+)?import(?:\s+for)?|is\s+missing\s+(?:from|in\s+this|here)|not\s+been\s+(?:imported|defined|declared)|does\s+not\s+exist|has\s+not\s+been\s+(?:imported|defined|declared))/i;
+/**
+ * Find backtick-wrapped identifiers in `issue` whose absence the model
+ * claims (via patterns like "X is not imported") but which are actually
+ * present in `diff`. Returns the names of contradicted claims.
+ */
+function findContradictedNegativeClaims(issue, diff) {
+    if (!diff)
+        return [];
+    const contradicted = [];
+    const seen = new Set();
+    function nameInDiff(name) {
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = lowerDiff.indexOf(lowerName);
+        while (idx !== -1) {
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx = lowerDiff.indexOf(lowerName, idx + 1);
+        }
+        return false;
+    }
+    for (const sentence of issue.split(/[.!?\n]+/)) {
+        if (!NEGATIVE_CLAIM_RE.test(sentence))
+            continue;
+        const backtickRefs = sentence.match(/`(\w+)`/g) || [];
+        for (const ref of backtickRefs) {
+            const name = ref.slice(1, -1);
+            if (name.length <= 2)
+                continue;
+            if (seen.has(name))
+                continue;
+            if (!nameInDiff(name))
+                continue;
+            contradicted.push(name);
+            seen.add(name);
+        }
+    }
+    return contradicted;
 }
 export async function revalidateFindings(findings, diff, client, model) {
     if (findings.length === 0)

@@ -2,6 +2,7 @@ import { type ReviewType, type ReviewFinding } from './review-schema.js';
 import { withRetry, RetryableError } from './retry.js';
 import { validateCodeContext, revalidateFindings } from './validation.js';
 import type { OpenAIClient } from './openai-client.js';
+import type { Config } from './config.js';
 
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
 
@@ -53,10 +54,12 @@ export async function validateFindings(
   changedFiles: Set<string>,
   client?: OpenAIClient,
   model?: string,
+  config?: Pick<Config, 'dropUnreferenced' | 'revalidateFindings'>,
 ): Promise<{ valid: ReviewType; warnings: string[]; dropped: number }> {
   const warnings: string[] = [];
   const hunks = getFileHunks(filesDiff);
   const validFindings: typeof review.findings = [];
+  const dropUnreferenced = config?.dropUnreferenced ?? true;
 
   for (const f of review.findings) {
     if (!changedFiles.has(f.file)) {
@@ -84,7 +87,11 @@ export async function validateFindings(
         continue;
       }
     }
-    const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+    const codeContext = validateCodeContext(f, filesDiff[f.file] || '', dropUnreferenced);
+    if (!codeContext.valid) {
+      warnings.push(`Warning: ${codeContext.reason} in "${f.file}", dropping`);
+      continue;
+    }
     if (codeContext.reason) {
       warnings.push(`${codeContext.reason} in "${f.file}"`);
     }

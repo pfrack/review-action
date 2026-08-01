@@ -60,6 +60,7 @@ jobs:
 | `nim_prompt_mode` | `append` | How to use custom prompt: `append` or `replace` |
 | `custom_rules` | `''` | Custom review rules (one per line, supports severity prefixes) |
 | `revalidate_findings` | `false` | Re-validate findings with LLM before posting (reduces false positives, adds latency) |
+| `drop_unreferenced` | `true` | Drop findings whose backtick-wrapped identifier or explicit `function X` / `variable X` reference is not present in the diff. Set `false` to keep them as soft `Note:` warnings (legacy behavior). |
 | `model_timeout` | `60` | Timeout in seconds for each individual model call (0 = no per-model limit) |
 | `chain_timeout` | `0` | Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models) |
 
@@ -251,7 +252,7 @@ The `resolve-swe` script (`npm run resolve-swe`) automatically resolves models a
 
 ## Model Probing
 
-Before sending the review request, the action probes models in the chain to find the fastest-responding one. Models are probed in batches of 3 with a 10-second timeout. The first model to respond is moved to the front of the chain. This reduces latency when higher-ranked models are temporarily slow or unavailable.
+Before sending the review request, the action probes models in the chain to find the fastest-responding one. Models are probed in batches of 3 with a 10-second timeout. The fastest probed model is moved to the front of the chain — but only if its SWE-bench score is within `PROBE_PROMOTE_MAX_HEAD_GAP` (0.02) of the SWE-sorted chain head. A faster probe on a much-lower-SWE model is **not** allowed to leapfrog the head, so e.g. `mistral-medium-3.5` (0.776) cannot displace `deepseek-v4-pro` (0.806). This reduces latency when higher-ranked models are temporarily slow or unavailable while preserving the SWE-bench ordering.
 
 ## Per-Language Prompts
 

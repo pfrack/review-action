@@ -26196,6 +26196,7 @@ async function loadConfig() {
         promptMode,
         customRules: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_rules') || '',
         revalidateFindings: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('revalidate_findings') === 'true',
+        dropUnreferenced: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
             const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('model_timeout') || '60';
             const parsed = Number.parseInt(raw, 10);
@@ -26693,7 +26694,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
             }
             batchReview = parsed.data;
             const changedFiles = new Set(batch.files);
-            const validated = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .validateFindings */ .Fk)(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
+            const validated = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .validateFindings */ .Fk)(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined, config);
             for (const warning of validated.warnings)
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(warning);
             batchReview = validated.valid;
@@ -26783,7 +26784,7 @@ function detectLanguage(files) {
 }
 async function prioritizeChain(chain, clients) {
     try {
-        const fastest = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .probeModels */ .Z)(chain, clients);
+        const fastest = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .probeModels */ .Zh)(chain, clients);
         if (fastest) {
             const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
             if (fastestIndex > 0) {
@@ -26908,7 +26909,7 @@ async function run() {
     validateConfig(config);
     const clients = buildClients(config);
     const hasCustom = !!(config.customApiUrl && config.customModel);
-    const chain = (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .buildCombinedChain */ .h)({
+    const chain = (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .buildCombinedChain */ .h2)({
         nimModels: config.models,
         mistralModels: config.mistralModels,
         groqModels: config.groqModels,
@@ -27043,13 +27044,21 @@ function formatMetrics(metrics) {
 
 __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   Z: () => (/* binding */ probeModels),
-/* harmony export */   h: () => (/* binding */ buildCombinedChain)
+/* harmony export */   Zh: () => (/* binding */ probeModels),
+/* harmony export */   h2: () => (/* binding */ buildCombinedChain)
 /* harmony export */ });
+/* unused harmony export PROBE_PROMOTE_MAX_HEAD_GAP */
 /* harmony import */ var _bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7911);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__]);
 _bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
 
+// Maximum SWE-bench score gap (head - fastest) for which a probed-fast
+// model is allowed to take over the head. With head=0.806 (deepseek-v4-pro)
+// and fastest=0.776 (mistral-medium-3.5) the gap is 0.030 > 0.02 → no promote.
+// With head=0.806 and fastest=0.790 (deepseek-v4-flash) the gap is 0.016
+// < 0.02 → still no promote (preserves the higher-SWE head). The margin
+// exists only to absorb rounding/fluctuation, not real score differences.
+const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
 /**
  * Build the model fallback chain.
  *
@@ -27151,6 +27160,22 @@ async function probeModels(chain, clients) {
     if (available.length === 0)
         return null;
     available.sort((a, b) => a.latency - b.latency);
+    // Cap the promotion: a lower-SWE model that happens to answer the probe
+    // faster must not be allowed to leapfrog a higher-SWE chain head. The
+    // head is already the best model the user has configured by score; probe
+    // latency is at best a tiebreaker. If the head probed successfully it
+    // already appears in `available`; if it didn't, the chain still tries
+    // it first (per the runModelChainForBatch loop) and falls through on
+    // failure, so a wrong promotion here can only hurt quality.
+    if (chain.length > 0) {
+        const head = chain[0];
+        const headScore = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(head.id);
+        const fastest = available[0];
+        const fastestScore = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(fastest.model.id);
+        if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
+            return null;
+        }
+    }
     return available[0].model;
 }
 
@@ -35593,7 +35618,7 @@ var retry = __nccwpck_require__(9809);
 var core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: ./src/validation.ts
 
-function validateCodeContext(finding, diff) {
+function validateCodeContext(finding, diff, dropUnreferenced = true) {
     const issue = finding.issue;
     const warnings = [];
     function nameInDiff(name) {
@@ -35631,7 +35656,68 @@ function validateCodeContext(finding, diff) {
             warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
         }
     }
-    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
+    // Check for negative claims the model makes about identifier presence —
+    // e.g. "X is used but not imported" or "Missing import for X". If the
+    // model claims X is missing/undefined but X is actually in the diff, the
+    // claim is contradicted and the finding is a hallucination. Sentence-
+    // scoped so a backtick ref in one sentence and a negative phrase in
+    // another don't get paired up.
+    for (const name of findContradictedNegativeClaims(issue, diff)) {
+        warnings.push(`Note: claim that \`${name}\` is not imported/defined is contradicted by the diff — identifier is present`);
+    }
+    if (warnings.length === 0) {
+        return { valid: true, reason: undefined };
+    }
+    return { valid: !dropUnreferenced, reason: warnings.join('; ') };
+}
+// Negative-claim patterns the model uses to assert that an identifier is
+// absent from the file/module. We deliberately exclude bare "is missing"
+// because the model also writes "X is missing retry fields" / "X is
+// missing error handling" — those are "incompleteness" claims, not
+// "absence" claims, and are not contradicted by X being in the diff.
+const NEGATIVE_CLAIM_RE = /(?:is\s+(?:used\s+but\s+)?not\s+(?:imported|defined|declared)|missing\s+(?:the\s+)?import(?:\s+for)?|is\s+missing\s+(?:from|in\s+this|here)|not\s+been\s+(?:imported|defined|declared)|does\s+not\s+exist|has\s+not\s+been\s+(?:imported|defined|declared))/i;
+/**
+ * Find backtick-wrapped identifiers in `issue` whose absence the model
+ * claims (via patterns like "X is not imported") but which are actually
+ * present in `diff`. Returns the names of contradicted claims.
+ */
+function findContradictedNegativeClaims(issue, diff) {
+    if (!diff)
+        return [];
+    const contradicted = [];
+    const seen = new Set();
+    function nameInDiff(name) {
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = lowerDiff.indexOf(lowerName);
+        while (idx !== -1) {
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx = lowerDiff.indexOf(lowerName, idx + 1);
+        }
+        return false;
+    }
+    for (const sentence of issue.split(/[.!?\n]+/)) {
+        if (!NEGATIVE_CLAIM_RE.test(sentence))
+            continue;
+        const backtickRefs = sentence.match(/`(\w+)`/g) || [];
+        for (const ref of backtickRefs) {
+            const name = ref.slice(1, -1);
+            if (name.length <= 2)
+                continue;
+            if (seen.has(name))
+                continue;
+            if (!nameInDiff(name))
+                continue;
+            contradicted.push(name);
+            seen.add(name);
+        }
+    }
+    return contradicted;
 }
 async function revalidateFindings(findings, diff, client, model) {
     if (findings.length === 0)
@@ -35731,10 +35817,11 @@ function getFileHunks(filesDiff) {
     }
     return map;
 }
-async function validateFindings(review, filesDiff, changedFiles, client, model) {
+async function validateFindings(review, filesDiff, changedFiles, client, model, config) {
     const warnings = [];
     const hunks = getFileHunks(filesDiff);
     const validFindings = [];
+    const dropUnreferenced = config?.dropUnreferenced ?? true;
     for (const f of review.findings) {
         if (!changedFiles.has(f.file)) {
             warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
@@ -35761,7 +35848,11 @@ async function validateFindings(review, filesDiff, changedFiles, client, model) 
                 continue;
             }
         }
-        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '', dropUnreferenced);
+        if (!codeContext.valid) {
+            warnings.push(`Warning: ${codeContext.reason} in "${f.file}", dropping`);
+            continue;
+        }
         if (codeContext.reason) {
             warnings.push(`${codeContext.reason} in "${f.file}"`);
         }

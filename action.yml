@@ -97,6 +97,10 @@ inputs:
     description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
     required: false
     default: 'false'
+  drop_unreferenced:
+    description: 'Drop findings whose backtick-wrapped identifier or explicit `function X`/`variable X` reference is not present in the diff. Default true. Set false to keep them as soft warnings (legacy behavior).'
+    required: false
+    default: 'true'
   model_timeout:
     description: 'Timeout in seconds for each individual model call (0 = no per-model limit)'
     required: false
