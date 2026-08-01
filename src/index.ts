@@ -56,6 +56,159 @@ function providerToFormat(provider: Provider, responseFormat: ResponseFormat): R
   return provider === 'mistral' ? 'tools' : responseFormat;
 }
 
+const MAX_OUTPUT_TOKENS_CAP = 16384;
+
+/**
+ * Compute the output token limit for a model call.
+ *
+ * When `explicitMaxTokens > 0`, that value is honoured (capped at 16384).
+ * Otherwise the limit scales with the input diff size so that large reviews
+ * (many files / large diffs) get enough output tokens to produce a complete
+ * JSON findings array instead of being truncated at `finish_reason: 'length'`.
+ *
+ * Scaling rule:
+ *   inputTokens = ceil(diffLength / 3)   (conservative 3 chars/token)
+ *   output      = 4096 + min(inputTokens, 8000)
+ *   result      = min(output, 16384)
+ */
+export function computeMaxTokens(combinedDiff: string, explicitMaxTokens: number): number {
+  if (explicitMaxTokens > 0) {
+    return Math.min(explicitMaxTokens, MAX_OUTPUT_TOKENS_CAP);
+  }
+  const inputTokens = Math.ceil(combinedDiff.length / 3);
+  const scaledOutput = 4096 + Math.min(inputTokens, 12288);
+  return Math.min(scaledOutput, MAX_OUTPUT_TOKENS_CAP);
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(), ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new Error('aborted'));
+    }, { once: true });
+  });
+}
+
+/**
+ * Attempt a single model: chat → truncation check → schema validation (+ retry) → finding validation.
+ * Returns a BatchResult on partial-or-full failure (with lastRawContent), or null if the model
+ * should be skipped entirely (timeout, truncation with no extractable JSON, empty response).
+ */
+async function attemptModel(
+  tagged: TaggedModel,
+  client: OpenAIClient,
+  batch: FileBatch,
+  userMsg: string,
+  systemMessage: string,
+  responseFormat: ResponseFormat,
+  config: Config,
+  modelTimeoutMs: number,
+  maxTokens: number,
+  externalSignal?: AbortSignal,
+): Promise<BatchResult | null> {
+  try {
+    const isTextModeModel = /\bstep-\d/.test(tagged.id);
+    // Text-mode models (step-*) need extra headroom because the JSON is
+    // extracted from the natural response, which tends to be more verbose.
+    const effectiveMaxTokens = isTextModeModel ? Math.max(maxTokens, 8192) : maxTokens;
+
+    core.info(`Trying ${tagged.id} (${tagged.provider})...`);
+
+    const initSignals = modelTimeoutMs > 0 ? [AbortSignal.timeout(modelTimeoutMs)] : [];
+    if (externalSignal) initSignals.push(externalSignal);
+    const attemptSignal = initSignals.length > 0 ? AbortSignal.any(initSignals) : undefined;
+
+    const result = await client.chat(tagged.id, [
+      { role: 'system', content: systemMessage },
+      { role: 'user', content: userMsg },
+    ], {
+      temperature: 0.2,
+      maxTokens: effectiveMaxTokens,
+      schema: ReviewJsonSchema,
+      format: providerToFormat(tagged.provider, responseFormat),
+      signal: attemptSignal,
+    });
+
+    if (result.finishReason === 'length') {
+      // For text-mode models, extractJsonFromText (inside chat) may
+      // have pulled a complete JSON object from the response *before*
+      // the model's thinking stream hit the token cap. Don't throw
+      // that away — validate it. For non-text-mode models the JSON is
+      // definitely incomplete, so skip immediately.
+      if (!safeParseJson(result.content)) {
+        core.info(`${tagged.id} response truncated, trying next...`);
+        return null;
+      }
+      core.info(`${tagged.id} response truncated but JSON was extractable, proceeding to validation`);
+    }
+    if (!result.content || !result.content.trim()) {
+      core.info(`${tagged.id} returned empty, trying next...`);
+      return null;
+    }
+
+    let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
+    if (!parsed.success) {
+      core.info(`${tagged.id} schema validation failed, retrying...`);
+      const truncatedContent = result.content.length > 500
+        ? '...' + result.content.slice(-500)
+        : result.content;
+      const errorSummary = parsed.error.issues.slice(0, 3)
+        .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
+        .join('\n');
+      const retrySignals = modelTimeoutMs > 0 ? [AbortSignal.timeout(modelTimeoutMs)] : [];
+      if (externalSignal) retrySignals.push(externalSignal);
+      const retrySignal = retrySignals.length > 0 ? AbortSignal.any(retrySignals) : undefined;
+      const retryResult = await client.chat(tagged.id, [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: truncatedContent },
+        { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
+      ], {
+        temperature: 0.2,
+        maxTokens: effectiveMaxTokens,
+        schema: ReviewJsonSchema,
+        format: providerToFormat(tagged.provider, responseFormat),
+        signal: retrySignal,
+      });
+
+      if (retryResult.finishReason === 'length') {
+        core.info(`${tagged.id} retry truncated, trying next...`);
+        return null;
+      }
+      parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
+      if (!parsed.success) {
+        core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+        return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0 };
+      }
+    }
+
+    const batchReview: ReviewType = parsed.data;
+    const changedFiles = new Set(batch.files);
+    const validated = await validateFindings(
+      batchReview,
+      batch.diffs,
+      changedFiles,
+      config.revalidateFindings ? client : undefined,
+      config.revalidateFindings ? tagged.id : undefined,
+      config,
+    );
+    for (const warning of validated.warnings) core.warning(warning);
+
+    core.info(`Done with ${tagged.id} (${tagged.provider})`);
+    return {
+      findings: validated.valid.findings,
+      summary: validated.valid.summary ?? '',
+      usedModel: tagged.id,
+      lastRawContent: '',
+      dropped: validated.dropped,
+    };
+  } catch (err) {
+    core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+    return null;
+  }
+}
+
 export async function runModelChainForBatch(
   chain: TaggedModel[],
   clients: Record<Provider, OpenAIClient | null>,
@@ -67,105 +220,126 @@ export async function runModelChainForBatch(
 ): Promise<BatchResult> {
   const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
+  const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
+
+  const availableChain = chain.filter(tagged => clients[tagged.provider]);
 
   let batchReview: ReviewType | null = null;
   let batchUsedModel = '';
   let batchLastRawContent = '';
   let batchDropped = 0;
 
-  for (const tagged of chain) {
-    const client = clients[tagged.provider];
-    if (!client) continue;
+  const parallelEnabled = config.parallelAttempts > 1 && availableChain.length > 1;
 
-    try {
-      core.info(`Trying ${tagged.id} (${tagged.provider})...`);
-      const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
-      // Bump maxTokens to 8192 for text-mode models — StepFun's
-      // step-* family produces well-formed JSON but verbose enough
-      // to truncate at 4096. The chain's truncation handler then
-      // rejects the finding before the JSON parser sees it.
-      const isTextModeModel = /\bstep-\d/.test(tagged.id);
-      const result = await client.chat(tagged.id, [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: userMsg },
-      ], {
-        temperature: 0.2,
-        maxTokens: isTextModeModel ? 8192 : 4096,
-        schema: ReviewJsonSchema,
-        format: providerToFormat(tagged.provider, responseFormat),
-        signal: attemptSignal,
-      });
+  if (parallelEnabled) {
+    const parallelCount = Math.min(config.parallelAttempts, availableChain.length);
+    const controller = new AbortController();
+    const attemptPromises: Promise<BatchResult | null>[] = [];
 
-      if (result.finishReason === 'length') {
-        // For text-mode models, extractJsonFromText (inside chat) may
-        // have pulled a complete JSON object from the response *before*
-        // the model's thinking stream hit the token cap. Don't throw
-        // that away — validate it. For non-text-mode models the JSON is
-        // definitely incomplete, so skip immediately.
-        if (!safeParseJson(result.content)) {
-          core.info(`${tagged.id} response truncated, trying next...`);
-        continue;
+    for (let i = 0; i < parallelCount; i++) {
+      const tagged = availableChain[i];
+      const client = clients[tagged.provider]!;
+      const delayMs = i * config.parallelThreshold * 1000;
+
+      attemptPromises.push((async () => {
+        if (delayMs > 0) {
+          try { await delay(delayMs, controller.signal); } catch { return null; }
         }
-        core.info(`${tagged.id} response truncated but JSON was extractable, proceeding to validation`);
-      }
-      if (!result.content || !result.content.trim()) {
-        core.info(`${tagged.id} returned empty, trying next...`);
-        continue;
-      }
+        if (controller.signal.aborted) return null;
+        const result = await attemptModel(
+          tagged, client, batch, userMsg, systemMessage,
+          responseFormat, config, modelTimeoutMs, maxTokens, controller.signal,
+        );
+        if (result && result.findings.length > 0) controller.abort();
+        return result;
+      })());
+    }
 
-      let parsed = ReviewSchema.safeParse(safeParseJson(result.content));
-      if (!parsed.success) {
-        core.info(`${tagged.id} schema validation failed, retrying...`);
-        const truncatedContent = result.content.length > 500
-          ? '...' + result.content.slice(-500)
-          : result.content;
-        const errorSummary = parsed.error.issues.slice(0, 3)
-          .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
-          .join('\n');
-        const retrySignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
-        const retryResult = await client.chat(tagged.id, [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMsg },
-          { role: 'assistant', content: truncatedContent },
-          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
-        ], {
-          temperature: 0.2,
-          maxTokens: isTextModeModel ? 8192 : 4096,
-          schema: ReviewJsonSchema,
-          format: providerToFormat(tagged.provider, responseFormat),
-          signal: retrySignal,
-        });
+    const settled = await Promise.all(attemptPromises.map(p => p.catch(() => null)));
 
-        if (retryResult.finishReason === 'length') {
-          core.info(`${tagged.id} retry truncated, trying next...`);
-          continue;
-        }
-        parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
-        if (!parsed.success) {
-          batchLastRawContent = retryResult.content;
-          core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-          continue;
+    let winner: BatchResult | null = null;
+    let fallbackContent = '';
+    let fallbackModel = '';
+    for (const r of settled) {
+      if (r && r.findings.length > 0) {
+        winner = r;
+        break;
+      }
+      if (r && r.lastRawContent && !fallbackContent) {
+        fallbackContent = r.lastRawContent;
+        fallbackModel = r.usedModel;
+      }
+    }
+
+    if (winner) {
+      batchReview = { findings: winner.findings, summary: winner.summary };
+      batchUsedModel = winner.usedModel;
+      batchDropped = winner.dropped;
+    } else if (fallbackContent) {
+      // All parallel attempts failed but we captured raw content.
+      // Continue to remaining chain sequentially; fallthrough overwrites
+      // batchLastRawContent if a later model produces valid findings.
+      batchLastRawContent = fallbackContent;
+      batchUsedModel = fallbackModel;
+      for (let i = parallelCount; i < availableChain.length; i++) {
+        const tagged = availableChain[i];
+        const client = clients[tagged.provider]!;
+        const result = await attemptModel(
+          tagged, client, batch, userMsg, systemMessage,
+          responseFormat, config, modelTimeoutMs, maxTokens, undefined,
+        );
+        if (result) {
+          if (result.findings.length > 0) {
+            batchReview = { findings: result.findings, summary: result.summary };
+            batchUsedModel = result.usedModel;
+            batchDropped = result.dropped;
+            batchLastRawContent = '';
+            break;
+          }
+          if (result.lastRawContent) batchLastRawContent = result.lastRawContent;
+          if (result.usedModel) batchUsedModel = result.usedModel;
         }
       }
-
-      batchReview = parsed.data;
-      const changedFiles = new Set(batch.files);
-      const validated = await validateFindings(
-        batchReview,
-        batch.diffs,
-        changedFiles,
-        config.revalidateFindings ? client : undefined,
-        config.revalidateFindings ? tagged.id : undefined,
-        config,
+    } else {
+      // No winner, no fallback — try remaining chain sequentially
+      for (let i = parallelCount; i < availableChain.length; i++) {
+        const tagged = availableChain[i];
+        const client = clients[tagged.provider]!;
+        const result = await attemptModel(
+          tagged, client, batch, userMsg, systemMessage,
+          responseFormat, config, modelTimeoutMs, maxTokens, undefined,
+        );
+        if (result) {
+          if (result.findings.length > 0) {
+            batchReview = { findings: result.findings, summary: result.summary };
+            batchUsedModel = result.usedModel;
+            batchDropped = result.dropped;
+            break;
+          }
+          if (result.lastRawContent) batchLastRawContent = result.lastRawContent;
+          if (result.usedModel) batchUsedModel = result.usedModel;
+        }
+      }
+    }
+  } else {
+    // Sequential fallback (original behavior)
+    for (const tagged of availableChain) {
+      const client = clients[tagged.provider]!;
+      const result = await attemptModel(
+        tagged, client, batch, userMsg, systemMessage,
+        responseFormat, config, modelTimeoutMs, maxTokens, undefined,
       );
-      for (const warning of validated.warnings) core.warning(warning);
-      batchReview = validated.valid;
-      batchDropped = validated.dropped;
-      batchUsedModel = tagged.id;
-      core.info(`Done with ${tagged.id} (${tagged.provider})`);
-      break;
-    } catch (err) {
-      core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+      if (result) {
+        if (result.findings.length > 0) {
+          batchReview = { findings: result.findings, summary: result.summary };
+          batchUsedModel = result.usedModel;
+          batchDropped = result.dropped;
+          break;
+        }
+        // Validation failed after retry — preserve lastRawContent
+        if (result.lastRawContent) batchLastRawContent = result.lastRawContent;
+        if (result.usedModel) batchUsedModel = result.usedModel;
+      }
     }
   }
 

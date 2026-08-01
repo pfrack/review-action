@@ -113,6 +113,18 @@ inputs:
     description: 'Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models)'
     required: false
     default: '0'
+  max_tokens:
+    description: 'Override the adaptive output token limit for each model call. 0 = auto-scale based on diff size (default). Range 256-16384.'
+    required: false
+    default: '0'
+  parallel_attempts:
+    description: 'Number of models to try in parallel after the threshold without a successful response. 1 = fully sequential (default). 2-5 enables staggered parallel fallback.'
+    required: false
+    default: '1'
+  parallel_threshold:
+    description: 'Seconds to wait before starting the next model in parallel (when parallel_attempts > 1). The head model always starts first; this controls how long to wait before launching fallback copies.'
+    required: false
+    default: '40'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'

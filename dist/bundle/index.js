@@ -26224,6 +26224,35 @@ async function loadConfig() {
             }
             return parsed;
         })(),
+        maxTokens: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('max_tokens') || '0';
+            const parsed = Number.parseInt(raw, 10);
+            if (raw.trim() === '0' || parsed === 0)
+                return 0;
+            if (Number.isNaN(parsed) || parsed < 256 || parsed > 16384) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid max_tokens "${raw}", must be 256-16384. Defaulting to adaptive.`);
+                return 0;
+            }
+            return parsed;
+        })(),
+        parallelAttempts: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_attempts') || '1';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 1.`);
+                return 1;
+            }
+            return parsed;
+        })(),
+        parallelThreshold: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_threshold') || '40';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 5 || parsed > 120) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_threshold "${raw}", must be 5-120. Defaulting to 40.`);
+                return 40;
+            }
+            return parsed;
+        })(),
     };
     const openRouterInput = splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_models'));
     if (openRouterInput.length > 0) {
@@ -26567,6 +26596,7 @@ async function createComment(repo, prNumber, token, body) {
 
 __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   cK: () => (/* binding */ computeMaxTokens),
 /* harmony export */   ni: () => (/* binding */ withAggregateTimeout),
 /* harmony export */   od: () => (/* binding */ detectLanguage),
 /* harmony export */   pW: () => (/* binding */ runModelChainForBatch)
@@ -26636,97 +26666,251 @@ async function cleanupPreviousOutput(repo, prNumber, token) {
 function providerToFormat(provider, responseFormat) {
     return provider === 'mistral' ? 'tools' : responseFormat;
 }
+const MAX_OUTPUT_TOKENS_CAP = 16384;
+/**
+ * Compute the output token limit for a model call.
+ *
+ * When `explicitMaxTokens > 0`, that value is honoured (capped at 16384).
+ * Otherwise the limit scales with the input diff size so that large reviews
+ * (many files / large diffs) get enough output tokens to produce a complete
+ * JSON findings array instead of being truncated at `finish_reason: 'length'`.
+ *
+ * Scaling rule:
+ *   inputTokens = ceil(diffLength / 3)   (conservative 3 chars/token)
+ *   output      = 4096 + min(inputTokens, 8000)
+ *   result      = min(output, 16384)
+ */
+function computeMaxTokens(combinedDiff, explicitMaxTokens) {
+    if (explicitMaxTokens > 0) {
+        return Math.min(explicitMaxTokens, MAX_OUTPUT_TOKENS_CAP);
+    }
+    const inputTokens = Math.ceil(combinedDiff.length / 3);
+    const scaledOutput = 4096 + Math.min(inputTokens, 12288);
+    return Math.min(scaledOutput, MAX_OUTPUT_TOKENS_CAP);
+}
+function delay(ms, signal) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve(), ms);
+        signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+        }, { once: true });
+    });
+}
+/**
+ * Attempt a single model: chat → truncation check → schema validation (+ retry) → finding validation.
+ * Returns a BatchResult on partial-or-full failure (with lastRawContent), or null if the model
+ * should be skipped entirely (timeout, truncation with no extractable JSON, empty response).
+ */
+async function attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, externalSignal) {
+    try {
+        const isTextModeModel = /\bstep-\d/.test(tagged.id);
+        // Text-mode models (step-*) need extra headroom because the JSON is
+        // extracted from the natural response, which tends to be more verbose.
+        const effectiveMaxTokens = isTextModeModel ? Math.max(maxTokens, 8192) : maxTokens;
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Trying ${tagged.id} (${tagged.provider})...`);
+        const initSignals = modelTimeoutMs > 0 ? [AbortSignal.timeout(modelTimeoutMs)] : [];
+        if (externalSignal)
+            initSignals.push(externalSignal);
+        const attemptSignal = initSignals.length > 0 ? AbortSignal.any(initSignals) : undefined;
+        const result = await client.chat(tagged.id, [
+            { role: 'system', content: systemMessage },
+            { role: 'user', content: userMsg },
+        ], {
+            temperature: 0.2,
+            maxTokens: effectiveMaxTokens,
+            schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
+            format: providerToFormat(tagged.provider, responseFormat),
+            signal: attemptSignal,
+        });
+        if (result.finishReason === 'length') {
+            // For text-mode models, extractJsonFromText (inside chat) may
+            // have pulled a complete JSON object from the response *before*
+            // the model's thinking stream hit the token cap. Don't throw
+            // that away — validate it. For non-text-mode models the JSON is
+            // definitely incomplete, so skip immediately.
+            if (!(0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content)) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
+                return null;
+            }
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated but JSON was extractable, proceeding to validation`);
+        }
+        if (!result.content || !result.content.trim()) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} returned empty, trying next...`);
+            return null;
+        }
+        let parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content));
+        if (!parsed.success) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} schema validation failed, retrying...`);
+            const truncatedContent = result.content.length > 500
+                ? '...' + result.content.slice(-500)
+                : result.content;
+            const errorSummary = parsed.error.issues.slice(0, 3)
+                .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
+                .join('\n');
+            const retrySignals = modelTimeoutMs > 0 ? [AbortSignal.timeout(modelTimeoutMs)] : [];
+            if (externalSignal)
+                retrySignals.push(externalSignal);
+            const retrySignal = retrySignals.length > 0 ? AbortSignal.any(retrySignals) : undefined;
+            const retryResult = await client.chat(tagged.id, [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: userMsg },
+                { role: 'assistant', content: truncatedContent },
+                { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
+            ], {
+                temperature: 0.2,
+                maxTokens: effectiveMaxTokens,
+                schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
+                format: providerToFormat(tagged.provider, responseFormat),
+                signal: retrySignal,
+            });
+            if (retryResult.finishReason === 'length') {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} retry truncated, trying next...`);
+                return null;
+            }
+            parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(retryResult.content));
+            if (!parsed.success) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} JSON validation failed after retry, trying next...`);
+                return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0 };
+            }
+        }
+        const batchReview = parsed.data;
+        const changedFiles = new Set(batch.files);
+        const validated = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .validateFindings */ .Fk)(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined, config);
+        for (const warning of validated.warnings)
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(warning);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Done with ${tagged.id} (${tagged.provider})`);
+        return {
+            findings: validated.valid.findings,
+            summary: validated.valid.summary ?? '',
+            usedModel: tagged.id,
+            lastRawContent: '',
+            dropped: validated.dropped,
+        };
+    }
+    catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+        return null;
+    }
+}
 async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
+    const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
+    const availableChain = chain.filter(tagged => clients[tagged.provider]);
     let batchReview = null;
     let batchUsedModel = '';
     let batchLastRawContent = '';
     let batchDropped = 0;
-    for (const tagged of chain) {
-        const client = clients[tagged.provider];
-        if (!client)
-            continue;
-        try {
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Trying ${tagged.id} (${tagged.provider})...`);
-            const attemptSignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
-            // Bump maxTokens to 8192 for text-mode models — StepFun's
-            // step-* family produces well-formed JSON but verbose enough
-            // to truncate at 4096. The chain's truncation handler then
-            // rejects the finding before the JSON parser sees it.
-            const isTextModeModel = /\bstep-\d/.test(tagged.id);
-            const result = await client.chat(tagged.id, [
-                { role: 'system', content: systemMessage },
-                { role: 'user', content: userMsg },
-            ], {
-                temperature: 0.2,
-                maxTokens: isTextModeModel ? 8192 : 4096,
-                schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
-                format: providerToFormat(tagged.provider, responseFormat),
-                signal: attemptSignal,
-            });
-            if (result.finishReason === 'length') {
-                // For text-mode models, extractJsonFromText (inside chat) may
-                // have pulled a complete JSON object from the response *before*
-                // the model's thinking stream hit the token cap. Don't throw
-                // that away — validate it. For non-text-mode models the JSON is
-                // definitely incomplete, so skip immediately.
-                if (!(0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content)) {
-                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
-                    continue;
+    const parallelEnabled = config.parallelAttempts > 1 && availableChain.length > 1;
+    if (parallelEnabled) {
+        const parallelCount = Math.min(config.parallelAttempts, availableChain.length);
+        const controller = new AbortController();
+        const attemptPromises = [];
+        for (let i = 0; i < parallelCount; i++) {
+            const tagged = availableChain[i];
+            const client = clients[tagged.provider];
+            const delayMs = i * config.parallelThreshold * 1000;
+            attemptPromises.push((async () => {
+                if (delayMs > 0) {
+                    try {
+                        await delay(delayMs, controller.signal);
+                    }
+                    catch {
+                        return null;
+                    }
                 }
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated but JSON was extractable, proceeding to validation`);
-            }
-            if (!result.content || !result.content.trim()) {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} returned empty, trying next...`);
-                continue;
-            }
-            let parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(result.content));
-            if (!parsed.success) {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} schema validation failed, retrying...`);
-                const truncatedContent = result.content.length > 500
-                    ? '...' + result.content.slice(-500)
-                    : result.content;
-                const errorSummary = parsed.error.issues.slice(0, 3)
-                    .map(i => `- ${i.path.join('.') || 'root'}: invalid value`)
-                    .join('\n');
-                const retrySignal = modelTimeoutMs > 0 ? AbortSignal.timeout(modelTimeoutMs) : undefined;
-                const retryResult = await client.chat(tagged.id, [
-                    { role: 'system', content: systemMessage },
-                    { role: 'user', content: userMsg },
-                    { role: 'assistant', content: truncatedContent },
-                    { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
-                ], {
-                    temperature: 0.2,
-                    maxTokens: isTextModeModel ? 8192 : 4096,
-                    schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewJsonSchema */ .uA,
-                    format: providerToFormat(tagged.provider, responseFormat),
-                    signal: retrySignal,
-                });
-                if (retryResult.finishReason === 'length') {
-                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} retry truncated, trying next...`);
-                    continue;
-                }
-                parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_9__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .safeParseJson */ .NS)(retryResult.content));
-                if (!parsed.success) {
-                    batchLastRawContent = retryResult.content;
-                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                    continue;
-                }
-            }
-            batchReview = parsed.data;
-            const changedFiles = new Set(batch.files);
-            const validated = await (0,_review_js__WEBPACK_IMPORTED_MODULE_3__/* .validateFindings */ .Fk)(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined, config);
-            for (const warning of validated.warnings)
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(warning);
-            batchReview = validated.valid;
-            batchDropped = validated.dropped;
-            batchUsedModel = tagged.id;
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Done with ${tagged.id} (${tagged.provider})`);
-            break;
+                if (controller.signal.aborted)
+                    return null;
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, controller.signal);
+                if (result && result.findings.length > 0)
+                    controller.abort();
+                return result;
+            })());
         }
-        catch (err) {
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
+        const settled = await Promise.all(attemptPromises.map(p => p.catch(() => null)));
+        let winner = null;
+        let fallbackContent = '';
+        let fallbackModel = '';
+        for (const r of settled) {
+            if (r && r.findings.length > 0) {
+                winner = r;
+                break;
+            }
+            if (r && r.lastRawContent && !fallbackContent) {
+                fallbackContent = r.lastRawContent;
+                fallbackModel = r.usedModel;
+            }
+        }
+        if (winner) {
+            batchReview = { findings: winner.findings, summary: winner.summary };
+            batchUsedModel = winner.usedModel;
+            batchDropped = winner.dropped;
+        }
+        else if (fallbackContent) {
+            // All parallel attempts failed but we captured raw content.
+            // Continue to remaining chain sequentially; fallthrough overwrites
+            // batchLastRawContent if a later model produces valid findings.
+            batchLastRawContent = fallbackContent;
+            batchUsedModel = fallbackModel;
+            for (let i = parallelCount; i < availableChain.length; i++) {
+                const tagged = availableChain[i];
+                const client = clients[tagged.provider];
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                if (result) {
+                    if (result.findings.length > 0) {
+                        batchReview = { findings: result.findings, summary: result.summary };
+                        batchUsedModel = result.usedModel;
+                        batchDropped = result.dropped;
+                        batchLastRawContent = '';
+                        break;
+                    }
+                    if (result.lastRawContent)
+                        batchLastRawContent = result.lastRawContent;
+                    if (result.usedModel)
+                        batchUsedModel = result.usedModel;
+                }
+            }
+        }
+        else {
+            // No winner, no fallback — try remaining chain sequentially
+            for (let i = parallelCount; i < availableChain.length; i++) {
+                const tagged = availableChain[i];
+                const client = clients[tagged.provider];
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                if (result) {
+                    if (result.findings.length > 0) {
+                        batchReview = { findings: result.findings, summary: result.summary };
+                        batchUsedModel = result.usedModel;
+                        batchDropped = result.dropped;
+                        break;
+                    }
+                    if (result.lastRawContent)
+                        batchLastRawContent = result.lastRawContent;
+                    if (result.usedModel)
+                        batchUsedModel = result.usedModel;
+                }
+            }
+        }
+    }
+    else {
+        // Sequential fallback (original behavior)
+        for (const tagged of availableChain) {
+            const client = clients[tagged.provider];
+            const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+            if (result) {
+                if (result.findings.length > 0) {
+                    batchReview = { findings: result.findings, summary: result.summary };
+                    batchUsedModel = result.usedModel;
+                    batchDropped = result.dropped;
+                    break;
+                }
+                // Validation failed after retry — preserve lastRawContent
+                if (result.lastRawContent)
+                    batchLastRawContent = result.lastRawContent;
+                if (result.usedModel)
+                    batchUsedModel = result.usedModel;
+            }
         }
     }
     return {
@@ -38268,8 +38452,9 @@ module.exports = parseParams
 /******/ // This entry module used 'module' so it can't be inlined
 /******/ var __webpack_exports__ = __nccwpck_require__(9407);
 /******/ __webpack_exports__ = await __webpack_exports__;
+/******/ var __webpack_exports__computeMaxTokens = __webpack_exports__.cK;
 /******/ var __webpack_exports__detectLanguage = __webpack_exports__.od;
 /******/ var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
 /******/ var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
-/******/ export { __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+/******/ export { __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
 /******/ 

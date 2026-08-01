@@ -76,6 +76,35 @@ export async function loadConfig() {
             }
             return parsed;
         })(),
+        maxTokens: (() => {
+            const raw = core.getInput('max_tokens') || '0';
+            const parsed = Number.parseInt(raw, 10);
+            if (raw.trim() === '0' || parsed === 0)
+                return 0;
+            if (Number.isNaN(parsed) || parsed < 256 || parsed > 16384) {
+                core.warning(`Invalid max_tokens "${raw}", must be 256-16384. Defaulting to adaptive.`);
+                return 0;
+            }
+            return parsed;
+        })(),
+        parallelAttempts: (() => {
+            const raw = core.getInput('parallel_attempts') || '1';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
+                core.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 1.`);
+                return 1;
+            }
+            return parsed;
+        })(),
+        parallelThreshold: (() => {
+            const raw = core.getInput('parallel_threshold') || '40';
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isNaN(parsed) || parsed < 5 || parsed > 120) {
+                core.warning(`Invalid parallel_threshold "${raw}", must be 5-120. Defaulting to 40.`);
+                return 40;
+            }
+            return parsed;
+        })(),
     };
     const openRouterInput = splitCSV(core.getInput('openrouter_models'));
     if (openRouterInput.length > 0) {
