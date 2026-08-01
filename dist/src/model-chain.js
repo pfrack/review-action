@@ -56,14 +56,15 @@ export function buildCombinedChain(opts) {
     const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
     const free = providerModels.filter(m => m.id.endsWith(':free'));
     const sortedProviderModels = [...nonFree, ...free];
+    const customSweScore = opts.customSweScore ?? 0.5;
     const customModels = [];
     if (opts.hasCustomModels && opts.customModels) {
         for (const id of opts.customModels) {
-            customModels.push({ id, provider: 'custom' });
+            customModels.push({ id, provider: 'custom', scoreOverride: customSweScore });
         }
     }
     if (opts.customModel && opts.hasCustomConfig) {
-        customModels.push({ id: opts.customModel, provider: 'custom' });
+        customModels.push({ id: opts.customModel, provider: 'custom', scoreOverride: customSweScore });
     }
     return [...customModels, ...sortedProviderModels];
 }
@@ -114,11 +115,17 @@ export async function probeModels(chain, clients) {
     // already appears in `available`; if it didn't, the chain still tries
     // it first (per the runModelChainForBatch loop) and falls through on
     // failure, so a wrong promotion here can only hurt quality.
+    //
+    // For custom models the user-supplied `custom_swe_score` (default 0.5)
+    // is the effective head score. With the default 0.5, a faster provider
+    // model with score >= 0.5 will pass the cap and be promoted — set
+    // `custom_swe_score` above the worst provider model to fully protect
+    // the custom head.
     if (chain.length > 0) {
         const head = chain[0];
-        const headScore = getSweBenchScore(head.id);
+        const headScore = head.scoreOverride ?? getSweBenchScore(head.id);
         const fastest = available[0];
-        const fastestScore = getSweBenchScore(fastest.model.id);
+        const fastestScore = fastest.model.scoreOverride ?? getSweBenchScore(fastest.model.id);
         if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
             return null;
         }

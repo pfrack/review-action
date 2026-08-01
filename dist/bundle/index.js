@@ -26182,6 +26182,15 @@ async function loadConfig() {
         customApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_key') || '',
         customModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_models') || ''),
         customModelsBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_models_base_url') || _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_url') || '',
+        customSweScore: (() => {
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_swe_score') || '0.5';
+            const parsed = Number.parseFloat(raw);
+            if (!/^[+]?(\d+(\.\d*)?|\.\d+)$/.test(raw.trim()) || Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid custom_swe_score "${raw}", must be 0-1. Defaulting to 0.5.`);
+                return 0.5;
+            }
+            return parsed;
+        })(),
         maxFiles: (() => {
             const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('max_files') || '100';
             const parsed = Number.parseInt(raw, 10);
@@ -26198,11 +26207,11 @@ async function loadConfig() {
         revalidateFindings: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('revalidate_findings') === 'true',
         dropUnreferenced: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
-            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('model_timeout') || '60';
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('model_timeout') || '90';
             const parsed = Number.parseInt(raw, 10);
             if (Number.isNaN(parsed) || parsed < 0) {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 60.`);
-                return 60;
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 90.`);
+                return 90;
             }
             return parsed;
         })(),
@@ -26924,6 +26933,7 @@ async function run() {
         hasCustomConfig: hasCustom,
         customModels: config.customModels,
         hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+        customSweScore: config.customSweScore,
     });
     const event = (0,_event_js__WEBPACK_IMPORTED_MODULE_7__/* .loadEvent */ .D)();
     const prNumber = event.pull_request.number;
@@ -27109,14 +27119,15 @@ function buildCombinedChain(opts) {
     const nonFree = providerModels.filter(m => !m.id.endsWith(':free'));
     const free = providerModels.filter(m => m.id.endsWith(':free'));
     const sortedProviderModels = [...nonFree, ...free];
+    const customSweScore = opts.customSweScore ?? 0.5;
     const customModels = [];
     if (opts.hasCustomModels && opts.customModels) {
         for (const id of opts.customModels) {
-            customModels.push({ id, provider: 'custom' });
+            customModels.push({ id, provider: 'custom', scoreOverride: customSweScore });
         }
     }
     if (opts.customModel && opts.hasCustomConfig) {
-        customModels.push({ id: opts.customModel, provider: 'custom' });
+        customModels.push({ id: opts.customModel, provider: 'custom', scoreOverride: customSweScore });
     }
     return [...customModels, ...sortedProviderModels];
 }
@@ -27167,11 +27178,17 @@ async function probeModels(chain, clients) {
     // already appears in `available`; if it didn't, the chain still tries
     // it first (per the runModelChainForBatch loop) and falls through on
     // failure, so a wrong promotion here can only hurt quality.
+    //
+    // For custom models the user-supplied `custom_swe_score` (default 0.5)
+    // is the effective head score. With the default 0.5, a faster provider
+    // model with score >= 0.5 will pass the cap and be promoted — set
+    // `custom_swe_score` above the worst provider model to fully protect
+    // the custom head.
     if (chain.length > 0) {
         const head = chain[0];
-        const headScore = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(head.id);
+        const headScore = head.scoreOverride ?? (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(head.id);
         const fastest = available[0];
-        const fastestScore = (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(fastest.model.id);
+        const fastestScore = fastest.model.scoreOverride ?? (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(fastest.model.id);
         if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
             return null;
         }
@@ -27213,16 +27230,50 @@ function sanitizeErrorBody(body) {
         .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
 }
 function isUnsupportedJsonSchemaResponse(status, body) {
-    return status === 400
-        && /json_schema/i.test(body)
-        && /does not support|doesn't support|not supported|unsupported/i.test(body);
+    if (status !== 400)
+        return false;
+    // Match the API parameter name (OpenAI/Groq wording) OR the generic
+    // feature name (StepFun "structured_outputs", Anthropic "structured
+    // output", etc.). Without the OR, models whose error body says only
+    // "structured_outputs" never trigger the json_object retry path.
+    const signalsStructuredOutput = /json_schema|structured_outputs|structured\s+output/i.test(body);
+    const signalsUnsupported = /does not support|doesn't support|not supported|unsupported|is not supported/i.test(body);
+    return signalsStructuredOutput && signalsUnsupported;
 }
 class UnsupportedJsonSchemaError extends Error {
+}
+// Per-provider/model format overrides. When a model is known not to
+// support `json_schema` (e.g. Groq llama-3.3-70b-versatile, some Mistral
+// legacy IDs), starting with `json_object` skips one wasted round-trip
+// and the half-second latency it costs. The fallback path in `chat()`
+// still triggers the retry on unknown models — this only short-circuits
+// the cases we know about.
+const NO_JSON_SCHEMA_MODELS = new Set([
+    // Groq: json_schema unsupported on most llama models (only certain
+    // gpt-oss and moonshotai variants support it on Groq).
+    'llama-3.3-70b-versatile',
+    'llama-3.1-70b-versatile',
+    'llama3-70b-8192',
+    'llama3-8b-8192',
+    'mixtral-8x7b-32768',
+    'gemma2-9b-it',
+]);
+function effectiveFormat(model, provider, requested) {
+    if (requested !== 'json_schema')
+        return requested;
+    // 1. Provider-qualified key wins (e.g. "groq:llama-3.3-70b-versatile")
+    if (NO_JSON_SCHEMA_MODELS.has(`${provider}:${model}`))
+        return 'json_object';
+    // 2. Bare model id (most IDs are provider-unique already)
+    if (NO_JSON_SCHEMA_MODELS.has(model))
+        return 'json_object';
+    return requested;
 }
 class OpenAIClient {
     baseURL;
     apiKey;
     providerLabel;
+    providerKey;
     constructor(baseURL, apiKey, providerLabel) {
         this.baseURL = baseURL.replace(/\/+$/, '');
         this.apiKey = apiKey;
@@ -27233,9 +27284,17 @@ class OpenAIClient {
                         baseURL.includes('openrouter') ? 'OpenRouter' :
                             baseURL.includes('kilo.ai') ? 'Kilo' :
                                 baseURL.split('/')[2] || 'API');
+        this.providerKey =
+            baseURL.includes('nvidia.com') ? 'nim' :
+                baseURL.includes('mistral') ? 'mistral' :
+                    baseURL.includes('groq') ? 'groq' :
+                        baseURL.includes('openrouter') ? 'openrouter' :
+                            baseURL.includes('kilo.ai') ? 'kilocode' :
+                                'custom';
     }
     async chat(model, messages, opts = {}) {
         const outerSignal = opts.signal;
+        const format = effectiveFormat(model, this.providerKey, opts.format ?? 'text');
         const payload = {
             model,
             messages,
@@ -27243,23 +27302,23 @@ class OpenAIClient {
             max_tokens: opts.maxTokens ?? 1024,
             stream: false,
         };
-        if (opts.format === 'json_schema' || opts.format === 'tools') {
+        if (format === 'json_schema' || format === 'tools') {
             if (!opts.schema) {
-                throw new Error(`format "${opts.format}" requires a schema to be provided`);
+                throw new Error(`format "${format}" requires a schema to be provided`);
             }
         }
-        if (opts.format === 'json_object') {
+        if (format === 'json_object') {
             payload.response_format = { type: 'json_object' };
         }
-        else if (opts.schema && opts.format && opts.format !== 'text') {
-            if (opts.format === 'json_schema') {
+        else if (opts.schema && format && format !== 'text') {
+            if (format === 'json_schema') {
                 payload.response_format = {
                     type: 'json_schema',
                     strict: true,
                     json_schema: { name: 'review', schema: opts.schema },
                 };
             }
-            else if (opts.format === 'tools') {
+            else if (format === 'tools') {
                 payload.tools = [{
                         type: 'function',
                         function: {

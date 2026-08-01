@@ -77,6 +77,10 @@ inputs:
     description: 'API key for the custom endpoint (can be empty for local/keyless endpoints)'
     required: false
     default: ''
+  custom_swe_score:
+    description: 'SWE-bench score assigned to the custom model(s) (default 0.5). Used by the probe-based chain reorder cap so you can stop a faster-but-worse provider model from leapfrogging your custom head. Set to a value above your worst provider model (e.g. 0.99) to fully protect the custom head from probe promotion.'
+    required: false
+    default: '0.5'
   max_files:
     description: 'Max files to review per PR'
     default: '100'
@@ -104,7 +108,7 @@ inputs:
   model_timeout:
     description: 'Timeout in seconds for each individual model call (0 = no per-model limit)'
     required: false
-    default: '60'
+    default: '90'
   chain_timeout:
     description: 'Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models)'
     required: false

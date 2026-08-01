@@ -343,6 +343,7 @@ async function run() {
         hasCustomConfig: hasCustom,
         customModels: config.customModels,
         hasCustomModels: !!(config.customApiUrl && config.customModels.length > 0),
+        customSweScore: config.customSweScore,
     });
     const event = loadEvent();
     const prNumber = event.pull_request.number;

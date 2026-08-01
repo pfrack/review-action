@@ -34,6 +34,15 @@ export async function loadConfig() {
         customApiKey: core.getInput('custom_api_key') || '',
         customModels: splitCSV(core.getInput('custom_models') || ''),
         customModelsBaseUrl: core.getInput('custom_models_base_url') || core.getInput('custom_api_url') || '',
+        customSweScore: (() => {
+            const raw = core.getInput('custom_swe_score') || '0.5';
+            const parsed = Number.parseFloat(raw);
+            if (!/^[+]?(\d+(\.\d*)?|\.\d+)$/.test(raw.trim()) || Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
+                core.warning(`Invalid custom_swe_score "${raw}", must be 0-1. Defaulting to 0.5.`);
+                return 0.5;
+            }
+            return parsed;
+        })(),
         maxFiles: (() => {
             const raw = core.getInput('max_files') || '100';
             const parsed = Number.parseInt(raw, 10);
@@ -50,11 +59,11 @@ export async function loadConfig() {
         revalidateFindings: core.getInput('revalidate_findings') === 'true',
         dropUnreferenced: core.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
-            const raw = core.getInput('model_timeout') || '60';
+            const raw = core.getInput('model_timeout') || '90';
             const parsed = Number.parseInt(raw, 10);
             if (Number.isNaN(parsed) || parsed < 0) {
-                core.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 60.`);
-                return 60;
+                core.warning(`Invalid model_timeout "${raw}", must be >= 0. Defaulting to 90.`);
+                return 90;
             }
             return parsed;
         })(),
