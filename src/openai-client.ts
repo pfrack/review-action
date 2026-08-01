@@ -16,6 +16,14 @@ export function sanitizeErrorBody(body: string): string {
     .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
 }
 
+function isUnsupportedJsonSchemaResponse(status: number, body: string): boolean {
+  return status === 400
+    && /json_schema/i.test(body)
+    && /does not support|doesn't support|not supported|unsupported/i.test(body);
+}
+
+class UnsupportedJsonSchemaError extends Error {}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -30,7 +38,7 @@ export interface ChatOptions {
   signal?: AbortSignal;
 }
 
-export type ResponseFormat = 'json_schema' | 'tools' | 'text';
+export type ResponseFormat = 'json_schema' | 'json_object' | 'tools' | 'text';
 
 export interface Usage {
   prompt_tokens: number;
@@ -61,6 +69,8 @@ interface ChatRequest {
     type: 'json_schema';
     strict: true;
     json_schema: { name: string; schema: object };
+  } | {
+    type: 'json_object';
   };
   tools?: Array<{
     type: 'function';
@@ -113,7 +123,9 @@ export class OpenAIClient {
       }
     }
 
-    if (opts.schema && opts.format && opts.format !== 'text') {
+    if (opts.format === 'json_object') {
+      payload.response_format = { type: 'json_object' };
+    } else if (opts.schema && opts.format && opts.format !== 'text') {
       if (opts.format === 'json_schema') {
         payload.response_format = {
           type: 'json_schema',
@@ -134,27 +146,41 @@ export class OpenAIClient {
     }
 
     const start = Date.now();
-    const resp = await withRetry(async () => {
-      if (outerSignal?.aborted) throw new Error('Request aborted by caller');
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal: outerSignal
-          ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
-          : AbortSignal.timeout(180_000),
-      });
+    let resp: Response;
+    try {
+      resp = await withRetry(async () => {
+        if (outerSignal?.aborted) throw new Error('Request aborted by caller');
+        const response = await fetch(`${this.baseURL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: outerSignal
+            ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+            : AbortSignal.timeout(180_000),
+        });
 
-      if (!response.ok) {
-        const body = await response.text();
-        const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-        throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
+        if (!response.ok) {
+          const body = await response.text();
+          const errorBody = sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body);
+          if (opts.format === 'json_schema' && isUnsupportedJsonSchemaResponse(response.status, body)) {
+            throw new UnsupportedJsonSchemaError(errorBody);
+          }
+          const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+          throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${errorBody}`, response.status, retryAfterMs);
+        }
+        return response;
+      });
+    } catch (err) {
+      if (err instanceof UnsupportedJsonSchemaError) {
+        core.info(`${this.providerLabel} does not support json_schema for ${model}; retrying with json_object`);
+        const result = await this.chat(model, messages, { ...opts, format: 'json_object' });
+        return { ...result, latency: Date.now() - start };
       }
-      return response;
-    });
+      throw err;
+    }
 
     let data: ChatResponse;
     try {

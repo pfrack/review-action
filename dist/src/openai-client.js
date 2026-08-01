@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 export function parseRetryAfter(value, now = Date.now()) {
     if (!value)
@@ -14,6 +15,13 @@ export function sanitizeErrorBody(body) {
     return body
         .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
         .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
+}
+function isUnsupportedJsonSchemaResponse(status, body) {
+    return status === 400
+        && /json_schema/i.test(body)
+        && /does not support|doesn't support|not supported|unsupported/i.test(body);
+}
+class UnsupportedJsonSchemaError extends Error {
 }
 export class OpenAIClient {
     baseURL;
@@ -44,7 +52,10 @@ export class OpenAIClient {
                 throw new Error(`format "${opts.format}" requires a schema to be provided`);
             }
         }
-        if (opts.schema && opts.format && opts.format !== 'text') {
+        if (opts.format === 'json_object') {
+            payload.response_format = { type: 'json_object' };
+        }
+        else if (opts.schema && opts.format && opts.format !== 'text') {
             if (opts.format === 'json_schema') {
                 payload.response_format = {
                     type: 'json_schema',
@@ -65,27 +76,42 @@ export class OpenAIClient {
             }
         }
         const start = Date.now();
-        const resp = await withRetry(async () => {
-            if (outerSignal?.aborted)
-                throw new Error('Request aborted by caller');
-            const response = await fetch(`${this.baseURL}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-                signal: outerSignal
-                    ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
-                    : AbortSignal.timeout(180_000),
+        let resp;
+        try {
+            resp = await withRetry(async () => {
+                if (outerSignal?.aborted)
+                    throw new Error('Request aborted by caller');
+                const response = await fetch(`${this.baseURL}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.apiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                    signal: outerSignal
+                        ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+                        : AbortSignal.timeout(180_000),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    const errorBody = sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body);
+                    if (opts.format === 'json_schema' && isUnsupportedJsonSchemaResponse(response.status, body)) {
+                        throw new UnsupportedJsonSchemaError(errorBody);
+                    }
+                    const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+                    throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${errorBody}`, response.status, retryAfterMs);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new RetryableError(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
+        }
+        catch (err) {
+            if (err instanceof UnsupportedJsonSchemaError) {
+                core.info(`${this.providerLabel} does not support json_schema for ${model}; retrying with json_object`);
+                const result = await this.chat(model, messages, { ...opts, format: 'json_object' });
+                return { ...result, latency: Date.now() - start };
             }
-            return response;
-        });
+            throw err;
+        }
         let data;
         try {
             data = await resp.json();

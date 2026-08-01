@@ -27166,7 +27166,10 @@ __webpack_async_result__();
 /* harmony export */   gP: () => (/* binding */ OpenAIClient)
 /* harmony export */ });
 /* unused harmony exports parseRetryAfter, sanitizeErrorBody */
-/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(9809);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
+
 
 function parseRetryAfter(value, now = Date.now()) {
     if (!value)
@@ -27183,6 +27186,13 @@ function sanitizeErrorBody(body) {
     return body
         .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
         .replace(/api[_-]?key["'\s]*[:=]["'\s]*\S+/gi, 'api[_-]?key: [REDACTED]');
+}
+function isUnsupportedJsonSchemaResponse(status, body) {
+    return status === 400
+        && /json_schema/i.test(body)
+        && /does not support|doesn't support|not supported|unsupported/i.test(body);
+}
+class UnsupportedJsonSchemaError extends Error {
 }
 class OpenAIClient {
     baseURL;
@@ -27213,7 +27223,10 @@ class OpenAIClient {
                 throw new Error(`format "${opts.format}" requires a schema to be provided`);
             }
         }
-        if (opts.schema && opts.format && opts.format !== 'text') {
+        if (opts.format === 'json_object') {
+            payload.response_format = { type: 'json_object' };
+        }
+        else if (opts.schema && opts.format && opts.format !== 'text') {
             if (opts.format === 'json_schema') {
                 payload.response_format = {
                     type: 'json_schema',
@@ -27234,34 +27247,49 @@ class OpenAIClient {
             }
         }
         const start = Date.now();
-        const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .bD)(async () => {
-            if (outerSignal?.aborted)
-                throw new Error('Request aborted by caller');
-            const response = await fetch(`${this.baseURL}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-                signal: outerSignal
-                    ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
-                    : AbortSignal.timeout(180_000),
+        let resp;
+        try {
+            resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+                if (outerSignal?.aborted)
+                    throw new Error('Request aborted by caller');
+                const response = await fetch(`${this.baseURL}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.apiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                    signal: outerSignal
+                        ? AbortSignal.any([AbortSignal.timeout(180_000), outerSignal])
+                        : AbortSignal.timeout(180_000),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    const errorBody = sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body);
+                    if (opts.format === 'json_schema' && isUnsupportedJsonSchemaResponse(response.status, body)) {
+                        throw new UnsupportedJsonSchemaError(errorBody);
+                    }
+                    const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
+                    throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`${this.providerLabel} returned ${response.status}: ${errorBody}`, response.status, retryAfterMs);
+                }
+                return response;
             });
-            if (!response.ok) {
-                const body = await response.text();
-                const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : undefined;
-                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel} returned ${response.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, response.status, retryAfterMs);
+        }
+        catch (err) {
+            if (err instanceof UnsupportedJsonSchemaError) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${this.providerLabel} does not support json_schema for ${model}; retrying with json_object`);
+                const result = await this.chat(model, messages, { ...opts, format: 'json_object' });
+                return { ...result, latency: Date.now() - start };
             }
-            return response;
-        });
+            throw err;
+        }
         let data;
         try {
             data = await resp.json();
         }
         catch (err) {
             if (err instanceof SyntaxError) {
-                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel} returned non-JSON response`, 502);
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`${this.providerLabel} returned non-JSON response`, 502);
             }
             throw err;
         }
@@ -27296,7 +27324,7 @@ class OpenAIClient {
             max_tokens: opts.maxTokens ?? 1024,
             stream: true,
         };
-        const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .bD)(async () => {
+        const resp = await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
             const r = await fetch(`${this.baseURL}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -27310,7 +27338,7 @@ class OpenAIClient {
             if (!r.ok) {
                 const body = await r.text();
                 const retryAfterMs = r.status === 429 ? parseRetryAfter(r.headers.get('Retry-After')) : undefined;
-                throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`${this.providerLabel}: ${r.status}: ${sanitizeErrorBody(body.length > 200 ? '...' + body.slice(-200) : body)}`, r.status, retryAfterMs);
             }
             return r;
         });
