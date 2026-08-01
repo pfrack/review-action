@@ -386,11 +386,11 @@ describe('loadConfig — timeout fields', () => {
     }
   }
 
-  it('defaults modelTimeout to 60 and chainTimeout to 0', async () => {
+  it('defaults modelTimeout to 90 and chainTimeout to 0', async () => {
     setupEnv();
     try {
       const config = await loadConfig();
-      assert.strictEqual(config.modelTimeout, 60);
+      assert.strictEqual(config.modelTimeout, 90);
       assert.strictEqual(config.chainTimeout, 0);
     } finally {
       restoreEnv();
@@ -423,9 +423,93 @@ describe('loadConfig — timeout fields', () => {
     setupEnv({ 'INPUT_MODEL_TIMEOUT': '-5' });
     try {
       const config = await loadConfig();
-      assert.strictEqual(config.modelTimeout, 60);
+      assert.strictEqual(config.modelTimeout, 90);
     } finally {
       restoreEnv();
+    }
+  });
+});
+
+describe('loadConfig — custom_swe_score', () => {
+  const ENV_KEYS = [
+    'INPUT_CUSTOM_SWE_SCORE', 'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL',
+    'INPUT_NIM_MODELS', 'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
+    'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
+    'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_MODELS',
+    'INPUT_MODEL_TIMEOUT', 'INPUT_CHAIN_TIMEOUT',
+  ];
+  const saved: Record<string, string | undefined> = {};
+
+  function setupEnv(overrides: Record<string, string> = {}) {
+    for (const key of ENV_KEYS) saved[key] = process.env[key];
+    process.env['INPUT_NIM_API_KEY'] = 'nim-key';
+    process.env['INPUT_NIM_BASE_URL'] = '';
+    process.env['INPUT_NIM_MODELS'] = '';
+    process.env['INPUT_MAX_FILES'] = '';
+    process.env['INPUT_EXCLUDE_PATTERNS'] = '';
+    process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
+    process.env['INPUT_NIM_PROMPT_MODE'] = '';
+    process.env['INPUT_OPENROUTER_API_KEY'] = '';
+    process.env['INPUT_OPENROUTER_MODELS'] = '';
+    process.env['INPUT_MODEL_TIMEOUT'] = '';
+    process.env['INPUT_CHAIN_TIMEOUT'] = '';
+    process.env['INPUT_CUSTOM_SWE_SCORE'] = '';
+    for (const [k, v] of Object.entries(overrides)) process.env[k] = v;
+  }
+
+  function restoreEnv() {
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+
+  it('defaults customSweScore to 0.5 when unset', async () => {
+    setupEnv();
+    try {
+      const config = await loadConfig();
+      assert.strictEqual(config.customSweScore, 0.5);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('parses a valid customSweScore', async () => {
+    setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '0.85' });
+    try {
+      const config = await loadConfig();
+      assert.strictEqual(config.customSweScore, 0.85);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('accepts 0 and 1 as boundary values', async () => {
+    setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '0' });
+    try {
+      const config = await loadConfig();
+      assert.strictEqual(config.customSweScore, 0);
+    } finally {
+      restoreEnv();
+    }
+    setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '1' });
+    try {
+      const config = await loadConfig();
+      assert.strictEqual(config.customSweScore, 1);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('warns and falls back to 0.5 for out-of-range or non-numeric values', async () => {
+    for (const bad of ['-0.1', '1.5', 'abc', '1.1', '2']) {
+      setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': bad });
+      try {
+        const config = await loadConfig();
+        assert.strictEqual(config.customSweScore, 0.5, `value "${bad}" should fall back to 0.5`);
+      } finally {
+        restoreEnv();
+      }
     }
   });
 

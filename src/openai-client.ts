@@ -17,12 +17,43 @@ export function sanitizeErrorBody(body: string): string {
 }
 
 function isUnsupportedJsonSchemaResponse(status: number, body: string): boolean {
-  return status === 400
-    && /json_schema/i.test(body)
-    && /does not support|doesn't support|not supported|unsupported/i.test(body);
+  if (status !== 400) return false;
+  // Match the API parameter name (OpenAI/Groq wording) OR the generic
+  // feature name (StepFun "structured_outputs", Anthropic "structured
+  // output", etc.). Without the OR, models whose error body says only
+  // "structured_outputs" never trigger the json_object retry path.
+  const signalsStructuredOutput = /json_schema|structured_outputs|structured\s+output/i.test(body);
+  const signalsUnsupported = /does not support|doesn't support|not supported|unsupported|is not supported/i.test(body);
+  return signalsStructuredOutput && signalsUnsupported;
 }
 
 class UnsupportedJsonSchemaError extends Error {}
+
+// Per-provider/model format overrides. When a model is known not to
+// support `json_schema` (e.g. Groq llama-3.3-70b-versatile, some Mistral
+// legacy IDs), starting with `json_object` skips one wasted round-trip
+// and the half-second latency it costs. The fallback path in `chat()`
+// still triggers the retry on unknown models — this only short-circuits
+// the cases we know about.
+const NO_JSON_SCHEMA_MODELS: ReadonlySet<string> = new Set<string>([
+  // Groq: json_schema unsupported on most llama models (only certain
+  // gpt-oss and moonshotai variants support it on Groq).
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'mixtral-8x7b-32768',
+  'gemma2-9b-it',
+]);
+
+function effectiveFormat(model: string, provider: string, requested: ResponseFormat): ResponseFormat {
+  if (requested !== 'json_schema') return requested;
+  // 1. Provider-qualified key wins (e.g. "groq:llama-3.3-70b-versatile")
+  if (NO_JSON_SCHEMA_MODELS.has(`${provider}:${model}`)) return 'json_object';
+  // 2. Bare model id (most IDs are provider-unique already)
+  if (NO_JSON_SCHEMA_MODELS.has(model)) return 'json_object';
+  return requested;
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -94,6 +125,7 @@ export class OpenAIClient {
   private baseURL: string;
   private apiKey: string;
   private providerLabel: string;
+  private providerKey: string;
 
   constructor(baseURL: string, apiKey: string, providerLabel?: string) {
     this.baseURL = baseURL.replace(/\/+$/, '');
@@ -105,10 +137,18 @@ export class OpenAIClient {
        baseURL.includes('openrouter') ? 'OpenRouter' :
        baseURL.includes('kilo.ai') ? 'Kilo' :
        baseURL.split('/')[2] || 'API');
+    this.providerKey =
+      baseURL.includes('nvidia.com') ? 'nim' :
+      baseURL.includes('mistral') ? 'mistral' :
+      baseURL.includes('groq') ? 'groq' :
+      baseURL.includes('openrouter') ? 'openrouter' :
+      baseURL.includes('kilo.ai') ? 'kilocode' :
+      'custom';
   }
 
   async chat(model: string, messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
     const outerSignal = opts.signal;
+    const format = effectiveFormat(model, this.providerKey, opts.format ?? 'text');
     const payload: ChatRequest = {
       model,
       messages,
@@ -117,22 +157,22 @@ export class OpenAIClient {
       stream: false,
     };
 
-    if (opts.format === 'json_schema' || opts.format === 'tools') {
+    if (format === 'json_schema' || format === 'tools') {
       if (!opts.schema) {
-        throw new Error(`format "${opts.format}" requires a schema to be provided`);
+        throw new Error(`format "${format}" requires a schema to be provided`);
       }
     }
 
-    if (opts.format === 'json_object') {
+    if (format === 'json_object') {
       payload.response_format = { type: 'json_object' };
-    } else if (opts.schema && opts.format && opts.format !== 'text') {
-      if (opts.format === 'json_schema') {
+    } else if (opts.schema && format && format !== 'text') {
+      if (format === 'json_schema') {
         payload.response_format = {
           type: 'json_schema',
           strict: true,
           json_schema: { name: 'review', schema: opts.schema },
         };
-      } else if (opts.format === 'tools') {
+      } else if (format === 'tools') {
         payload.tools = [{
           type: 'function',
           function: {

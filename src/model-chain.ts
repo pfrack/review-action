@@ -14,6 +14,14 @@ export const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
 export interface TaggedModel {
   id: string;
   provider: Provider;
+  /**
+   * Optional SWE-bench score override for this model. Used by the
+   * probe-based chain reorder cap. When the user has set a score for
+   * their custom model via `custom_swe_score`, that value is attached
+   * here so `probeModels` can apply the same cap mechanism to custom
+   * heads as it does to provider heads.
+   */
+  scoreOverride?: number;
 }
 
 export interface ChainOptions {
@@ -31,6 +39,14 @@ export interface ChainOptions {
   hasCustomConfig?: boolean;
   customModels?: string[];
   hasCustomModels?: boolean;
+  /**
+   * SWE-bench score assigned to the user's custom model(s). Default 0.5.
+   * With 0.5, any non-custom model with score ≥ 0.5 can still leapfrog
+   * the custom head via the probe — the cap (0.02) only protects a
+   * higher-scored head. Users who want their custom head always first
+   * must set this to a value above their worst provider model.
+   */
+  customSweScore?: number;
 }
 
 /**
@@ -92,14 +108,15 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
 
   const sortedProviderModels = [...nonFree, ...free];
 
+  const customSweScore = opts.customSweScore ?? 0.5;
   const customModels: TaggedModel[] = [];
   if (opts.hasCustomModels && opts.customModels) {
     for (const id of opts.customModels) {
-      customModels.push({ id, provider: 'custom' });
+      customModels.push({ id, provider: 'custom', scoreOverride: customSweScore });
     }
   }
   if (opts.customModel && opts.hasCustomConfig) {
-    customModels.push({ id: opts.customModel, provider: 'custom' });
+    customModels.push({ id: opts.customModel, provider: 'custom', scoreOverride: customSweScore });
   }
 
   return [...customModels, ...sortedProviderModels];
@@ -153,11 +170,17 @@ export async function probeModels(
   // already appears in `available`; if it didn't, the chain still tries
   // it first (per the runModelChainForBatch loop) and falls through on
   // failure, so a wrong promotion here can only hurt quality.
+  //
+  // For custom models the user-supplied `custom_swe_score` (default 0.5)
+  // is the effective head score. With the default 0.5, a faster provider
+  // model with score >= 0.5 will pass the cap and be promoted — set
+  // `custom_swe_score` above the worst provider model to fully protect
+  // the custom head.
   if (chain.length > 0) {
     const head = chain[0];
-    const headScore = getSweBenchScore(head.id);
+    const headScore = head.scoreOverride ?? getSweBenchScore(head.id);
     const fastest = available[0];
-    const fastestScore = getSweBenchScore(fastest.model.id);
+    const fastestScore = fastest.model.scoreOverride ?? getSweBenchScore(fastest.model.id);
     if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
       return null;
     }

@@ -348,6 +348,46 @@ describe('custom_models CSV', () => {
     assert.strictEqual(chain.length, 1);
     assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
   });
+
+  it('propagates customSweScore to all custom model entries (single + CSV)', () => {
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: [],
+      hasGroqKey: false,
+      hasNimKey: true,
+      hasMistralKey: false,
+      customModel: 'single-custom',
+      hasCustomConfig: true,
+      customModels: ['csv-custom-a', 'csv-custom-b'],
+      hasCustomModels: true,
+      customSweScore: 0.85,
+    });
+
+    const customModels = chain.filter(m => m.provider === 'custom');
+    assert.strictEqual(customModels.length, 3);
+    for (const m of customModels) {
+      assert.strictEqual(m.scoreOverride, 0.85, `${m.id} should have scoreOverride=0.85`);
+    }
+  });
+
+  it('uses 0.5 as the default scoreOverride on custom models when customSweScore is not set', () => {
+    // The default 0.5 is always attached — this gives the probe cap a
+    // definite value to compare against instead of forcing it to know
+    // "missing override means 0.5". Users who want protection set
+    // custom_swe_score to a value above their worst provider model.
+    const chain = buildCombinedChain({
+      nimModels: ['deepseek-ai/deepseek-v4-pro'],
+      mistralModels: [],
+      hasGroqKey: false,
+      hasNimKey: true,
+      hasMistralKey: false,
+      customModel: 'single-custom',
+      hasCustomConfig: true,
+    });
+
+    assert.strictEqual(chain[0].id, 'single-custom');
+    assert.strictEqual(chain[0].scoreOverride, 0.5);
+  });
 });
 
 describe('6-provider combined chain ordering', () => {
@@ -540,5 +580,62 @@ describe('probeModels', () => {
     const result = await probeModels(chain, clients);
     assert.ok(result);
     assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-pro');
+  });
+
+  it('does not promote a faster probe over a custom head when scoreOverride protects it', async () => {
+    // Custom head has scoreOverride=0.99 (user knows their model is great).
+    // llama-3.3-70b-versatile scores 0.620 and probes faster. Gap = 0.370
+    // >> 0.02, so the cap blocks the promotion.
+    const chain: TaggedModel[] = [
+      { id: 'my-custom-model', provider: 'custom', scoreOverride: 0.99 },
+      { id: 'llama-3.3-70b-versatile', provider: 'groq' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: null, mistral: null, openrouter: null, kilocode: null, custom: null,
+      groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.strictEqual(result, null);
+  });
+
+  it('promotes a faster probe over a custom head when scoreOverride is the default 0.5', async () => {
+    // With default scoreOverride=0.5 on a custom head, any non-custom
+    // model with score >= 0.5 passes the cap and gets promoted. This is
+    // the documented behavior — users who want their custom head always
+    // first must set custom_swe_score to a value above their worst
+    // provider model.
+    const chain: TaggedModel[] = [
+      { id: 'my-custom-model', provider: 'custom', scoreOverride: 0.5 },
+      { id: 'llama-3.3-70b-versatile', provider: 'groq' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: null, mistral: null, openrouter: null, kilocode: null, custom: null,
+      groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'llama-3.3-70b-versatile');
+  });
+
+  it('respects scoreOverride on the fastest model too (override wins over table score)', async () => {
+    // Fastest model is a custom model whose scoreOverride is artificially
+    // high; it should win promotion over the higher-SWE nim head only
+    // when the override is competitive. (Synthetic — just to lock the
+    // symmetry: the override is consulted on both sides of the cap.)
+    const chain: TaggedModel[] = [
+      { id: 'unknown-head-nim', provider: 'nim' },
+      { id: 'my-custom-model', provider: 'custom', scoreOverride: 0.95 },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeVariableLatencyClient({ 'unknown-head-nim': 100 }),
+      custom: makeVariableLatencyClient({ 'my-custom-model': 10 }),
+      mistral: null, groq: null, openrouter: null, kilocode: null,
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'my-custom-model');
   });
 });

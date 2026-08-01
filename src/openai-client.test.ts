@@ -130,6 +130,10 @@ describe('OpenAIClient', () => {
   });
 
   it('Chat retries with json_object when model rejects json_schema', async () => {
+    // Use a model id that is NOT in the NO_JSON_SCHEMA_MODELS override
+    // table — the table makes the override path start with json_object
+    // directly, so a model id from the table would skip the retry.
+    const modelId = 'unknown-model-that-rejects-schema';
     const calls: Array<{ body: any; payload: any }> = [];
     const mock = await startMockServer((req, res) => {
       let raw = '';
@@ -141,7 +145,7 @@ describe('OpenAIClient', () => {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: {
-              message: 'Model llama-3.3-70b-versatile does not support response format `json_schema`. See supported models at https://console.groq.com/docs/structured-outputs#supported-models',
+              message: `Model ${modelId} does not support response format \`json_schema\`. See supported models at https://console.groq.com/docs/structured-outputs#supported-models`,
               type: 'invalid_request_error',
               param: 'response_format',
             },
@@ -158,7 +162,7 @@ describe('OpenAIClient', () => {
 
     try {
       const client = new OpenAIClient(mock.url, 'key', 'Groq');
-      const result = await client.chat('llama-3.3-70b-versatile', [{ role: 'user', content: 'hi' }], {
+      const result = await client.chat(modelId, [{ role: 'user', content: 'hi' }], {
         schema: { type: 'object' },
         format: 'json_schema',
       });
@@ -167,6 +171,84 @@ describe('OpenAIClient', () => {
       assert.strictEqual(calls[0].payload.response_format?.type, 'json_schema');
       assert.strictEqual(calls[1].payload.response_format?.type, 'json_object');
       assert.strictEqual(calls[1].payload.response_format?.json_schema, undefined);
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat retries with json_object when error body says "structured_outputs is not supported" (StepFun-style)', async () => {
+    // Some providers (e.g. StepFun) use the generic feature name
+    // "structured_outputs" instead of the API param "json_schema" in
+    // their error body. The detector must match both.
+    const modelId = 'step-3.5-flash';
+    const calls: Array<{ payload: any }> = [];
+    const mock = await startMockServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => raw += chunk);
+      req.on('end', () => {
+        const payload = JSON.parse(raw);
+        calls.push({ payload });
+        if (payload.response_format?.type === 'json_schema') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: {
+              message: 'structured_outputs is not supported.',
+              type: 'BadRequestError',
+              param: null,
+              code: 400,
+            },
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"ok","findings":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key', 'Custom');
+      const result = await client.chat(modelId, [{ role: 'user', content: 'hi' }], {
+        schema: { type: 'object' },
+        format: 'json_schema',
+      });
+      assert.strictEqual(result.content, '{"summary":"ok","findings":[]}');
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls[0].payload.response_format?.type, 'json_schema');
+      assert.strictEqual(calls[1].payload.response_format?.type, 'json_object');
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat pre-selects json_object for models in NO_JSON_SCHEMA_MODELS (no json_schema round-trip)', async () => {
+    const calls: Array<{ payload: any }> = [];
+    const mock = await startMockServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => raw += chunk);
+      req.on('end', () => {
+        const payload = JSON.parse(raw);
+        calls.push({ payload });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"ok","findings":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key', 'Groq');
+      const result = await client.chat('llama-3.3-70b-versatile', [{ role: 'user', content: 'hi' }], {
+        schema: { type: 'object' },
+        format: 'json_schema',
+      });
+      assert.strictEqual(result.content, '{"summary":"ok","findings":[]}');
+      // Exactly one call — override skips the json_schema round-trip
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].payload.response_format?.type, 'json_object');
     } finally {
       mock.close();
     }
