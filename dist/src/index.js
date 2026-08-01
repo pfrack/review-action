@@ -113,7 +113,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
             }
             batchReview = parsed.data;
             const changedFiles = new Set(batch.files);
-            const validated = await validateFindings(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined);
+            const validated = await validateFindings(batchReview, batch.diffs, changedFiles, config.revalidateFindings ? client : undefined, config.revalidateFindings ? tagged.id : undefined, config);
             for (const warning of validated.warnings)
                 core.warning(warning);
             batchReview = validated.valid;

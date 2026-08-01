@@ -41,10 +41,24 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('warns about missing reference instead of dropping finding', () => {
+  it('warns about missing reference instead of dropping finding (dropUnreferenced=false)', () => {
+    const finding = makeFinding({ issue: 'The call to `nonexistentFunc` may fail' });
+    const result = validateCodeContext(finding, diff, false);
+    assert.strictEqual(result.valid, true);
+    assert.ok(result.reason?.includes('nonexistentFunc'));
+  });
+
+  it('drops finding with missing backtick reference by default (dropUnreferenced=true)', () => {
     const finding = makeFinding({ issue: 'The call to `nonexistentFunc` may fail' });
     const result = validateCodeContext(finding, diff);
-    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.reason?.includes('nonexistentFunc'));
+  });
+
+  it('drops finding with missing explicit `function X` reference by default', () => {
+    const finding = makeFinding({ issue: 'The function nonexistentFunc is broken' });
+    const result = validateCodeContext(finding, diff);
+    assert.strictEqual(result.valid, false);
     assert.ok(result.reason?.includes('nonexistentFunc'));
   });
 
@@ -54,10 +68,10 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('warns about missing variable reference instead of dropping finding', () => {
+  it('drops finding with missing variable reference by default', () => {
     const finding = makeFinding({ issue: 'The variable `unknownVar` is not validated' });
     const result = validateCodeContext(finding, diff);
-    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.valid, false);
     assert.ok(result.reason?.includes('unknownVar'));
   });
 
@@ -79,11 +93,91 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('warns about missing reference with empty diff but keeps finding', () => {
+  it('drops finding with missing reference in empty diff by default', () => {
     const finding = makeFinding({ issue: 'The call to `processData` may fail' });
     const result = validateCodeContext(finding, '');
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.reason?.includes('processData'));
+  });
+
+  it('warns (but keeps) finding with missing reference in empty diff when dropUnreferenced=false', () => {
+    const finding = makeFinding({ issue: 'The call to `processData` may fail' });
+    const result = validateCodeContext(finding, '', false);
     assert.strictEqual(result.valid, true);
     assert.ok(result.reason?.includes('processData'));
+  });
+
+  // --- Contradicted negative-claim detection --------------------------------
+
+  const diffWithImport = `diff --git a/src/main.ts b/src/main.ts
+@@ -1,3 +1,4 @@
+ import { fetchData } from './api';
++import { getSweBenchScore } from './bench-reorder.js';
++import { otherThing } from './other.js';
+`;
+
+  it('drops finding whose "X is not imported" claim is contradicted by the diff', () => {
+    const finding = makeFinding({
+      issue: 'The `getSweBenchScore` function is used but not imported or defined in this file.',
+    });
+    const result = validateCodeContext(finding, diffWithImport);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.reason?.includes('getSweBenchScore'));
+    assert.ok(result.reason?.includes('contradicted'));
+  });
+
+  it('drops finding whose "Missing import for X" claim is contradicted by the diff', () => {
+    const finding = makeFinding({
+      issue: 'Missing import for `otherThing` — this file uses it without importing.',
+    });
+    const result = validateCodeContext(finding, diffWithImport);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.reason?.includes('otherThing'));
+    assert.ok(result.reason?.includes('contradicted'));
+  });
+
+  it('keeps contradicted-claim finding as soft warning when dropUnreferenced=false', () => {
+    const finding = makeFinding({
+      issue: 'The `getSweBenchScore` function is used but not imported or defined in this file.',
+    });
+    const result = validateCodeContext(finding, diffWithImport, false);
+    assert.strictEqual(result.valid, true);
+    assert.ok(result.reason?.includes('contradicted'));
+  });
+
+  it('does not flag a negative claim when the named identifier is genuinely absent from the diff', () => {
+    // The negative-claim check is a no-op when the claimed-missing name is
+    // truly absent: "is not defined" matches, but the name isn't in the
+    // diff so no contradiction is recorded. (The backtick-ref check will
+    // separately warn about the missing name — that's not what we're
+    // testing here.) Use a positive-only sentence to isolate the check.
+    const finding = makeFinding({
+      issue: '`otherThing` is well-named and used consistently throughout.',
+    });
+    const result = validateCodeContext(finding, diffWithImport);
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.reason, undefined);
+  });
+
+  it('does not flag a sentence with a negative phrase but no backtick identifier', () => {
+    // "A function is used but not imported" has the negative pattern but
+    // no backtick subject — we can't verify the claim, so we leave it alone.
+    const finding = makeFinding({ issue: 'A function is used but not imported here.' });
+    const result = validateCodeContext(finding, diffWithImport);
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.reason, undefined);
+  });
+
+  it('does not pair a backtick ref in one sentence with a negative claim in another', () => {
+    // Sentence-scoping: backtick `otherThing` is in sentence 1 (no claim).
+    // Negative claim is in sentence 2 but has no backtick subject. They
+    // must not be paired up.
+    const finding = makeFinding({
+      issue: '`otherThing` is well-named. A function is not imported in this file.',
+    });
+    const result = validateCodeContext(finding, diffWithImport);
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.reason, undefined);
   });
 
   it('passes finding when issue has no identifiable references', () => {

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { buildCombinedChain, probeModels, type TaggedModel, type Provider } from './model-chain.js';
+import { SWE_BENCH_SCORES } from './bench-reorder.js';
 import type { OpenAIClient } from './openai-client.js';
 
 describe('buildCombinedChain', () => {
@@ -397,6 +398,16 @@ function makeMockClient(probeResult: boolean, delayMs = 0): OpenAIClient {
   } as unknown as OpenAIClient;
 }
 
+function makeVariableLatencyClient(latencies: Record<string, number>, probeResult = true): OpenAIClient {
+  return {
+    probeModel: async (model: string) => {
+      const delay = latencies[model] ?? 0;
+      if (delay > 0) await new Promise(r => setTimeout(r, delay));
+      return probeResult;
+    },
+  } as unknown as OpenAIClient;
+}
+
 function makeClients(model: TaggedModel, client: OpenAIClient | null): Record<Provider, OpenAIClient | null> {
   const clients: Record<Provider, OpenAIClient | null> = {
     nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
@@ -449,5 +460,85 @@ describe('probeModels', () => {
     };
     const result = await probeModels([], clients);
     assert.strictEqual(result, null);
+  });
+
+  it('does not promote a fastest probe whose SWE score is well below the chain head', async () => {
+    // deepseek-v4-pro (0.806) is the head, mistral-medium-3.5 (0.776) is fastest.
+    // Gap = 0.030 > 0.02 → no promotion; head stays first.
+    const chain: TaggedModel[] = [
+      { id: 'deepseek-ai/deepseek-v4-pro', provider: 'nim' },
+      { id: 'mistral-medium-3.5', provider: 'mistral' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeVariableLatencyClient({ 'deepseek-ai/deepseek-v4-pro': 100 }),
+      mistral: makeVariableLatencyClient({ 'mistral-medium-3.5': 10 }),
+      groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.strictEqual(result, null);
+  });
+
+  it('promotes a fastest probe that is competitive with the chain head', async () => {
+    // deepseek-v4-pro (0.806) is the head, deepseek-v4-flash (0.790) is fastest.
+    // Gap = 0.016 ≤ 0.02 → promotion allowed (rounding-equal).
+    const chain: TaggedModel[] = [
+      { id: 'deepseek-ai/deepseek-v4-pro', provider: 'nim' },
+      { id: 'deepseek-ai/deepseek-v4-flash', provider: 'nim' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeVariableLatencyClient({
+        'deepseek-ai/deepseek-v4-pro': 100,
+        'deepseek-ai/deepseek-v4-flash': 10,
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-flash');
+  });
+
+  it('promotes a fastest probe that beats the chain head on SWE score', async () => {
+    // Hypothetical scenario where the head is a low-SWE model and a higher-SWE
+    // model is faster in the probe. We inject a fake head with score 0.5 by
+    // using a model id not in the SWE_BENCH_SCORES table; the higher-SWE
+    // model then wins on both score and latency.
+    const chain: TaggedModel[] = [
+      { id: 'unknown-head-model', provider: 'nim' },
+      { id: 'deepseek-ai/deepseek-v4-pro', provider: 'nim' },
+    ];
+    assert.strictEqual(SWE_BENCH_SCORES['unknown-head-model'], undefined);
+    assert.strictEqual(SWE_BENCH_SCORES['deepseek-ai/deepseek-v4-pro'], 0.806);
+
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeVariableLatencyClient({
+        'unknown-head-model': 100,
+        'deepseek-ai/deepseek-v4-pro': 10,
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-pro');
+  });
+
+  it('returns the head itself when the head is the fastest probed model', async () => {
+    // The head is fastest — no reordering happens later (fastestIndex is 0)
+    // but probeModels should still return the head so the caller can decide.
+    const chain: TaggedModel[] = [
+      { id: 'deepseek-ai/deepseek-v4-pro', provider: 'nim' },
+      { id: 'mistral-medium-3.5', provider: 'mistral' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeVariableLatencyClient({ 'deepseek-ai/deepseek-v4-pro': 10 }),
+      mistral: makeVariableLatencyClient({ 'mistral-medium-3.5': 100 }),
+      groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const result = await probeModels(chain, clients);
+    assert.ok(result);
+    assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-pro');
   });
 });

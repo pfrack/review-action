@@ -37,10 +37,11 @@ export function getFileHunks(filesDiff) {
     }
     return map;
 }
-export async function validateFindings(review, filesDiff, changedFiles, client, model) {
+export async function validateFindings(review, filesDiff, changedFiles, client, model, config) {
     const warnings = [];
     const hunks = getFileHunks(filesDiff);
     const validFindings = [];
+    const dropUnreferenced = config?.dropUnreferenced ?? true;
     for (const f of review.findings) {
         if (!changedFiles.has(f.file)) {
             warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
@@ -67,7 +68,11 @@ export async function validateFindings(review, filesDiff, changedFiles, client, 
                 continue;
             }
         }
-        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '', dropUnreferenced);
+        if (!codeContext.valid) {
+            warnings.push(`Warning: ${codeContext.reason} in "${f.file}", dropping`);
+            continue;
+        }
         if (codeContext.reason) {
             warnings.push(`${codeContext.reason} in "${f.file}"`);
         }
