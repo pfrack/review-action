@@ -75,6 +75,149 @@ describe('OpenAIClient', () => {
     }
   });
 
+  it('Chat sends json_schema response_format when format=json_schema', async () => {
+    let capturedPayload: any = null;
+    const mock = await startMockServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => body += chunk);
+      req.on('end', () => {
+        capturedPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"ok","findings":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'test-key');
+      await client.chat('test-model', [{ role: 'user', content: 'hi' }], {
+        schema: { type: 'object' },
+        format: 'json_schema',
+      });
+      assert.strictEqual(capturedPayload.response_format?.type, 'json_schema');
+      assert.strictEqual(capturedPayload.response_format?.json_schema?.name, 'review');
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat sends json_object response_format when format=json_object', async () => {
+    let capturedPayload: any = null;
+    const mock = await startMockServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => body += chunk);
+      req.on('end', () => {
+        capturedPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"ok","findings":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'test-key');
+      await client.chat('test-model', [{ role: 'user', content: 'hi' }], {
+        format: 'json_object',
+      });
+      assert.deepStrictEqual(capturedPayload.response_format, { type: 'json_object' });
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat retries with json_object when model rejects json_schema', async () => {
+    const calls: Array<{ body: any; payload: any }> = [];
+    const mock = await startMockServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => raw += chunk);
+      req.on('end', () => {
+        const payload = JSON.parse(raw);
+        calls.push({ body: raw, payload });
+        if (payload.response_format?.type === 'json_schema') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: {
+              message: 'Model llama-3.3-70b-versatile does not support response format `json_schema`. See supported models at https://console.groq.com/docs/structured-outputs#supported-models',
+              type: 'invalid_request_error',
+              param: 'response_format',
+            },
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"ok","findings":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key', 'Groq');
+      const result = await client.chat('llama-3.3-70b-versatile', [{ role: 'user', content: 'hi' }], {
+        schema: { type: 'object' },
+        format: 'json_schema',
+      });
+      assert.strictEqual(result.content, '{"summary":"ok","findings":[]}');
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls[0].payload.response_format?.type, 'json_schema');
+      assert.strictEqual(calls[1].payload.response_format?.type, 'json_object');
+      assert.strictEqual(calls[1].payload.response_format?.json_schema, undefined);
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat does not retry with json_object when 400 error is unrelated to json_schema', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Invalid model' } }));
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      await assert.rejects(
+        () => client.chat('model', [{ role: 'user', content: 'hi' }], {
+          schema: { type: 'object' },
+          format: 'json_schema',
+        }),
+        (err: Error) => {
+          assert.ok(err.message.includes('400'));
+          return true;
+        }
+      );
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('Chat does not retry with json_object when format is not json_schema', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'tools not supported' } }));
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      await assert.rejects(
+        () => client.chat('model', [{ role: 'user', content: 'hi' }], {
+          schema: { type: 'object' },
+          format: 'tools',
+        }),
+        (err: Error) => {
+          assert.ok(err.message.includes('400'));
+          return true;
+        }
+      );
+    } finally {
+      mock.close();
+    }
+  });
+
   it('ChatStream parses SSE chunks correctly', async () => {
     const mock = await startMockServer((req, res) => {
       assert.ok(req.headers.accept?.includes('text/event-stream'));
