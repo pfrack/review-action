@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { OpenAIClient, extractJsonFromText } from './openai-client.js';
+import { OpenAIClient, extractJsonFromText, stripThinkingContent } from './openai-client.js';
 import { RetryableError } from './retry.js';
 import { startMockServer } from './test-utils.js';
 describe('OpenAIClient provider label detection', () => {
@@ -290,6 +290,24 @@ describe('OpenAIClient', () => {
         assert.strictEqual(extractJsonFromText(''), null);
         // Unbalanced braces
         assert.strictEqual(extractJsonFromText('{"a":1'), null);
+    });
+    it('extractJsonFromText: strips thinking blocks before JSON extraction', () => {
+        // <thinking> with a brace inside must not corrupt the JSON walk
+        assert.strictEqual(extractJsonFromText('<thinking>why { not } this</thinking>{"a":1}'), '{"a":1}');
+        // thinking with a bare JSON object after it
+        assert.strictEqual(extractJsonFromText('[thinking]some reasoning[/thinking]\n{"summary":"ok","findings":[]}'), '{"summary":"ok","findings":[]}');
+        // === thinking === ... === answer === ... JSON
+        assert.strictEqual(extractJsonFromText('=== thinking ===\nreasoning\n=== answer ===\n{"a":1}'), '{"a":1}');
+    });
+    it('stripThinkingContent removes all supported dialects', () => {
+        assert.strictEqual(stripThinkingContent('<thinking>reason</thinking>'), '');
+        assert.strictEqual(stripThinkingContent('[thinking]reason[/thinking]'), '');
+        assert.strictEqual(stripThinkingContent('=== thinking ===\nreason\n=== answer ===\n{"a":1}'), '{"a":1}');
+        // Multiple blocks
+        assert.strictEqual(stripThinkingContent('<thinking>a</thinking>content<thinking>b</thinking>'), 'content');
+        // No thinking — passthrough
+        assert.strictEqual(stripThinkingContent('plain text'), 'plain text');
+        assert.strictEqual(stripThinkingContent(''), '');
     });
     it('Chat falls back to text mode without json_schema round-trip (no NO_JSON_SCHEMA_MODELS hit first)', async () => {
         // A model in NO_STRUCTURED_OUTPUT_MODELS but NOT in NO_JSON_SCHEMA_MODELS

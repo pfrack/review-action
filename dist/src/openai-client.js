@@ -75,6 +75,29 @@ function effectiveFormat(model, provider, requested) {
     return requested;
 }
 /**
+ * Strip chain-of-thought / reasoning blocks that some models (StepFun,
+ * DeepSeek, Qwen3, etc.) emit inside their `content` response.
+ *
+ * These markers come in a few dialects:
+ *   <thinking>...</thinking>
+ *   === thinking === ... === answer ===
+ *   [thinking]...[/thinking]
+ *   思考内容: ...  (Chinese models)
+ *
+ * Removing the block *before* JSON extraction prevents reasoning prose
+ * (which can contain stray braces) from corrupting the brace walker.
+ */
+export function stripThinkingContent(text) {
+    if (!text)
+        return text;
+    return text
+        .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+        .replace(/\[thinking\b[^\]]*\][\s\S]*?\[\/thinking\]/gi, '')
+        .replace(/===+\s*thinking\s*===+[\s\S]*?===\s*(?:answer|response|final)\s*===+/gi, '')
+        .replace(/thought_block\b[\s\S]*?endofthought_block\b/gi, '')
+        .trim();
+}
+/**
  * Extract a JSON object from a model's text response.
  *
  * Most models that don't support structured output still emit well-formed
@@ -88,9 +111,10 @@ function effectiveFormat(model, provider, requested) {
  * The caller is responsible for parsing the string as JSON.
  */
 export function extractJsonFromText(text) {
-    if (!text)
+    const cleaned = stripThinkingContent(text);
+    const trimmed = cleaned.trim();
+    if (!trimmed)
         return null;
-    const trimmed = text.trim();
     // 1. Fenced code block with `json` language tag
     const jsonFence = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
     if (jsonFence)

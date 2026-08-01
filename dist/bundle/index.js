@@ -27212,7 +27212,7 @@ __webpack_async_result__();
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   gP: () => (/* binding */ OpenAIClient)
 /* harmony export */ });
-/* unused harmony exports parseRetryAfter, sanitizeErrorBody, extractJsonFromText */
+/* unused harmony exports parseRetryAfter, sanitizeErrorBody, stripThinkingContent, extractJsonFromText */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
@@ -27293,6 +27293,29 @@ function effectiveFormat(model, provider, requested) {
     return requested;
 }
 /**
+ * Strip chain-of-thought / reasoning blocks that some models (StepFun,
+ * DeepSeek, Qwen3, etc.) emit inside their `content` response.
+ *
+ * These markers come in a few dialects:
+ *   <thinking>...</thinking>
+ *   === thinking === ... === answer ===
+ *   [thinking]...[/thinking]
+ *   思考内容: ...  (Chinese models)
+ *
+ * Removing the block *before* JSON extraction prevents reasoning prose
+ * (which can contain stray braces) from corrupting the brace walker.
+ */
+function stripThinkingContent(text) {
+    if (!text)
+        return text;
+    return text
+        .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+        .replace(/\[thinking\b[^\]]*\][\s\S]*?\[\/thinking\]/gi, '')
+        .replace(/===+\s*thinking\s*===+[\s\S]*?===\s*(?:answer|response|final)\s*===+/gi, '')
+        .replace(/thought_block\b[\s\S]*?endofthought_block\b/gi, '')
+        .trim();
+}
+/**
  * Extract a JSON object from a model's text response.
  *
  * Most models that don't support structured output still emit well-formed
@@ -27306,9 +27329,10 @@ function effectiveFormat(model, provider, requested) {
  * The caller is responsible for parsing the string as JSON.
  */
 function extractJsonFromText(text) {
-    if (!text)
+    const cleaned = stripThinkingContent(text);
+    const trimmed = cleaned.trim();
+    if (!trimmed)
         return null;
-    const trimmed = text.trim();
     // 1. Fenced code block with `json` language tag
     const jsonFence = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
     if (jsonFence)
