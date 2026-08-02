@@ -1,169 +1,119 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { loadConfig, filterFreeOnly, isFreeModel } from './config.js';
+import { withEnv } from './test-utils.js';
 describe('loadConfig — OpenRouter fields', () => {
-    const ENV_KEYS = [
-        'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_BASE_URL', 'INPUT_OPENROUTER_MODELS',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('reads OpenRouter API key and models', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_OPENROUTER_API_KEY'] = 'sk-or-v1-key';
-        process.env['INPUT_OPENROUTER_MODELS'] = 'deepseek/deepseek-r1:free,google/gemini-2.0-flash-exp:free';
-        process.env['INPUT_OPENROUTER_BASE_URL'] = 'https://openrouter.ai/api/v1';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.openRouterApiKey, 'sk-or-v1-key');
-        assert.strictEqual(config.openRouterBaseUrl, 'https://openrouter.ai/api/v1');
-        assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'google/gemini-2.0-flash-exp:free']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_OPENROUTER_API_KEY: 'sk-or-v1-key',
+            INPUT_OPENROUTER_MODELS: 'deepseek/deepseek-r1:free,google/gemini-2.0-flash-exp:free',
+            INPUT_OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.openRouterApiKey, 'sk-or-v1-key');
+            assert.strictEqual(config.openRouterBaseUrl, 'https://openrouter.ai/api/v1');
+            assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'google/gemini-2.0-flash-exp:free']);
+        });
     });
     it('defaults OpenRouter models to empty when no key and no models provided', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_OPENROUTER_API_KEY'] = '';
-        process.env['INPUT_OPENROUTER_MODELS'] = '';
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.openRouterApiKey, '');
-        assert.deepStrictEqual(config.openRouterModels, []);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_OPENROUTER_API_KEY: '',
+            INPUT_OPENROUTER_MODELS: '',
+            INPUT_NIM_API_KEY: 'nim-key',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.openRouterApiKey, '');
+            assert.deepStrictEqual(config.openRouterModels, []);
+        });
     });
 });
 describe('loadConfig — Kilo fields', () => {
-    const ENV_KEYS = [
-        'INPUT_KILOCODE_API_KEY', 'INPUT_KILOCODE_BASE_URL', 'INPUT_KILOCODE_MODELS',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('reads Kilo API key and models', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-        process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free';
-        process.env['INPUT_KILOCODE_BASE_URL'] = 'https://api.kilo.ai/api/gateway';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.kiloApiKey, 'kilo-key');
-        assert.strictEqual(config.kiloBaseUrl, 'https://api.kilo.ai/api/gateway');
-        assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_KILOCODE_API_KEY: 'kilo-key',
+            INPUT_KILOCODE_MODELS: 'kilo-auto/free',
+            INPUT_KILOCODE_BASE_URL: 'https://api.kilo.ai/api/gateway',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.kiloApiKey, 'kilo-key');
+            assert.strictEqual(config.kiloBaseUrl, 'https://api.kilo.ai/api/gateway');
+            assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
+        });
     });
     it('defaults Kilo models to empty when no key and no models provided', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_KILOCODE_API_KEY'] = '';
-        process.env['INPUT_KILOCODE_MODELS'] = '';
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.kiloApiKey, '');
-        assert.deepStrictEqual(config.kiloModels, []);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_KILOCODE_API_KEY: '',
+            INPUT_KILOCODE_MODELS: '',
+            INPUT_NIM_API_KEY: 'nim-key',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.kiloApiKey, '');
+            assert.deepStrictEqual(config.kiloModels, []);
+        });
     });
 });
 describe('loadConfig — custom_models CSV', () => {
-    const ENV_KEYS = [
-        'INPUT_CUSTOM_MODELS', 'INPUT_CUSTOM_MODELS_BASE_URL', 'INPUT_CUSTOM_API_URL',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('parses custom_models CSV and defaults base URL to custom_api_url', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_CUSTOM_MODELS'] = 'model-a, model-b';
-        process.env['INPUT_CUSTOM_API_URL'] = 'https://api.example.com/v1';
-        process.env['INPUT_CUSTOM_MODELS_BASE_URL'] = '';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.deepStrictEqual(config.customModels, ['model-a', 'model-b']);
-        assert.strictEqual(config.customModelsBaseUrl, 'https://api.example.com/v1');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_CUSTOM_MODELS: 'model-a, model-b',
+            INPUT_CUSTOM_API_URL: 'https://api.example.com/v1',
+            INPUT_CUSTOM_MODELS_BASE_URL: '',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.deepStrictEqual(config.customModels, ['model-a', 'model-b']);
+            assert.strictEqual(config.customModelsBaseUrl, 'https://api.example.com/v1');
+        });
     });
     it('custom_models empty when not provided', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_CUSTOM_MODELS'] = '';
-        process.env['INPUT_CUSTOM_API_URL'] = '';
-        process.env['INPUT_CUSTOM_MODELS_BASE_URL'] = '';
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.deepStrictEqual(config.customModels, []);
-        assert.strictEqual(config.customModelsBaseUrl, '');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_CUSTOM_MODELS: '',
+            INPUT_CUSTOM_API_URL: '',
+            INPUT_CUSTOM_MODELS_BASE_URL: '',
+            INPUT_NIM_API_KEY: 'nim-key',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.deepStrictEqual(config.customModels, []);
+            assert.strictEqual(config.customModelsBaseUrl, '');
+        });
     });
 });
 describe('isFreeModel', () => {
@@ -206,290 +156,182 @@ describe('filterFreeOnly', () => {
     });
 });
 describe('loadConfig — free-only filter', () => {
-    const ENV_KEYS = [
-        'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_MODELS', 'INPUT_OPENROUTER_FREE_ONLY',
-        'INPUT_KILOCODE_API_KEY', 'INPUT_KILOCODE_MODELS', 'INPUT_KILOCODE_FREE_ONLY',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('filters OpenRouter models to free-only when openrouter_free_only is true', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_OPENROUTER_API_KEY'] = 'or-key';
-        process.env['INPUT_OPENROUTER_MODELS'] = 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick,google/gemini-2.0-flash-exp:free';
-        process.env['INPUT_OPENROUTER_FREE_ONLY'] = 'true';
-        process.env['INPUT_KILOCODE_API_KEY'] = '';
-        process.env['INPUT_KILOCODE_MODELS'] = '';
-        process.env['INPUT_KILOCODE_FREE_ONLY'] = '';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.openRouterFreeOnly, true);
-        assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'google/gemini-2.0-flash-exp:free']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_OPENROUTER_API_KEY: 'or-key',
+            INPUT_OPENROUTER_MODELS: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick,google/gemini-2.0-flash-exp:free',
+            INPUT_OPENROUTER_FREE_ONLY: 'true',
+            INPUT_KILOCODE_API_KEY: '',
+            INPUT_KILOCODE_MODELS: '',
+            INPUT_KILOCODE_FREE_ONLY: '',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.openRouterFreeOnly, true);
+            assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'google/gemini-2.0-flash-exp:free']);
+        });
     });
     it('does not filter OpenRouter models when openrouter_free_only is false', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_OPENROUTER_API_KEY'] = 'or-key';
-        process.env['INPUT_OPENROUTER_MODELS'] = 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick,google/gemini-2.0-flash-exp:free';
-        process.env['INPUT_OPENROUTER_FREE_ONLY'] = 'false';
-        process.env['INPUT_KILOCODE_API_KEY'] = '';
-        process.env['INPUT_KILOCODE_MODELS'] = '';
-        process.env['INPUT_KILOCODE_FREE_ONLY'] = '';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.openRouterFreeOnly, false);
-        assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick', 'google/gemini-2.0-flash-exp:free']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_OPENROUTER_API_KEY: 'or-key',
+            INPUT_OPENROUTER_MODELS: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick,google/gemini-2.0-flash-exp:free',
+            INPUT_OPENROUTER_FREE_ONLY: 'false',
+            INPUT_KILOCODE_API_KEY: '',
+            INPUT_KILOCODE_MODELS: '',
+            INPUT_KILOCODE_FREE_ONLY: '',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.openRouterFreeOnly, false);
+            assert.deepStrictEqual(config.openRouterModels, ['deepseek/deepseek-r1:free', 'meta-llama/llama-4-maverick', 'google/gemini-2.0-flash-exp:free']);
+        });
     });
     it('filters Kilo models to free-only when kilocode_free_only is true', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-        process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free,kilo-auto/premium';
-        process.env['INPUT_KILOCODE_FREE_ONLY'] = 'true';
-        process.env['INPUT_OPENROUTER_API_KEY'] = '';
-        process.env['INPUT_OPENROUTER_MODELS'] = '';
-        process.env['INPUT_OPENROUTER_FREE_ONLY'] = '';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.kiloFreeOnly, true);
-        assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_KILOCODE_API_KEY: 'kilo-key',
+            INPUT_KILOCODE_MODELS: 'kilo-auto/free,kilo-auto/premium',
+            INPUT_KILOCODE_FREE_ONLY: 'true',
+            INPUT_OPENROUTER_API_KEY: '',
+            INPUT_OPENROUTER_MODELS: '',
+            INPUT_OPENROUTER_FREE_ONLY: '',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.kiloFreeOnly, true);
+            assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free']);
+        });
     });
     it('does not filter Kilo models when kilocode_free_only is false', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_KILOCODE_API_KEY'] = 'kilo-key';
-        process.env['INPUT_KILOCODE_MODELS'] = 'kilo-auto/free,kilo-auto/premium';
-        process.env['INPUT_KILOCODE_FREE_ONLY'] = 'false';
-        process.env['INPUT_OPENROUTER_API_KEY'] = '';
-        process.env['INPUT_OPENROUTER_MODELS'] = '';
-        process.env['INPUT_OPENROUTER_FREE_ONLY'] = '';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.kiloFreeOnly, false);
-        assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free', 'kilo-auto/premium']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_KILOCODE_API_KEY: 'kilo-key',
+            INPUT_KILOCODE_MODELS: 'kilo-auto/free,kilo-auto/premium',
+            INPUT_KILOCODE_FREE_ONLY: 'false',
+            INPUT_OPENROUTER_API_KEY: '',
+            INPUT_OPENROUTER_MODELS: '',
+            INPUT_OPENROUTER_FREE_ONLY: '',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.kiloFreeOnly, false);
+            assert.deepStrictEqual(config.kiloModels, ['kilo-auto/free', 'kilo-auto/premium']);
+        });
     });
 });
 describe('loadConfig — timeout fields', () => {
-    const ENV_KEYS = [
-        'INPUT_MODEL_TIMEOUT', 'INPUT_CHAIN_TIMEOUT',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-        'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_MODELS',
-    ];
-    const saved = {};
-    function setupEnv(overrides = {}) {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        process.env['INPUT_OPENROUTER_API_KEY'] = '';
-        process.env['INPUT_OPENROUTER_MODELS'] = '';
-        process.env['INPUT_MODEL_TIMEOUT'] = '';
-        process.env['INPUT_CHAIN_TIMEOUT'] = '';
-        for (const [k, v] of Object.entries(overrides))
-            process.env[k] = v;
-    }
-    function restoreEnv() {
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    }
+    const BASE = {
+        INPUT_NIM_API_KEY: 'nim-key',
+        INPUT_NIM_BASE_URL: '',
+        INPUT_NIM_MODELS: '',
+        INPUT_MAX_FILES: '',
+        INPUT_EXCLUDE_PATTERNS: '',
+        INPUT_NIM_SYSTEM_PROMPT: '',
+        INPUT_NIM_PROMPT_MODE: '',
+        INPUT_OPENROUTER_API_KEY: '',
+        INPUT_OPENROUTER_MODELS: '',
+        INPUT_MODEL_TIMEOUT: '',
+        INPUT_CHAIN_TIMEOUT: '',
+    };
     it('defaults modelTimeout to 90 and chainTimeout to 0', async () => {
-        setupEnv();
-        try {
+        await withEnv({ ...BASE }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.modelTimeout, 90);
             assert.strictEqual(config.chainTimeout, 0);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('reads custom valid values', async () => {
-        setupEnv({ 'INPUT_MODEL_TIMEOUT': '90', 'INPUT_CHAIN_TIMEOUT': '300' });
-        try {
+        await withEnv({ ...BASE, INPUT_MODEL_TIMEOUT: '90', INPUT_CHAIN_TIMEOUT: '300' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.modelTimeout, 90);
             assert.strictEqual(config.chainTimeout, 300);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('accepts 0 as valid for both fields', async () => {
-        setupEnv({ 'INPUT_MODEL_TIMEOUT': '0', 'INPUT_CHAIN_TIMEOUT': '0' });
-        try {
+        await withEnv({ ...BASE, INPUT_MODEL_TIMEOUT: '0', INPUT_CHAIN_TIMEOUT: '0' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.modelTimeout, 0);
             assert.strictEqual(config.chainTimeout, 0);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('warns and falls back on invalid model_timeout', async () => {
-        setupEnv({ 'INPUT_MODEL_TIMEOUT': '-5' });
-        try {
+        await withEnv({ ...BASE, INPUT_MODEL_TIMEOUT: '-5' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.modelTimeout, 90);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
 });
 describe('loadConfig — custom_swe_score', () => {
-    const ENV_KEYS = [
-        'INPUT_CUSTOM_SWE_SCORE', 'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL',
-        'INPUT_NIM_MODELS', 'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-        'INPUT_OPENROUTER_API_KEY', 'INPUT_OPENROUTER_MODELS',
-        'INPUT_MODEL_TIMEOUT', 'INPUT_CHAIN_TIMEOUT',
-    ];
-    const saved = {};
-    function setupEnv(overrides = {}) {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        process.env['INPUT_OPENROUTER_API_KEY'] = '';
-        process.env['INPUT_OPENROUTER_MODELS'] = '';
-        process.env['INPUT_MODEL_TIMEOUT'] = '';
-        process.env['INPUT_CHAIN_TIMEOUT'] = '';
-        process.env['INPUT_CUSTOM_SWE_SCORE'] = '';
-        for (const [k, v] of Object.entries(overrides))
-            process.env[k] = v;
-    }
-    function restoreEnv() {
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
-    }
+    const BASE = {
+        INPUT_NIM_API_KEY: 'nim-key',
+        INPUT_NIM_BASE_URL: '',
+        INPUT_NIM_MODELS: '',
+        INPUT_MAX_FILES: '',
+        INPUT_EXCLUDE_PATTERNS: '',
+        INPUT_NIM_SYSTEM_PROMPT: '',
+        INPUT_NIM_PROMPT_MODE: '',
+        INPUT_OPENROUTER_API_KEY: '',
+        INPUT_OPENROUTER_MODELS: '',
+        INPUT_MODEL_TIMEOUT: '',
+        INPUT_CHAIN_TIMEOUT: '',
+        INPUT_CUSTOM_SWE_SCORE: '',
+    };
     it('defaults customSweScore to 0.5 when unset', async () => {
-        setupEnv();
-        try {
+        await withEnv({ ...BASE }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.customSweScore, 0.5);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('parses a valid customSweScore', async () => {
-        setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '0.85' });
-        try {
+        await withEnv({ ...BASE, INPUT_CUSTOM_SWE_SCORE: '0.85' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.customSweScore, 0.85);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('accepts 0 and 1 as boundary values', async () => {
-        setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '0' });
-        try {
+        await withEnv({ ...BASE, INPUT_CUSTOM_SWE_SCORE: '0' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.customSweScore, 0);
-        }
-        finally {
-            restoreEnv();
-        }
-        setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': '1' });
-        try {
+        });
+        await withEnv({ ...BASE, INPUT_CUSTOM_SWE_SCORE: '1' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.customSweScore, 1);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
     it('warns and falls back to 0.5 for out-of-range or non-numeric values', async () => {
         for (const bad of ['-0.1', '1.5', 'abc', '1.1', '2']) {
-            setupEnv({ 'INPUT_CUSTOM_SWE_SCORE': bad });
-            try {
+            await withEnv({ ...BASE, INPUT_CUSTOM_SWE_SCORE: bad }, async () => {
                 const config = await loadConfig();
                 assert.strictEqual(config.customSweScore, 0.5, `value "${bad}" should fall back to 0.5`);
-            }
-            finally {
-                restoreEnv();
-            }
+            });
         }
     });
     it('warns and falls back on invalid chain_timeout', async () => {
-        setupEnv({ 'INPUT_CHAIN_TIMEOUT': 'abc' });
-        try {
+        await withEnv({ ...BASE, INPUT_CHAIN_TIMEOUT: 'abc' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.chainTimeout, 0);
-        }
-        finally {
-            restoreEnv();
-        }
+        });
     });
 });

@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { resolveScores, patchScoresTable } from './swe-resolver.js';
+import { resolveScores, patchScoresTable, fetchLeaderboard } from './swe-resolver.js';
+import { RetryableError } from './retry.js';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { startMockServer } from './test-utils.js';
 const LEADERBOARD = [
     { modelId: 'nemotron-3-super-120b-a12b', score: 0.5373, org: 'nvidia' },
     { modelId: 'nemotron-3-ultra-550b-a55b', score: 0.707, org: 'nvidia' },
@@ -71,6 +73,60 @@ describe('patchScoresTable', () => {
         }
         finally {
             rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+describe('fetchLeaderboard — retry & parse', () => {
+    const originalUrl = process.env.SWE_BENCH_API_URL;
+    it('retries on 500 and succeeds', async () => {
+        let callCount = 0;
+        const mock = await startMockServer((_req, res) => {
+            callCount++;
+            if (callCount === 1) {
+                res.writeHead(500);
+                res.end('Internal Server Error');
+            }
+            else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    models: [{ model_id: 'model-a', score: 0.8, organization_id: 'org' }],
+                }));
+            }
+        });
+        process.env.SWE_BENCH_API_URL = mock.url;
+        try {
+            const result = await fetchLeaderboard();
+            assert.strictEqual(callCount, 2);
+            assert.strictEqual(result.length, 1);
+            assert.strictEqual(result[0].modelId, 'model-a');
+        }
+        finally {
+            if (originalUrl === undefined)
+                delete process.env.SWE_BENCH_API_URL;
+            else
+                process.env.SWE_BENCH_API_URL = originalUrl;
+            mock.close();
+        }
+    });
+    it('throws RetryableError with status 502 on non-JSON 200 body', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end('<html><body>502 Bad Gateway</body></html>');
+        });
+        process.env.SWE_BENCH_API_URL = mock.url;
+        try {
+            await assert.rejects(() => fetchLeaderboard(), (err) => {
+                assert.ok(err instanceof RetryableError);
+                assert.strictEqual(err.status, 502);
+                return true;
+            });
+        }
+        finally {
+            if (originalUrl === undefined)
+                delete process.env.SWE_BENCH_API_URL;
+            else
+                process.env.SWE_BENCH_API_URL = originalUrl;
+            mock.close();
         }
     });
 });

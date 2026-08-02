@@ -10,3 +10,24 @@ export function startMockServer(handler) {
         });
     });
 }
+export async function withEnv(overrides, fn) {
+    const orig = {};
+    for (const key of Object.keys(overrides)) {
+        orig[key] = process.env[key];
+        if (overrides[key] === undefined)
+            delete process.env[key];
+        else
+            process.env[key] = overrides[key];
+    }
+    try {
+        await fn();
+    }
+    finally {
+        for (const key of Object.keys(orig)) {
+            if (orig[key] === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = orig[key];
+        }
+    }
+}

@@ -187,10 +187,12 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
         const parallelCount = Math.min(config.parallelAttempts, availableChain.length);
         const controller = new AbortController();
         const attemptPromises = [];
+        const attemptModelIds = [];
         for (let i = 0; i < parallelCount; i++) {
             const tagged = availableChain[i];
             const client = clients[tagged.provider];
             const delayMs = i * config.parallelThreshold * 1000;
+            attemptModelIds.push(tagged.id);
             attemptPromises.push((async () => {
                 if (delayMs > 0) {
                     try {
@@ -221,6 +223,10 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                 fallbackContent = r.lastRawContent;
                 fallbackModel = r.usedModel;
             }
+        }
+        if (winner && parallelCount > 1) {
+            const cancelledIds = attemptModelIds.filter((_id, idx) => settled[idx] === null);
+            core.info(`Parallel: ${winner.usedModel} won; cancelled ${cancelledIds.join(', ')}`);
         }
         if (winner) {
             batchReview = { findings: winner.findings, summary: winner.summary };
@@ -327,6 +333,9 @@ function validateConfig(config) {
         }
         validateProviderUrl(config.customApiUrl, 'custom_api_url');
     }
+    if (config.customModelsBaseUrl && config.customModelsBaseUrl !== config.customApiUrl) {
+        validateProviderUrl(config.customModelsBaseUrl, 'custom_models_base_url');
+    }
     if (config.openRouterBaseUrl)
         validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
     if (config.kiloBaseUrl)
@@ -371,23 +380,21 @@ export function detectLanguage(files) {
         .filter(([language]) => language !== 'generic')
         .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
 }
-async function prioritizeChain(chain, clients) {
+export async function prioritizeChain(chain, clients) {
     try {
-        const fastest = await probeModels(chain, clients);
-        if (fastest) {
-            const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
-            if (fastestIndex > 0) {
-                const [fastestModel] = chain.splice(fastestIndex, 1);
-                chain.unshift(fastestModel);
-                core.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
-            }
+        const probed = await probeModels(chain, clients);
+        if (probed) {
+            core.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+        }
+        else {
+            core.info(`Probe: no model available, using SWE-bench chain order`);
         }
     }
     catch (probeErr) {
         core.warning(`Model probing failed, using original chain order: ${probeErr}`);
     }
 }
-async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
+export async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
     const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
     const batchResults = [];
     const modelTimeoutMs = config.modelTimeout * 1000;
@@ -396,9 +403,16 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
             core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
         const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
-        const result = config.chainTimeout > 0
-            ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
-            : await runBatch();
+        let result;
+        try {
+            result = config.chainTimeout > 0
+                ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+                : await runBatch();
+        }
+        catch (err) {
+            core.warning(`Batch ${batchResults.length + 1}/${batches.length} failed: ${err} — ${batch.files.length} file(s) dropped`);
+            result = null;
+        }
         if (result === null) {
             core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }
@@ -493,7 +507,7 @@ async function writeMetrics(metrics) {
         core.warning(`Failed to write metrics to step summary: ${err}`);
     }
 }
-async function run() {
+export async function run() {
     const config = await loadConfig();
     validateConfig(config);
     const clients = buildClients(config);

@@ -4,6 +4,7 @@ import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable } from './bench-reorder.js';
+import { startMockServer } from './test-utils.js';
 describe('updateActionYml groq target', () => {
     it('correctly replaces groq_models default', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
@@ -405,6 +406,61 @@ describe('fetchSweBenchScores', () => {
                 delete process.env.SWE_BENCH_API_URL;
             else
                 process.env.SWE_BENCH_API_URL = originalUrl;
+        }
+    });
+});
+describe('fetchSweBenchScores — retry on transient failure', () => {
+    const originalUrl = process.env.SWE_BENCH_API_URL;
+    it('retries on 500 and succeeds', async () => {
+        let callCount = 0;
+        const mock = await startMockServer((_req, res) => {
+            callCount++;
+            if (callCount === 1) {
+                res.writeHead(500);
+                res.end('Internal Server Error');
+            }
+            else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    results: [
+                        { model_id: 'model-a', score: 0.85 },
+                        { model_id: 'model-b', score: 0.72 },
+                    ],
+                }));
+            }
+        });
+        process.env.SWE_BENCH_API_URL = mock.url;
+        try {
+            const result = await fetchSweBenchScores();
+            assert.strictEqual(callCount, 2);
+            assert.strictEqual(result.length, 2);
+            assert.strictEqual(result[0].modelId, 'model-a');
+        }
+        finally {
+            if (originalUrl === undefined)
+                delete process.env.SWE_BENCH_API_URL;
+            else
+                process.env.SWE_BENCH_API_URL = originalUrl;
+            mock.close();
+        }
+    });
+    it('gracefully returns empty array on non-JSON 200 body', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end('<html><body>502 Bad Gateway</body></html>');
+        });
+        process.env.SWE_BENCH_API_URL = mock.url;
+        try {
+            const result = await fetchSweBenchScores();
+            assert.ok(Array.isArray(result));
+            assert.strictEqual(result.length, 0);
+        }
+        finally {
+            if (originalUrl === undefined)
+                delete process.env.SWE_BENCH_API_URL;
+            else
+                process.env.SWE_BENCH_API_URL = originalUrl;
+            mock.close();
         }
     });
 });

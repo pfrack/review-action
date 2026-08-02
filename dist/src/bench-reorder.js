@@ -7,7 +7,8 @@
  * 3. Updates nim_models in action.yml
  */
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
-import { withRetry } from './retry.js';
+import { withRetry, RetryableError } from './retry.js';
+import { safeParseJsonBody } from './utils.js';
 /**
  * Parse SWE-bench API response into sorted entries.
  * Filters to score > 0.5, sorts by score descending, returns top 30.
@@ -42,10 +43,10 @@ export async function fetchSweBenchScores() {
                 signal: AbortSignal.timeout(30_000),
             });
             if (!r.ok)
-                throw new Error(`SWE-bench API returned ${r.status}`);
+                throw new RetryableError(`SWE-bench API returned ${r.status}`, r.status);
             return r;
         });
-        const data = await resp.json();
+        const data = await safeParseJsonBody(resp, 'SWE-bench API');
         sweBenchFetchFailures = 0;
         return parseSweBenchResponse(data);
     }

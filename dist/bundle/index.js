@@ -25613,6 +25613,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3024);
 /* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(node_fs__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
+/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(1798);
 /**
  * bench-reorder.ts
  *
@@ -25621,6 +25622,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
  * 2. Ranks models by SWE-bench score with latency penalty
  * 3. Updates nim_models in action.yml
  */
+
 
 
 /**
@@ -25657,10 +25659,10 @@ async function fetchSweBenchScores() {
                 signal: AbortSignal.timeout(30_000),
             });
             if (!r.ok)
-                throw new Error(`SWE-bench API returned ${r.status}`);
+                throw new RetryableError(`SWE-bench API returned ${r.status}`, r.status);
             return r;
         });
-        const data = await resp.json();
+        const data = await safeParseJsonBody(resp, 'SWE-bench API');
         sweBenchFetchFailures = 0;
         return parseSweBenchResponse(data);
     }
@@ -26323,7 +26325,12 @@ function loadEvent() {
     catch (err) {
         throw new Error(`Failed to parse GitHub event payload at ${path}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    if (!event.pull_request?.number || !event.pull_request?.head?.sha) {
+    if (event.pull_request === undefined || event.pull_request === null) {
+        const eventName = process.env.GITHUB_EVENT_NAME || 'unknown';
+        throw new Error(`This action only runs on pull_request events. ` +
+            `Received "${eventName}" event (no pull_request payload) — check your workflow triggers.`);
+    }
+    if (!event.pull_request.number || !event.pull_request.head?.sha) {
         throw new Error('No PR number or head SHA in event payload');
     }
     return event;
@@ -26343,10 +26350,11 @@ function loadEvent() {
 /* harmony export */   ZX: () => (/* binding */ findExistingReview),
 /* harmony export */   ic: () => (/* binding */ findExistingComment)
 /* harmony export */ });
-/* unused harmony exports formatFindingComment, createReview, INLINE_COMMENT_THRESHOLD, shouldUseInlineComments, updateComment */
+/* unused harmony exports formatFindingComment, createReview, INLINE_COMMENT_THRESHOLD, shouldUseInlineComments, updateComment, createComment */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
+/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(1798);
 
 
 
@@ -26416,7 +26424,7 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
         }
         return response;
     });
-    const data = await resp.json();
+    const data = await safeParseJsonBody(resp, 'GitHub');
     return data.id;
 }
 async function findExistingReview(repo, prNumber, token) {
@@ -26447,7 +26455,7 @@ async function findExistingReview(repo, prNumber, token) {
                 return null;
             throw err;
         }
-        const reviews = await resp.json();
+        const reviews = await (0,_utils_js__WEBPACK_IMPORTED_MODULE_2__/* .safeParseJsonBody */ .Zs)(resp, 'GitHub');
         for (const review of reviews) {
             if (review.body?.startsWith(AI_REVIEW_MARKER)) {
                 return review.id;
@@ -26464,20 +26472,29 @@ async function findExistingReview(repo, prNumber, token) {
 }
 async function deleteReview(repo, prNumber, reviewId, token) {
     const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
-    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    try {
+        await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github+json',
+                },
+                signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                const body = await response.text();
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+            }
         });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+    }
+    catch (err) {
+        if (err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw && err.status === 404) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Review not found (404) when deleting — skipping');
+            return;
         }
-    });
+        throw err;
+    }
 }
 const INLINE_COMMENT_THRESHOLD = 50;
 function shouldUseInlineComments(findings) {
@@ -26557,7 +26574,7 @@ async function findExistingComment(repo, prNumber, token) {
                 return null;
             throw err;
         }
-        const comments = await resp.json();
+        const comments = await (0,_utils_js__WEBPACK_IMPORTED_MODULE_2__/* .safeParseJsonBody */ .Zs)(resp, 'GitHub');
         for (const comment of comments) {
             if (comment.body.startsWith(AI_REVIEW_MARKER)) {
                 return comment.id;
@@ -26571,22 +26588,31 @@ async function findExistingComment(repo, prNumber, token) {
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-    await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+    try {
+        await (0,_retry_js__WEBPACK_IMPORTED_MODULE_1__/* .withRetry */ .bD)(async () => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github+json',
+                },
+                body: JSON.stringify({ body }),
+                signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                const responseBody = await response.text();
+                throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+            }
         });
-        if (!response.ok) {
-            const responseBody = await response.text();
-            throw new _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+    }
+    catch (err) {
+        if (err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw && err.status === 404) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`PR ${repo}#${prNumber} not found (404) when posting comment — skipping`);
+            return;
         }
-    });
+        throw err;
+    }
 }
 
 
@@ -26599,10 +26625,13 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   Bo: () => (/* binding */ buildClients),
 /* harmony export */   Kt: () => (/* binding */ buildRawOutputBody),
+/* harmony export */   Xj: () => (/* binding */ prioritizeChain),
 /* harmony export */   cK: () => (/* binding */ computeMaxTokens),
+/* harmony export */   eF: () => (/* binding */ run),
 /* harmony export */   ni: () => (/* binding */ withAggregateTimeout),
 /* harmony export */   od: () => (/* binding */ detectLanguage),
-/* harmony export */   pW: () => (/* binding */ runModelChainForBatch)
+/* harmony export */   pW: () => (/* binding */ runModelChainForBatch),
+/* harmony export */   wv: () => (/* binding */ executeReview)
 /* harmony export */ });
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
@@ -26810,10 +26839,12 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
         const parallelCount = Math.min(config.parallelAttempts, availableChain.length);
         const controller = new AbortController();
         const attemptPromises = [];
+        const attemptModelIds = [];
         for (let i = 0; i < parallelCount; i++) {
             const tagged = availableChain[i];
             const client = clients[tagged.provider];
             const delayMs = i * config.parallelThreshold * 1000;
+            attemptModelIds.push(tagged.id);
             attemptPromises.push((async () => {
                 if (delayMs > 0) {
                     try {
@@ -26844,6 +26875,10 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 fallbackContent = r.lastRawContent;
                 fallbackModel = r.usedModel;
             }
+        }
+        if (winner && parallelCount > 1) {
+            const cancelledIds = attemptModelIds.filter((_id, idx) => settled[idx] === null);
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Parallel: ${winner.usedModel} won; cancelled ${cancelledIds.join(', ')}`);
         }
         if (winner) {
             batchReview = { findings: winner.findings, summary: winner.summary };
@@ -26950,6 +26985,9 @@ function validateConfig(config) {
         }
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.customApiUrl, 'custom_api_url');
     }
+    if (config.customModelsBaseUrl && config.customModelsBaseUrl !== config.customApiUrl) {
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.customModelsBaseUrl, 'custom_models_base_url');
+    }
     if (config.openRouterBaseUrl)
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .validateProviderUrl */ .ph)(config.openRouterBaseUrl, 'openrouter_base_url');
     if (config.kiloBaseUrl)
@@ -26996,14 +27034,12 @@ function detectLanguage(files) {
 }
 async function prioritizeChain(chain, clients) {
     try {
-        const fastest = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .probeModels */ .Zh)(chain, clients);
-        if (fastest) {
-            const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
-            if (fastestIndex > 0) {
-                const [fastestModel] = chain.splice(fastestIndex, 1);
-                chain.unshift(fastestModel);
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
-            }
+        const probed = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_8__/* .probeModels */ .Zh)(chain, clients);
+        if (probed) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+        }
+        else {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Probe: no model available, using SWE-bench chain order`);
         }
     }
     catch (probeErr) {
@@ -27019,9 +27055,16 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
         const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
-        const result = config.chainTimeout > 0
-            ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
-            : await runBatch();
+        let result;
+        try {
+            result = config.chainTimeout > 0
+                ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+                : await runBatch();
+        }
+        catch (err) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Batch ${batchResults.length + 1}/${batches.length} failed: ${err} — ${batch.files.length} file(s) dropped`);
+            result = null;
+        }
         if (result === null) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }
@@ -27428,7 +27471,7 @@ __webpack_async_result__();
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   gP: () => (/* binding */ OpenAIClient)
 /* harmony export */ });
-/* unused harmony exports parseRetryAfter, sanitizeErrorBody, stripThinkingContent, extractJsonFromText */
+/* unused harmony exports parseRetryAfter, sanitizeErrorBody, effectiveFormat, stripThinkingContent, extractJsonFromText */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
@@ -27733,9 +27776,9 @@ class OpenAIClient {
         }
         return {
             content,
-            usage: data.usage,
+            usage: data.usage ?? { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
             latency: Date.now() - start,
-            finishReason: choice.finish_reason,
+            finishReason: choice.finish_reason ?? null,
         };
     }
     async *chatStream(model, messages, opts = {}) {
@@ -28175,9 +28218,10 @@ class RetryableError extends Error {
     }
 }
 function getRetryDelay(error, attempt, delayMs) {
+    const jitter = delayMs * (0.5 + Math.random());
     const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
     const retryAfterMs = error instanceof RetryableError ? error.retryAfterMs ?? 0 : 0;
-    return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
+    return Math.min(Math.max(exponentialDelay + jitter, retryAfterMs), 60_000);
 }
 async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
     let lastError;
@@ -36024,32 +36068,30 @@ var utils = __nccwpck_require__(1798);
 ;// CONCATENATED MODULE: ./src/validation.ts
 
 
+function nameInDiff(diff, name) {
+    const MAX_NAME_LENGTH = 80;
+    const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+    const lowerDiff = diff.toLowerCase();
+    const lowerName = safeName.toLowerCase();
+    let idx = lowerDiff.indexOf(lowerName);
+    while (idx !== -1) {
+        const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+        const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+        if (before && after)
+            return true;
+        idx = lowerDiff.indexOf(lowerName, idx + 1);
+    }
+    return false;
+}
 function validateCodeContext(finding, diff, dropUnreferenced = true) {
     const issue = finding.issue;
     const warnings = [];
-    function nameInDiff(name) {
-        const MAX_NAME_LENGTH = 80;
-        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-        const lowerDiff = diff.toLowerCase();
-        const lowerName = safeName.toLowerCase();
-        let idx = 0;
-        while (true) {
-            idx = lowerDiff.indexOf(lowerName, idx);
-            if (idx === -1)
-                return false;
-            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
-            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
-            if (before && after)
-                return true;
-            idx += 1;
-        }
-    }
     // Check for backtick-wrapped identifiers (most reliable)
     const backtickRefs = issue.match(/`(\w+)`/g);
     if (backtickRefs) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
-            if (name.length > 2 && !nameInDiff(name)) {
+            if (name.length > 2 && !nameInDiff(diff, name)) {
                 warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
             }
         }
@@ -36058,7 +36100,7 @@ function validateCodeContext(finding, diff, dropUnreferenced = true) {
     const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
     if (explicitRef) {
         const name = explicitRef[1];
-        if (name.length > 2 && !nameInDiff(name)) {
+        if (name.length > 2 && !nameInDiff(diff, name)) {
             warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
         }
     }
@@ -36092,21 +36134,6 @@ function findContradictedNegativeClaims(issue, diff) {
         return [];
     const contradicted = [];
     const seen = new Set();
-    function nameInDiff(name) {
-        const MAX_NAME_LENGTH = 80;
-        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-        const lowerDiff = diff.toLowerCase();
-        const lowerName = safeName.toLowerCase();
-        let idx = lowerDiff.indexOf(lowerName);
-        while (idx !== -1) {
-            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
-            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
-            if (before && after)
-                return true;
-            idx = lowerDiff.indexOf(lowerName, idx + 1);
-        }
-        return false;
-    }
     for (const sentence of issue.split(/[.!?\n]+/)) {
         if (!NEGATIVE_CLAIM_RE.test(sentence))
             continue;
@@ -36117,7 +36144,7 @@ function findContradictedNegativeClaims(issue, diff) {
                 continue;
             if (seen.has(name))
                 continue;
-            if (!nameInDiff(name))
+            if (!nameInDiff(diff, name))
                 continue;
             contradicted.push(name);
             seen.add(name);
@@ -36397,8 +36424,11 @@ function validateRules(rules) {
         if (rule.description.length > 500) {
             errors.push(`Rule ${i + 1} exceeds 500 characters (${rule.description.length})`);
         }
+        const effectiveDescription = rule.description.startsWith('safe:')
+            ? rule.description.slice(5).trim()
+            : rule.description;
         for (const pattern of INJECTION_PATTERNS) {
-            if (pattern.test(rule.description)) {
+            if (pattern.test(effectiveDescription)) {
                 errors.push(`Rule ${i + 1} contains potential prompt injection`);
                 blockedRules.push(i);
                 break;
@@ -36413,7 +36443,10 @@ function formatRulesForPrompt(rules) {
     const lines = ['## Custom Review Rules', 'Apply these additional rules during review:'];
     for (let i = 0; i < rules.length; i++) {
         const r = rules[i];
-        lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${r.description}`);
+        const description = r.description.startsWith('safe:')
+            ? r.description.slice(5).trim()
+            : r.description;
+        lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${description}`);
     }
     return lines.join('\n');
 }
@@ -36427,8 +36460,11 @@ function formatRulesForPrompt(rules) {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   FV: () => (/* binding */ escapeMarkdown),
 /* harmony export */   NS: () => (/* binding */ safeParseJson),
+/* harmony export */   Zs: () => (/* binding */ safeParseJsonBody),
 /* harmony export */   ph: () => (/* binding */ validateProviderUrl)
 /* harmony export */ });
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(9809);
+
 function safeParseJson(content) {
     const trimmed = content.trim();
     if (!trimmed)
@@ -36438,6 +36474,20 @@ function safeParseJson(content) {
     }
     catch {
         return undefined;
+    }
+}
+/**
+ * Parse a Response body as JSON, throwing a retryable error (502) if the
+ * body is not valid JSON (e.g. an HTML error page from a proxy or a
+ * maintenance page). This lets `withRetry` retry the request instead of
+ * crashing with a raw `SyntaxError`.
+ */
+async function safeParseJsonBody(resp, source) {
+    try {
+        return await resp.json();
+    }
+    catch (err) {
+        throw new _retry_js__WEBPACK_IMPORTED_MODULE_0__/* .RetryableError */ .dw(`${source} API returned non-JSON body (${err instanceof Error ? err.message : String(err)})`, 502);
     }
 }
 function escapeMarkdown(text) {
@@ -38500,7 +38550,10 @@ module.exports = parseParams
 /******/ var __webpack_exports__buildRawOutputBody = __webpack_exports__.Kt;
 /******/ var __webpack_exports__computeMaxTokens = __webpack_exports__.cK;
 /******/ var __webpack_exports__detectLanguage = __webpack_exports__.od;
+/******/ var __webpack_exports__executeReview = __webpack_exports__.wv;
+/******/ var __webpack_exports__prioritizeChain = __webpack_exports__.Xj;
+/******/ var __webpack_exports__run = __webpack_exports__.eF;
 /******/ var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
 /******/ var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
-/******/ export { __webpack_exports__buildClients as buildClients, __webpack_exports__buildRawOutputBody as buildRawOutputBody, __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+/******/ export { __webpack_exports__buildClients as buildClients, __webpack_exports__buildRawOutputBody as buildRawOutputBody, __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__executeReview as executeReview, __webpack_exports__prioritizeChain as prioritizeChain, __webpack_exports__run as run, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
 /******/ 

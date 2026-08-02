@@ -1,7 +1,7 @@
 ---
 change: "parallel-review-hardening"
 title: "Pipeline Hardening from Parallel Review Findings"
-status: implemented
+status: merged
 created: 2026-08-02
 updated: 2026-08-02
 plan_reviewed_at: 2026-08-02T14:47:42Z
