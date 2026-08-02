@@ -60,7 +60,7 @@ const NO_STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set<string>([
   'step-3.5-flash-2603',
 ]);
 
-function effectiveFormat(model: string, provider: string, requested: ResponseFormat): ResponseFormat {
+export function effectiveFormat(model: string, provider: string, requested: ResponseFormat): ResponseFormat {
   if (requested !== 'json_schema' && requested !== 'json_object') return requested;
   // 1. Provider-qualified key wins (e.g. "groq:llama-3.3-70b-versatile")
   if (NO_JSON_SCHEMA_MODELS.has(`${provider}:${model}`)) return 'json_object';

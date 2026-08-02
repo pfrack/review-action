@@ -405,9 +405,9 @@ None — no runtime API, schema, or config changes. The only source edits are tw
 
 #### Automated
 
-- [ ] 2.1 `index.ts` `run` exported (no other change)
-- [ ] 2.2 `run — orchestrator` passes; asserts posted comment contains `### AI Code Review` + finding (success case)
-- [ ] 2.3 `run — orchestrator` early-return case asserts `No reviewable files found` comment
+- [x] 2.1 `index.ts` `run` exported (no other change) — 610ffa3
+- [x] 2.2 `run — orchestrator` passes; asserts posted comment contains `### AI Code Review` + finding (success case) — 610ffa3
+- [x] 2.3 `run — orchestrator` early-return case asserts `No reviewable files found` comment — 610ffa3
 
 #### Manual
 
