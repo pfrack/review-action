@@ -598,7 +598,13 @@ async function run(): Promise<void> {
   const rules = parseRules(config.customRules);
   const rulesValidation = validateRules(rules);
   if (!rulesValidation.valid) for (const err of rulesValidation.errors) core.warning(err);
-  if (rules.length > 0) core.info(`Loaded ${rules.length} custom rule(s)`);
+  const filteredRules = rulesValidation.blockedRules.length > 0
+    ? rules.filter((_, idx) => !rulesValidation.blockedRules.includes(idx))
+    : rules;
+  if (rulesValidation.blockedRules.length > 0) {
+    core.info(`Blocked ${rulesValidation.blockedRules.length} custom rule(s) matching prompt-injection patterns`);
+  }
+  if (filteredRules.length > 0) core.info(`Loaded ${filteredRules.length} custom rule(s)`);
   const reviewStartTime = Date.now();
   let filesDiff: Record<string, string>;
   try {
@@ -627,7 +633,7 @@ async function run(): Promise<void> {
   const batches = filesToReview.length > 50 ? batchFiles(filesDiffMap, 50) : [];
   const useBatching = batches.length > 1;
   core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
-  const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules);
+  const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules);
   const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
   const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
   await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });

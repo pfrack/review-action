@@ -222,9 +222,14 @@ export const BASE_SYSTEM_PROMPT = GENERIC_PROMPT;
 export function buildSystemMessage(promptMode: string, systemPrompt: string, language?: string, rules?: Rule[]): string {
   const base = buildSystemPrompt(language, rules);
   if (promptMode === 'replace') {
-    return systemPrompt
-      ? `${systemPrompt}\n\n## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}`
-      : base;
+    if (!systemPrompt) return base;
+    const languageSecurity = language ? languagePrompts[language] : undefined;
+    const securitySection = languageSecurity
+      ? `\n\n## Language-specific security focus (${language})\n${languageSecurity}`
+      : '';
+    const rulesSection = formatRulesForPrompt(rules || []);
+    const rulesBlock = rulesSection ? `${rulesSection}\n\n` : '';
+    return `${systemPrompt}\n\n${rulesBlock}## Framework guidance\n${JSON_SCHEMA_DEFINITION}\n${SEVERITY_GUIDANCE}${securitySection}`;
   }
   return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
 }

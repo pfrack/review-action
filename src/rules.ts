@@ -46,10 +46,12 @@ const INJECTION_PATTERNS = [
 export interface RulesValidation {
   valid: boolean;
   errors: string[];
+  blockedRules: number[];
 }
 
 export function validateRules(rules: Rule[]): RulesValidation {
   const errors: string[] = [];
+  const blockedRules: number[] = [];
 
   for (let i = 0; i < rules.length; i++) {
     const rule = rules[i];
@@ -59,11 +61,13 @@ export function validateRules(rules: Rule[]): RulesValidation {
     for (const pattern of INJECTION_PATTERNS) {
       if (pattern.test(rule.description)) {
         errors.push(`Rule ${i + 1} contains potential prompt injection`);
+        blockedRules.push(i);
+        break;
       }
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: errors.length === 0, errors, blockedRules };
 }
 
 export function formatRulesForPrompt(rules: Rule[]): string {
