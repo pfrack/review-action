@@ -8,32 +8,31 @@ interface CodeContextResult {
   reason?: string;
 }
 
+function nameInDiff(diff: string, name: string): boolean {
+  const MAX_NAME_LENGTH = 80;
+  const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+  const lowerDiff = diff.toLowerCase();
+  const lowerName = safeName.toLowerCase();
+  let idx = lowerDiff.indexOf(lowerName);
+  while (idx !== -1) {
+    const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+    const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+    if (before && after) return true;
+    idx = lowerDiff.indexOf(lowerName, idx + 1);
+  }
+  return false;
+}
+
 export function validateCodeContext(finding: ReviewFinding, diff: string, dropUnreferenced = true): CodeContextResult {
   const issue = finding.issue;
   const warnings: string[] = [];
-
-  function nameInDiff(name: string): boolean {
-    const MAX_NAME_LENGTH = 80;
-    const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-    const lowerDiff = diff.toLowerCase();
-    const lowerName = safeName.toLowerCase();
-    let idx = 0;
-    while (true) {
-      idx = lowerDiff.indexOf(lowerName, idx);
-      if (idx === -1) return false;
-      const before = idx === 0 || !/\w/.test(diff[idx - 1]);
-      const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
-      if (before && after) return true;
-      idx += 1;
-    }
-  }
 
   // Check for backtick-wrapped identifiers (most reliable)
   const backtickRefs = issue.match(/`(\w+)`/g);
   if (backtickRefs) {
     for (const ref of backtickRefs) {
       const name = ref.slice(1, -1);
-      if (name.length > 2 && !nameInDiff(name)) {
+      if (name.length > 2 && !nameInDiff(diff, name)) {
         warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
       }
     }
@@ -43,7 +42,7 @@ export function validateCodeContext(finding: ReviewFinding, diff: string, dropUn
   const explicitRef = issue.match(/(?:function|variable|field|param|class|struct|type|interface)\s+(\w+)/i);
   if (explicitRef) {
     const name = explicitRef[1];
-    if (name.length > 2 && !nameInDiff(name)) {
+    if (name.length > 2 && !nameInDiff(diff, name)) {
       warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
     }
   }
@@ -81,21 +80,6 @@ function findContradictedNegativeClaims(issue: string, diff: string): string[] {
   const contradicted: string[] = [];
   const seen = new Set<string>();
 
-  function nameInDiff(name: string): boolean {
-    const MAX_NAME_LENGTH = 80;
-    const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-    const lowerDiff = diff.toLowerCase();
-    const lowerName = safeName.toLowerCase();
-    let idx = lowerDiff.indexOf(lowerName);
-    while (idx !== -1) {
-      const before = idx === 0 || !/\w/.test(diff[idx - 1]);
-      const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
-      if (before && after) return true;
-      idx = lowerDiff.indexOf(lowerName, idx + 1);
-    }
-    return false;
-  }
-
   for (const sentence of issue.split(/[.!?\n]+/)) {
     if (!NEGATIVE_CLAIM_RE.test(sentence)) continue;
     const backtickRefs = sentence.match(/`(\w+)`/g) || [];
@@ -103,7 +87,7 @@ function findContradictedNegativeClaims(issue: string, diff: string): string[] {
       const name = ref.slice(1, -1);
       if (name.length <= 2) continue;
       if (seen.has(name)) continue;
-      if (!nameInDiff(name)) continue;
+      if (!nameInDiff(diff, name)) continue;
       contradicted.push(name);
       seen.add(name);
     }

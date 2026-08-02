@@ -381,6 +381,9 @@ function validateConfig(config: Config): void {
     }
     validateProviderUrl(config.customApiUrl, 'custom_api_url');
   }
+  if (config.customModelsBaseUrl && config.customModelsBaseUrl !== config.customApiUrl) {
+    validateProviderUrl(config.customModelsBaseUrl, 'custom_models_base_url');
+  }
   if (config.openRouterBaseUrl) validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
   if (config.kiloBaseUrl) validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
   if (config.baseURL) validateProviderUrl(config.baseURL, 'nim_base_url');
@@ -579,7 +582,7 @@ async function writeMetrics(metrics: ReviewMetrics): Promise<void> {
   }
 }
 
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
   const config = await loadConfig();
   validateConfig(config);
   const clients = buildClients(config);

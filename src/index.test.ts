@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
 import { validateFindings } from './review.js';
@@ -7,7 +10,7 @@ import { severityTally } from './render.js';
 import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, type BatchResult, withAggregateTimeout, executeReview, prioritizeChain } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, type BatchResult, withAggregateTimeout, executeReview, prioritizeChain, run } from './index.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { type FileBatch } from './batching.js';
 import { type Config } from './config.js';
@@ -61,11 +64,18 @@ describe('buildRawOutputBody — XSS escaping', () => {
 });
 
 describe('OpenAIClient integration', () => {
-  it('returns parsed content on successful chat', async () => {
+  it('returns parsed ReviewJsonSchema-shaped content on successful chat', async () => {
     const mock = await startMockServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        choices: [{ message: { content: 'test response' } }],
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              findings: [{ file: 'src/a.ts', severity: 'Warning', issue: 'unused var', critical_action: 'not applicable', warning_action: 'remove it', suggestion_action: 'not applicable' }],
+              summary: 'review summary',
+            }),
+          },
+        }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }));
     });
@@ -76,7 +86,9 @@ describe('OpenAIClient integration', () => {
         schema: ReviewJsonSchema,
         format: 'json_schema',
       });
-      assert.ok(result.content.length > 0);
+      const parsed = JSON.parse(result.content);
+      assert.ok(Array.isArray(parsed.findings), 'content must parse to an object with a findings array');
+      assert.strictEqual(typeof parsed.summary, 'string', 'content must include a summary string');
     } finally {
       mock.close();
     }
@@ -652,5 +664,124 @@ describe('runModelChainForBatch parallel logging', () => {
 
     const parallelLog = messages.find(m => m.includes('Parallel:'));
     assert.strictEqual(parallelLog, undefined, 'no parallel log when only one model in chain');
+  });
+});
+
+describe('run — orchestrator', () => {
+  const REPO = 'octocat/hello';
+  const PR = 42;
+  const DIFF = `diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,5 +1,6 @@
+ line1
++added line
+ line3
+ line4
+ line5
+`;
+  const REVIEW = {
+    findings: [
+      { file: 'src/a.ts', line_start: 2, severity: 'Warning', issue: 'unused variable', critical_action: 'not applicable', warning_action: 'remove unused variable', suggestion_action: 'not applicable' },
+    ],
+    summary: 'review summary',
+  };
+
+  function makeGithubFetch(captured: string[], mockUrl: string): typeof fetch {
+    const realFetch = globalThis.fetch;
+    return async (input: any, init?: any) => {
+      const url = typeof input === 'string' ? input : (input?.url ?? '');
+      if (url.includes(mockUrl)) return realFetch(input, init);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      const headers = init?.headers ?? {};
+      const accept = headers && (headers['Accept'] ?? headers['accept'] ?? '');
+      const acceptStr = Array.isArray(accept) ? accept.join(' ') : String(accept ?? '');
+      if (method === 'GET' && url === `https://api.github.com/repos/${REPO}/pulls/${PR}` && acceptStr.includes('v3.diff')) {
+        return new Response(DIFF, { status: 200 });
+      }
+      if (method === 'GET' && url.includes(`/issues/${PR}/comments`)) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (method === 'GET' && url.includes(`/pulls/${PR}/reviews`)) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (method === 'POST' && url.endsWith(`/issues/${PR}/comments`)) {
+        const body = typeof init?.body === 'string' ? init.body : '';
+        captured.push(body);
+        return new Response(JSON.stringify({ id: 1 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (method === 'GET') {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+  }
+
+  async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+    const orig: Record<string, string | undefined> = {};
+    for (const key of Object.keys(env)) {
+      orig[key] = process.env[key];
+      if (env[key] === undefined) delete process.env[key];
+      else process.env[key] = env[key];
+    }
+    try {
+      return await fn();
+    } finally {
+      for (const key of Object.keys(orig)) {
+        if (orig[key] === undefined) delete process.env[key];
+        else process.env[key] = orig[key];
+      }
+    }
+  }
+
+  async function runWithEnv(env: Record<string, string | undefined>, captured: string[]): Promise<void> {
+    process.env.NODE_TEST_CONTEXT = '1';
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(REVIEW) } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }));
+    });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = makeGithubFetch(captured, mock.url);
+    const eventPath = join(tmpdir(), `event-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    try {
+      await withEnv({
+        GITHUB_REPOSITORY: REPO,
+        GITHUB_TOKEN: 'fake-token',
+        GITHUB_EVENT_PATH: eventPath,
+        INPUT_CUSTOM_API_URL: mock.url,
+        INPUT_CUSTOM_MODEL: 'mock-model',
+        INPUT_CUSTOM_API_KEY: 'test-key',
+        INPUT_MAX_FILES: '100',
+        INPUT_REVALIDATE_FINDINGS: 'false',
+        ...env,
+      }, async () => {
+        writeFileSync(eventPath, JSON.stringify({ pull_request: { number: PR, head: { sha: 'abc123' } } }));
+        await run();
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+      delete process.env.NODE_TEST_CONTEXT;
+      mock.close();
+      try { unlinkSync(eventPath); } catch { /* ignore */ }
+    }
+  }
+
+  it('posts the AI Code Review comment end-to-end', async () => {
+    const captured: string[] = [];
+    await runWithEnv({}, captured);
+    assert.strictEqual(captured.length, 1, 'exactly one comment should be posted');
+    const body = captured[0];
+    assert.ok(body.includes('### AI Code Review'), 'comment must carry the AI Code Review marker');
+    assert.ok(body.includes('unused variable'), 'comment must include the finding text');
+  });
+
+  it('posts a no-reviewable-files comment when all files are excluded', async () => {
+    const captured: string[] = [];
+    await runWithEnv({ INPUT_EXCLUDE_PATTERNS: '*.ts' }, captured);
+    assert.strictEqual(captured.length, 1);
+    assert.ok(captured[0].includes('No reviewable files found'), 'excluded-files path must post the no-reviewable-files comment');
   });
 });

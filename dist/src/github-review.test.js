@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment, createComment, findExistingComment } from './github-review.js';
+import { RetryableError } from './retry.js';
 function makeFinding(overrides = {}) {
     return {
         file: 'src/main.ts',
@@ -285,6 +286,194 @@ describe('deleteReview', () => {
             await deleteReview('owner/repo', 42, 200, 'token');
             assert.ok(capturedUrl.includes('/pulls/42/reviews/200'));
             assert.strictEqual(capturedMethod, 'DELETE');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('createComment', () => {
+    const originalFetch = globalThis.fetch;
+    it('posts a comment via POST to issues endpoint', async () => {
+        let capturedUrl = '';
+        let capturedMethod = '';
+        globalThis.fetch = (async (url, init) => {
+            capturedUrl = url;
+            capturedMethod = init?.method || '';
+            return { ok: true };
+        });
+        try {
+            await createComment('owner/repo', 42, 'token', 'test body');
+            assert.ok(capturedUrl.includes('/issues/42/comments'));
+            assert.strictEqual(capturedMethod, 'POST');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('handles 404 gracefully — logs warning and does not throw', async () => {
+        globalThis.fetch = (async () => ({
+            ok: false,
+            status: 404,
+            text: async () => 'Not Found',
+        }));
+        try {
+            await createComment('owner/repo', 42, 'token', 'test body');
+            // Should not throw
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('retries on 500 then succeeds', async () => {
+        let callCount = 0;
+        globalThis.fetch = (async () => {
+            callCount++;
+            if (callCount === 1) {
+                return {
+                    ok: false,
+                    status: 500,
+                    text: async () => 'Internal Server Error',
+                };
+            }
+            return { ok: true };
+        });
+        try {
+            await createComment('owner/repo', 42, 'token', 'test body');
+            assert.strictEqual(callCount, 2, 'should have retried once after 500');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('safeParseJsonBody — GitHub .json() guard', () => {
+    const originalFetch = globalThis.fetch;
+    it('createReview throws RetryableError 502 on non-JSON 200 body', async () => {
+        globalThis.fetch = (async () => ({
+            ok: true,
+            status: 200,
+            json: async () => { throw new SyntaxError('Unexpected token <'); },
+        }));
+        try {
+            await assert.rejects(() => createReview('owner/repo', 42, 'abc123', [], 'summary', 'token'), (err) => {
+                assert.ok(err instanceof RetryableError);
+                assert.strictEqual(err.status, 502);
+                assert.ok(err.message.includes('non-JSON'));
+                return true;
+            });
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('findExistingReview throws RetryableError 502 on non-JSON 200 body', async () => {
+        globalThis.fetch = (async () => ({
+            ok: true,
+            status: 200,
+            json: async () => { throw new SyntaxError('Unexpected token <'); },
+        }));
+        try {
+            await assert.rejects(() => findExistingReview('owner/repo', 42, 'token'), (err) => {
+                assert.ok(err instanceof RetryableError);
+                assert.strictEqual(err.status, 502);
+                return true;
+            });
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('findExistingComment throws RetryableError 502 on non-JSON 200 body', async () => {
+        globalThis.fetch = (async () => ({
+            ok: true,
+            status: 200,
+            json: async () => { throw new SyntaxError('Unexpected token <'); },
+        }));
+        try {
+            await assert.rejects(() => findExistingComment('owner/repo', 42, 'token'), (err) => {
+                assert.ok(err instanceof RetryableError);
+                assert.strictEqual(err.status, 502);
+                return true;
+            });
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('findExistingReview — pagination', () => {
+    const originalFetch = globalThis.fetch;
+    it('scans multiple pages and returns the page-2 marker id', async () => {
+        let fetches = 0;
+        globalThis.fetch = (async (url) => {
+            fetches++;
+            const reviews = url.includes('page=2')
+                ? [{ id: 200, body: '### AI Code Review\nFindings' }]
+                : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other review' }));
+            return { ok: true, json: async () => reviews };
+        });
+        try {
+            const reviewId = await findExistingReview('owner/repo', 42, 'token');
+            assert.strictEqual(reviewId, 200);
+            assert.strictEqual(fetches, 2, 'should have fetched exactly 2 pages');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('returns null when no page contains the marker', async () => {
+        let fetches = 0;
+        globalThis.fetch = (async (url) => {
+            fetches++;
+            const reviews = url.includes('page=2')
+                ? []
+                : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other review' }));
+            return { ok: true, json: async () => reviews };
+        });
+        try {
+            const reviewId = await findExistingReview('owner/repo', 42, 'token');
+            assert.strictEqual(reviewId, null);
+            assert.strictEqual(fetches, 2, 'page-2 empty terminates the scan');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('findExistingComment — pagination', () => {
+    const originalFetch = globalThis.fetch;
+    it('scans multiple pages and returns the page-2 marker id', async () => {
+        let fetches = 0;
+        globalThis.fetch = (async (url) => {
+            fetches++;
+            const comments = url.includes('page=2')
+                ? [{ id: 200, body: '### AI Code Review\nFindings' }]
+                : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other comment' }));
+            return { ok: true, json: async () => comments };
+        });
+        try {
+            const commentId = await findExistingComment('owner/repo', 42, 'token');
+            assert.strictEqual(commentId, 200);
+            assert.strictEqual(fetches, 2, 'should have fetched exactly 2 pages');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('returns null when no page contains the marker', async () => {
+        let fetches = 0;
+        globalThis.fetch = (async (url) => {
+            fetches++;
+            const comments = url.includes('page=2')
+                ? []
+                : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other comment' }));
+            return { ok: true, json: async () => comments };
+        });
+        try {
+            const commentId = await findExistingComment('owner/repo', 42, 'token');
+            assert.strictEqual(commentId, null);
+            assert.strictEqual(fetches, 2, 'page-2 empty terminates the scan');
         }
         finally {
             globalThis.fetch = originalFetch;

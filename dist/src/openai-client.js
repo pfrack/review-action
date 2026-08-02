@@ -58,7 +58,7 @@ const NO_STRUCTURED_OUTPUT_MODELS = new Set([
     'step-3.5-flash',
     'step-3.5-flash-2603',
 ]);
-function effectiveFormat(model, provider, requested) {
+export function effectiveFormat(model, provider, requested) {
     if (requested !== 'json_schema' && requested !== 'json_object')
         return requested;
     // 1. Provider-qualified key wins (e.g. "groq:llama-3.3-70b-versatile")
@@ -299,9 +299,9 @@ export class OpenAIClient {
         }
         return {
             content,
-            usage: data.usage,
+            usage: data.usage ?? { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
             latency: Date.now() - start,
-            finishReason: choice.finish_reason,
+            finishReason: choice.finish_reason ?? null,
         };
     }
     async *chatStream(model, messages, opts = {}) {

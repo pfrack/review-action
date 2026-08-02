@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { withRetry } from './retry.js';
+import { withRetry, RetryableError } from './retry.js';
+import { safeParseJsonBody } from './utils.js';
 import { deterministicMatch as benchDeterministicMatch } from './bench-entry.js';
 import { patchScoresTable } from './bench-reorder.js';
 export { patchScoresTable };
@@ -9,10 +10,10 @@ export async function fetchLeaderboard() {
     const resp = await withRetry(async () => {
         const r = await fetch(url, { signal: AbortSignal.timeout(30_000) });
         if (!r.ok)
-            throw new Error(`SWE-bench API returned ${r.status}`);
+            throw new RetryableError(`SWE-bench API returned ${r.status}`, r.status);
         return r;
     });
-    const data = await resp.json();
+    const data = await safeParseJsonBody(resp, 'SWE-bench API');
     return (data.models || [])
         .filter(m => typeof m.score === 'number' && m.model_id)
         .sort((a, b) => b.score - a.score)

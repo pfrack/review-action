@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { OpenAIClient } from './openai-client.js';
 import { ReviewJsonSchema } from './review-schema.js';
 import { validateFindings } from './review.js';
@@ -7,7 +10,7 @@ import { severityTally } from './render.js';
 import { buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, withAggregateTimeout } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, withAggregateTimeout, executeReview, prioritizeChain, run } from './index.js';
 describe('buildSystemMessage', () => {
     it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
         const msg = buildSystemMessage('append', '');
@@ -48,11 +51,18 @@ describe('buildRawOutputBody — XSS escaping', () => {
     });
 });
 describe('OpenAIClient integration', () => {
-    it('returns parsed content on successful chat', async () => {
+    it('returns parsed ReviewJsonSchema-shaped content on successful chat', async () => {
         const mock = await startMockServer((req, res) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-                choices: [{ message: { content: 'test response' } }],
+                choices: [{
+                        message: {
+                            content: JSON.stringify({
+                                findings: [{ file: 'src/a.ts', severity: 'Warning', issue: 'unused var', critical_action: 'not applicable', warning_action: 'remove it', suggestion_action: 'not applicable' }],
+                                summary: 'review summary',
+                            }),
+                        },
+                    }],
                 usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
             }));
         });
@@ -62,7 +72,9 @@ describe('OpenAIClient integration', () => {
                 schema: ReviewJsonSchema,
                 format: 'json_schema',
             });
-            assert.ok(result.content.length > 0);
+            const parsed = JSON.parse(result.content);
+            assert.ok(Array.isArray(parsed.findings), 'content must parse to an object with a findings array');
+            assert.strictEqual(typeof parsed.summary, 'string', 'content must include a summary string');
         }
         finally {
             mock.close();
@@ -415,5 +427,270 @@ describe('buildClients — custom models plural without singular', () => {
         });
         const clients = buildClients(config);
         assert.strictEqual(clients.custom, null);
+    });
+});
+describe('prioritizeChain', () => {
+    it('does not change chain order regardless of probe results', async () => {
+        const chain = [
+            { id: 'model-slow', provider: 'nim' },
+            { id: 'model-fast', provider: 'mistral' },
+            { id: 'model-medium', provider: 'groq' },
+        ];
+        const originalOrder = chain.map(m => m.id);
+        const clients = {
+            nim: { probeModel: async () => true },
+            mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } },
+            groq: { probeModel: async () => true },
+            openrouter: null, kilocode: null, custom: null,
+        };
+        await prioritizeChain(chain, clients);
+        assert.deepStrictEqual(chain.map(m => m.id), originalOrder, 'chain order must not change after prioritizeChain');
+    });
+    it('logs probe results without reordering', async () => {
+        const chain = [
+            { id: 'head-model', provider: 'nim' },
+            { id: 'other-model', provider: 'mistral' },
+        ];
+        const originalOrder = chain.map(m => m.id);
+        const clients = {
+            nim: { probeModel: async () => true },
+            mistral: { probeModel: async () => true },
+            groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        await prioritizeChain(chain, clients);
+        assert.deepStrictEqual(chain.map(m => m.id), originalOrder);
+    });
+});
+describe('executeReview — batch loop resilience', () => {
+    it('continues to next batch when one batch throws', async () => {
+        // Build a diffs map where accessing 'throw.ts' throws — simulating
+        // an unexpected error inside runModelChainForBatch that escapes
+        // attemptModel's try/catch (e.g., a bug in chain setup).
+        const throwingDiffs = {};
+        Object.defineProperty(throwingDiffs, 'throw.ts', {
+            get() { throw new Error('simulated unexpected error'); },
+            enumerable: true,
+        });
+        throwingDiffs['b.ts'] = 'normal diff';
+        throwingDiffs['c.ts'] = 'normal diff';
+        const batch1 = { files: ['throw.ts', 'b.ts'], diffs: throwingDiffs };
+        const batch2 = { files: ['c.ts'], diffs: { 'c.ts': 'normal diff' } };
+        const config = makeConfig({ chainTimeout: 0 });
+        const callCounts = {};
+        const batch2Result = {
+            content: JSON.stringify({
+                findings: [{ file: 'c.ts', severity: 'Suggestion', issue: 'test finding', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'fix it' }],
+                summary: 'batch 2 summary',
+            }),
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            latency: 100,
+            finishReason: 'stop',
+        };
+        const clients = {
+            nim: makeMockClient(() => ({ response: batch2Result }), callCounts),
+            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        const chain = [{ id: 'model-a', provider: 'nim' }];
+        const result = await executeReview(chain, clients, ['throw.ts', 'b.ts', 'c.ts'], throwingDiffs, [batch1, batch2], 'system', config);
+        // Batch 2 should still produce findings
+        assert.ok(result.review.findings.length > 0, 'batch 2 findings should be present');
+        assert.strictEqual(result.usedModel, 'model-a');
+        assert.strictEqual(result.batchCount, 2);
+        assert.strictEqual(callCounts['model-a'], 1, 'batch 2 should have called model-a');
+    });
+    it('with chainTimeout > 0 still catches throws from runBatch', async () => {
+        const throwingDiffs = {};
+        Object.defineProperty(throwingDiffs, 'throw.ts', {
+            get() { throw new Error('simulated unexpected error'); },
+            enumerable: true,
+        });
+        const batch1 = { files: ['throw.ts'], diffs: throwingDiffs };
+        const config = makeConfig({ chainTimeout: 300 });
+        const clients = {
+            nim: makeMockClient(() => ({ response: VALID_CHAT_RESULT })),
+            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        const chain = [{ id: 'model-a', provider: 'nim' }];
+        const result = await executeReview(chain, clients, ['throw.ts'], throwingDiffs, [batch1], 'system', config);
+        assert.strictEqual(result.review.findings.length, 0);
+        assert.strictEqual(result.batchCount, 1);
+    });
+});
+describe('runModelChainForBatch parallel logging', () => {
+    it('logs winner and cancelled model ids in parallel mode', async () => {
+        const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+        const chain = [
+            { id: 'slow-model', provider: 'nim' },
+            { id: 'fast-model', provider: 'nim' },
+        ];
+        const clients = {
+            nim: makeMockClient((model) => {
+                if (model === 'slow-model')
+                    return { delayMs: 2000 };
+                return {};
+            }),
+            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        const messages = [];
+        const originalWrite = process.stdout.write.bind(process.stdout);
+        process.stdout.write = (data) => {
+            if (typeof data === 'string')
+                messages.push(data);
+            return true;
+        };
+        try {
+            await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
+        }
+        finally {
+            process.stdout.write = originalWrite;
+        }
+        const parallelLog = messages.find(m => m.includes('Parallel:') && m.includes('fast-model') && m.includes('cancelled'));
+        assert.ok(parallelLog, `expected parallel log with winner+cancelled, got: ${JSON.stringify(messages)}`);
+    });
+    it('does not log parallel winner when only one model in chain', async () => {
+        const config = makeConfig({ parallelAttempts: 3, parallelThreshold: 0 });
+        const chain = [{ id: 'single-model', provider: 'nim' }];
+        const clients = {
+            nim: makeMockClient(() => ({})),
+            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        };
+        const messages = [];
+        const originalWrite = process.stdout.write.bind(process.stdout);
+        process.stdout.write = (data) => {
+            if (typeof data === 'string')
+                messages.push(data);
+            return true;
+        };
+        try {
+            await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
+        }
+        finally {
+            process.stdout.write = originalWrite;
+        }
+        const parallelLog = messages.find(m => m.includes('Parallel:'));
+        assert.strictEqual(parallelLog, undefined, 'no parallel log when only one model in chain');
+    });
+});
+describe('run — orchestrator', () => {
+    const REPO = 'octocat/hello';
+    const PR = 42;
+    const DIFF = `diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,5 +1,6 @@
+ line1
++added line
+ line3
+ line4
+ line5
+`;
+    const REVIEW = {
+        findings: [
+            { file: 'src/a.ts', line_start: 2, severity: 'Warning', issue: 'unused variable', critical_action: 'not applicable', warning_action: 'remove unused variable', suggestion_action: 'not applicable' },
+        ],
+        summary: 'review summary',
+    };
+    function makeGithubFetch(captured, mockUrl) {
+        const realFetch = globalThis.fetch;
+        return async (input, init) => {
+            const url = typeof input === 'string' ? input : (input?.url ?? '');
+            if (url.includes(mockUrl))
+                return realFetch(input, init);
+            const method = (init?.method ?? 'GET').toUpperCase();
+            const headers = init?.headers ?? {};
+            const accept = headers && (headers['Accept'] ?? headers['accept'] ?? '');
+            const acceptStr = Array.isArray(accept) ? accept.join(' ') : String(accept ?? '');
+            if (method === 'GET' && url === `https://api.github.com/repos/${REPO}/pulls/${PR}` && acceptStr.includes('v3.diff')) {
+                return new Response(DIFF, { status: 200 });
+            }
+            if (method === 'GET' && url.includes(`/issues/${PR}/comments`)) {
+                return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'GET' && url.includes(`/pulls/${PR}/reviews`)) {
+                return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'POST' && url.endsWith(`/issues/${PR}/comments`)) {
+                const body = typeof init?.body === 'string' ? init.body : '';
+                captured.push(body);
+                return new Response(JSON.stringify({ id: 1 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'GET') {
+                return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+        };
+    }
+    async function withEnv(env, fn) {
+        const orig = {};
+        for (const key of Object.keys(env)) {
+            orig[key] = process.env[key];
+            if (env[key] === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = env[key];
+        }
+        try {
+            return await fn();
+        }
+        finally {
+            for (const key of Object.keys(orig)) {
+                if (orig[key] === undefined)
+                    delete process.env[key];
+                else
+                    process.env[key] = orig[key];
+            }
+        }
+    }
+    async function runWithEnv(env, captured) {
+        process.env.NODE_TEST_CONTEXT = '1';
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                choices: [{ message: { content: JSON.stringify(REVIEW) } }],
+                usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            }));
+        });
+        const realFetch = globalThis.fetch;
+        globalThis.fetch = makeGithubFetch(captured, mock.url);
+        const eventPath = join(tmpdir(), `event-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+        try {
+            await withEnv({
+                GITHUB_REPOSITORY: REPO,
+                GITHUB_TOKEN: 'fake-token',
+                GITHUB_EVENT_PATH: eventPath,
+                INPUT_CUSTOM_API_URL: mock.url,
+                INPUT_CUSTOM_MODEL: 'mock-model',
+                INPUT_CUSTOM_API_KEY: 'test-key',
+                INPUT_MAX_FILES: '100',
+                INPUT_REVALIDATE_FINDINGS: 'false',
+                ...env,
+            }, async () => {
+                writeFileSync(eventPath, JSON.stringify({ pull_request: { number: PR, head: { sha: 'abc123' } } }));
+                await run();
+            });
+        }
+        finally {
+            globalThis.fetch = realFetch;
+            delete process.env.NODE_TEST_CONTEXT;
+            mock.close();
+            try {
+                unlinkSync(eventPath);
+            }
+            catch { /* ignore */ }
+        }
+    }
+    it('posts the AI Code Review comment end-to-end', async () => {
+        const captured = [];
+        await runWithEnv({}, captured);
+        assert.strictEqual(captured.length, 1, 'exactly one comment should be posted');
+        const body = captured[0];
+        assert.ok(body.includes('### AI Code Review'), 'comment must carry the AI Code Review marker');
+        assert.ok(body.includes('unused variable'), 'comment must include the finding text');
+    });
+    it('posts a no-reviewable-files comment when all files are excluded', async () => {
+        const captured = [];
+        await runWithEnv({ INPUT_EXCLUDE_PATTERNS: '*.ts' }, captured);
+        assert.strictEqual(captured.length, 1);
+        assert.ok(captured[0].includes('No reviewable files found'), 'excluded-files path must post the no-reviewable-files comment');
     });
 });

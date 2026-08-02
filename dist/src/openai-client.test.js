@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { OpenAIClient, extractJsonFromText, stripThinkingContent } from './openai-client.js';
+import { OpenAIClient, extractJsonFromText, stripThinkingContent, effectiveFormat, sanitizeErrorBody } from './openai-client.js';
 import { RetryableError } from './retry.js';
 import { startMockServer } from './test-utils.js';
 describe('OpenAIClient provider label detection', () => {
@@ -541,5 +541,93 @@ describe('OpenAIClient signal/timeout', () => {
         finally {
             mock.close();
         }
+    });
+    it('chat() defaults missing usage to zeros', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+            }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.chat('model', [{ role: 'user', content: 'hi' }]);
+            assert.strictEqual(result.content, 'ok');
+            assert.deepStrictEqual(result.usage, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 });
+            assert.strictEqual(result.finishReason, 'stop');
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('chat() defaults missing finish_reason to null (no false truncation)', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                choices: [{ message: { content: 'ok' } }],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.chat('model', [{ role: 'user', content: 'hi' }]);
+            assert.strictEqual(result.content, 'ok');
+            assert.strictEqual(result.finishReason, null);
+        }
+        finally {
+            mock.close();
+        }
+    });
+});
+describe('OpenAIClient listModels', () => {
+    it('returns the model id list from /models', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ data: [{ id: 'a' }, { id: 'b' }] }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const models = await client.listModels();
+            assert.deepStrictEqual(models, ['a', 'b']);
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('throws when /models is not ok', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'boom' }));
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            await assert.rejects(() => client.listModels(), (err) => err.message.includes('/models returned 500'));
+        }
+        finally {
+            mock.close();
+        }
+    });
+});
+describe('sanitizeErrorBody', () => {
+    it('redacts Bearer tokens', () => {
+        assert.strictEqual(sanitizeErrorBody('Bearer secret123'), 'Bearer [REDACTED]');
+    });
+    it('redacts api key values', () => {
+        const out = sanitizeErrorBody('api_key: "abc"');
+        assert.ok(!out.includes('abc'), 'api key value must be removed');
+    });
+});
+describe('effectiveFormat', () => {
+    it('downgrades json_schema to json_object for known groq llama model', () => {
+        assert.strictEqual(effectiveFormat('llama-3.3-70b-versatile', 'groq', 'json_schema'), 'json_object');
+    });
+    it('falls through to text for no-structured-output models', () => {
+        assert.strictEqual(effectiveFormat('step-3.5-flash', 'openrouter', 'json_schema'), 'text');
+    });
+    it('passes json_schema through for unsupported-unknown models', () => {
+        assert.strictEqual(effectiveFormat('gpt-4', 'openai', 'json_schema'), 'json_schema');
+    });
+    it('returns text unchanged when text is requested', () => {
+        assert.strictEqual(effectiveFormat('x', 'y', 'text'), 'text');
     });
 });

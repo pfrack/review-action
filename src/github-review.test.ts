@@ -428,8 +428,88 @@ describe('safeParseJsonBody — GitHub .json() guard', () => {
           assert.ok(err instanceof RetryableError);
           assert.strictEqual(err.status, 502);
           return true;
-        },
+        }
       );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('findExistingReview — pagination', () => {
+  const originalFetch = globalThis.fetch;
+
+  it('scans multiple pages and returns the page-2 marker id', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (url: string) => {
+      fetches++;
+      const reviews = url.includes('page=2')
+        ? [{ id: 200, body: '### AI Code Review\nFindings' }]
+        : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other review' }));
+      return { ok: true, json: async () => reviews } as any;
+    }) as any;
+    try {
+      const reviewId = await findExistingReview('owner/repo', 42, 'token');
+      assert.strictEqual(reviewId, 200);
+      assert.strictEqual(fetches, 2, 'should have fetched exactly 2 pages');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns null when no page contains the marker', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (url: string) => {
+      fetches++;
+      const reviews = url.includes('page=2')
+        ? []
+        : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other review' }));
+      return { ok: true, json: async () => reviews } as any;
+    }) as any;
+    try {
+      const reviewId = await findExistingReview('owner/repo', 42, 'token');
+      assert.strictEqual(reviewId, null);
+      assert.strictEqual(fetches, 2, 'page-2 empty terminates the scan');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('findExistingComment — pagination', () => {
+  const originalFetch = globalThis.fetch;
+
+  it('scans multiple pages and returns the page-2 marker id', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (url: string) => {
+      fetches++;
+      const comments = url.includes('page=2')
+        ? [{ id: 200, body: '### AI Code Review\nFindings' }]
+        : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other comment' }));
+      return { ok: true, json: async () => comments } as any;
+    }) as any;
+    try {
+      const commentId = await findExistingComment('owner/repo', 42, 'token');
+      assert.strictEqual(commentId, 200);
+      assert.strictEqual(fetches, 2, 'should have fetched exactly 2 pages');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns null when no page contains the marker', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (url: string) => {
+      fetches++;
+      const comments = url.includes('page=2')
+        ? []
+        : Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, body: 'other comment' }));
+      return { ok: true, json: async () => comments } as any;
+    }) as any;
+    try {
+      const commentId = await findExistingComment('owner/repo', 42, 'token');
+      assert.strictEqual(commentId, null);
+      assert.strictEqual(fetches, 2, 'page-2 empty terminates the scan');
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -314,15 +314,15 @@ Apply to all read sites; write sites (POST/DELETE) that don't parse the body are
 
 #### Automated
 
-- [x] 1.1 `npm run build` succeeds (tsc + ncc bundle)
-- [x] 1.2 `npm test` passes — all existing tests green
-- [x] 1.3 New test: `withRetry` retries a `RetryableError` with status 500
-- [x] 1.4 New test: `fetchLeaderboard`/`fetchSweBenchScores` retries on 5xx (mock 500 then 200)
-- [x] 1.5 New test: `getRetryDelay` returns value within `[baseExpected, baseExpected + delayMs]` with jitter
-- [x] 1.6 New test: `chat()` with missing `usage` returns defaulted usage (no crash)
-- [x] 1.7 New test: `chat()` with missing `finish_reason` returns `finishReason: null` (no false truncation)
-- [x] 1.8 New test: `executeReview` with a throwing batch continues to next batch (remaining findings present)
-- [x] 1.9 New test: `runModelChainForBatch` parallel mode logs winner and cancelled model ids
+- [x] 1.1 `npm run build` succeeds (tsc + ncc bundle) — 4b4b647
+- [x] 1.2 `npm test` passes — all existing tests green — 4b4b647
+- [x] 1.3 New test: `withRetry` retries a `RetryableError` with status 500 — 4b4b647
+- [x] 1.4 New test: `fetchLeaderboard`/`fetchSweBenchScores` retries on 5xx (mock 500 then 200) — 4b4b647
+- [x] 1.5 New test: `getRetryDelay` returns value within `[baseExpected, baseExpected + delayMs]` with jitter — 4b4b647
+- [x] 1.6 New test: `chat()` with missing `usage` returns defaulted usage (no crash) — 4b4b647
+- [x] 1.7 New test: `chat()` with missing `finish_reason` returns `finishReason: null` (no false truncation) — 4b4b647
+- [x] 1.8 New test: `executeReview` with a throwing batch continues to next batch (remaining findings present) — 4b4b647
+- [x] 1.9 New test: `runModelChainForBatch` parallel mode logs winner and cancelled model ids — 4b4b647
 
 #### Manual
 
@@ -335,11 +335,11 @@ Apply to all read sites; write sites (POST/DELETE) that don't parse the body are
 
 #### Automated
 
-- [x] 2.1 `npm run build` succeeds
-- [x] 2.2 `npm test` passes — all existing tests green
-- [x] 2.3 New test: `prioritizeChain` does not change chain order regardless of probe results
-- [x] 2.4 New test: `probeModels` still returns fastest available model (return value preserved)
-- [x] 2.5 Existing `model-chain.test.ts` probe tests pass (adjust if they asserted reorder)
+- [x] 2.1 `npm run build` succeeds — 4b4b647
+- [x] 2.2 `npm test` passes — all existing tests green — 4b4b647
+- [x] 2.3 New test: `prioritizeChain` does not change chain order regardless of probe results — 4b4b647
+- [x] 2.4 New test: `probeModels` still returns fastest available model (return value preserved) — 4b4b647
+- [x] 2.5 Existing `model-chain.test.ts` probe tests pass (adjust if they asserted reorder) — 4b4b647
 
 #### Manual
 
@@ -352,16 +352,21 @@ Apply to all read sites; write sites (POST/DELETE) that don't parse the body are
 
 #### Automated
 
-- [x] 3.1 `npm run build` succeeds
-- [x] 3.2 `npm test` passes — all existing tests green
-- [x] 3.3 New test: `github-review` read with non-JSON 200 body throws `RetryableError` 502 (not `SyntaxError`)
-- [x] 3.4 New test: `fetchLeaderboard`/`fetchSweBenchScores` with non-JSON 200 body throws `RetryableError` 502 (not `SyntaxError`)
-- [x] 3.5 New test: `createComment` on 404 logs warning and does not throw
-- [x] 3.6 New test: `loadEvent` with payload lacking `pull_request` throws event-type error
-- [x] 3.7 New test: `loadEvent` with `pull_request` but missing `number` still throws field error
+- [x] 3.1 `npm run build` succeeds — 4b4b647
+- [x] 3.2 `npm test` passes — all existing tests green — 4b4b647
+- [x] 3.3 New test: `github-review` read with non-JSON 200 body throws `RetryableError` 502 (not `SyntaxError`) — 4b4b647
+- [x] 3.4 New test: `fetchLeaderboard`/`fetchSweBenchScores` with non-JSON 200 body throws `RetryableError` 502 (not `SyntaxError`) — 4b4b647
+- [x] 3.5 New test: `createComment` on 404 logs warning and does not throw — 4b4b647
+- [x] 3.6 New test: `loadEvent` with payload lacking `pull_request` throws event-type error — 4b4b647
+- [x] 3.7 New test: `loadEvent` with `pull_request` but missing `number` still throws field error — 4b4b647
 
 #### Manual
 
 - [ ] 3.8 Action on non-PR event shows event-type error (not "No PR number")
 - [ ] 3.9 Review when GitHub returns maintenance page: retries (502) or fails with clear message, not raw `SyntaxError`
 - [ ] 3.10 No regressions in normal review posting
+
+## Addendum (post-implementation)
+
+- **Phase 3.1 `.json()` guard — implementation refinement**: The plan specified inlined try/catch at each of the 5 call sites. The implementation instead extracted a shared `safeParseJsonBody(resp, ...)` helper in `src/utils.ts:19-28` and called it from all 5 sites. Functionally equivalent (same `RetryableError(502)` on non-JSON bodies) and cleaner — one source of truth instead of 5 copies. The file also carries pre-existing utilities (`safeParseJson`, `escapeMarkdown`, `validateProviderUrl`) from Change 1 (security).
+- **`deleteReview` 404 handling (related gap closed during review)**: `deleteReview` (`src/github-review.ts`) was missing the 404-skip guard that `findExistingComment` and (post-plan) `createComment` have. Added the same `RetryableError status === 404 → core.warning + return` pattern during implementation review triage — a review comment is already gone, retrying on 404 is wasted work.

@@ -58,10 +58,19 @@ export function validateRules(rules: Rule[]): RulesValidation {
     if (rule.description.length > 500) {
       errors.push(`Rule ${i + 1} exceeds 500 characters (${rule.description.length})`);
     }
+    // Custom rules come from the trusted `custom_rules` action input, which is
+    // set in the repo's workflow YAML by the repository owner — NOT from PR
+    // content. Untrusted contributors cannot influence custom rules via a pull
+    // request, so this injection check is defense-in-depth against the owner's
+    // own accidental/mistyped rules, not an untrusted-input boundary.
+    // We therefore surface injection-like content as a warning rather than
+    // silently dropping the rule, and deliberately provide no bypass prefix.
+    // Trade-off: injection-styled rules still reach the model; the owner is
+    // warned. A strict block mode is intentionally omitted to avoid dropping
+    // legitimate rules that merely mention injection concepts.
     for (const pattern of INJECTION_PATTERNS) {
       if (pattern.test(rule.description)) {
-        errors.push(`Rule ${i + 1} contains potential prompt injection`);
-        blockedRules.push(i);
+        errors.push(`Rule ${i + 1} looks like prompt injection — review before trusting`);
         break;
       }
     }

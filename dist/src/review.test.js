@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { parseDiff, shouldExclude, parseDiffHunks, getFileHunks, validateFindings } from './review.js';
 import { loadConfig } from './config.js';
 import { renderReview, severityTally } from './render.js';
+import { withEnv } from './test-utils.js';
 describe('parseDiff', () => {
     it('splits multi-file diffs', () => {
         const raw = `diff --git a/main.go b/main.go
@@ -48,117 +49,81 @@ describe('shouldExclude', () => {
     }
 });
 describe('loadConfig — mistral fields', () => {
-    const ENV_KEYS = [
-        'INPUT_MISTRAL_API_KEY', 'INPUT_MISTRAL_MODELS',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('reads mistralApiKey and mistralModels from inputs', async () => {
-        // Save original values
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_MISTRAL_API_KEY'] = 'test-mistral-key';
-        process.env['INPUT_MISTRAL_MODELS'] = 'mistral-medium-3.5,codestral-2508';
-        process.env['INPUT_NIM_API_KEY'] = 'test-nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = 'https://integrate.api.nvidia.com/v1';
-        process.env['INPUT_NIM_MODELS'] = 'deepseek-ai/deepseek-v4-pro';
-        process.env['INPUT_MAX_FILES'] = '50';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '*.lock';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = 'append';
-        const config = await loadConfig();
-        assert.strictEqual(config.mistralApiKey, 'test-mistral-key');
-        assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'codestral-2508']);
-        assert.strictEqual(config.apiKey, 'test-nim-key');
-        assert.deepStrictEqual(config.models, ['deepseek-ai/deepseek-v4-pro']);
-        // Restore original values
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_MISTRAL_API_KEY: 'test-mistral-key',
+            INPUT_MISTRAL_MODELS: 'mistral-medium-3.5,codestral-2508',
+            INPUT_NIM_API_KEY: 'test-nim-key',
+            INPUT_NIM_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+            INPUT_NIM_MODELS: 'deepseek-ai/deepseek-v4-pro',
+            INPUT_MAX_FILES: '50',
+            INPUT_EXCLUDE_PATTERNS: '*.lock',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: 'append',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.mistralApiKey, 'test-mistral-key');
+            assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'codestral-2508']);
+            assert.strictEqual(config.apiKey, 'test-nim-key');
+            assert.deepStrictEqual(config.models, ['deepseek-ai/deepseek-v4-pro']);
+        });
     });
     it('defaults mistral fields to empty when not provided', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_MISTRAL_API_KEY'] = '';
-        process.env['INPUT_MISTRAL_MODELS'] = '';
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.mistralApiKey, '');
-        assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_MISTRAL_API_KEY: '',
+            INPUT_MISTRAL_MODELS: '',
+            INPUT_NIM_API_KEY: 'nim-key',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.mistralApiKey, '');
+            assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
+        });
     });
 });
 describe('loadConfig — custom fields', () => {
-    const ENV_KEYS = [
-        'INPUT_CUSTOM_API_URL', 'INPUT_CUSTOM_MODEL', 'INPUT_CUSTOM_API_KEY',
-        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
-        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
-        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
-    ];
-    const saved = {};
     it('reads customApiUrl, customModel, customApiKey from inputs', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_CUSTOM_API_URL'] = 'https://openrouter.ai/api/v1';
-        process.env['INPUT_CUSTOM_MODEL'] = 'openai/gpt-4o';
-        process.env['INPUT_CUSTOM_API_KEY'] = 'sk-or-v1-abc';
-        process.env['INPUT_NIM_API_KEY'] = '';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.customApiUrl, 'https://openrouter.ai/api/v1');
-        assert.strictEqual(config.customModel, 'openai/gpt-4o');
-        assert.strictEqual(config.customApiKey, 'sk-or-v1-abc');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_CUSTOM_API_URL: 'https://openrouter.ai/api/v1',
+            INPUT_CUSTOM_MODEL: 'openai/gpt-4o',
+            INPUT_CUSTOM_API_KEY: 'sk-or-v1-abc',
+            INPUT_NIM_API_KEY: '',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.customApiUrl, 'https://openrouter.ai/api/v1');
+            assert.strictEqual(config.customModel, 'openai/gpt-4o');
+            assert.strictEqual(config.customApiKey, 'sk-or-v1-abc');
+        });
     });
     it('defaults custom fields to empty when not provided', async () => {
-        for (const key of ENV_KEYS)
-            saved[key] = process.env[key];
-        process.env['INPUT_CUSTOM_API_URL'] = '';
-        process.env['INPUT_CUSTOM_MODEL'] = '';
-        process.env['INPUT_CUSTOM_API_KEY'] = '';
-        process.env['INPUT_NIM_API_KEY'] = 'nim-key';
-        process.env['INPUT_NIM_BASE_URL'] = '';
-        process.env['INPUT_NIM_MODELS'] = '';
-        process.env['INPUT_MAX_FILES'] = '';
-        process.env['INPUT_EXCLUDE_PATTERNS'] = '';
-        process.env['INPUT_NIM_SYSTEM_PROMPT'] = '';
-        process.env['INPUT_NIM_PROMPT_MODE'] = '';
-        const config = await loadConfig();
-        assert.strictEqual(config.customApiUrl, '');
-        assert.strictEqual(config.customModel, '');
-        assert.strictEqual(config.customApiKey, '');
-        for (const key of ENV_KEYS) {
-            if (saved[key] === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved[key];
-        }
+        await withEnv({
+            INPUT_CUSTOM_API_URL: '',
+            INPUT_CUSTOM_MODEL: '',
+            INPUT_CUSTOM_API_KEY: '',
+            INPUT_NIM_API_KEY: 'nim-key',
+            INPUT_NIM_BASE_URL: '',
+            INPUT_NIM_MODELS: '',
+            INPUT_MAX_FILES: '',
+            INPUT_EXCLUDE_PATTERNS: '',
+            INPUT_NIM_SYSTEM_PROMPT: '',
+            INPUT_NIM_PROMPT_MODE: '',
+        }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.customApiUrl, '');
+            assert.strictEqual(config.customModel, '');
+            assert.strictEqual(config.customApiKey, '');
+        });
     });
 });
 describe('parseDiffHunks', () => {
@@ -389,18 +354,9 @@ describe('severityTally', () => {
 });
 describe('loadConfig — prompt mode validation', () => {
     it('coerces invalid prompt mode to append', async () => {
-        const key = 'INPUT_NIM_PROMPT_MODE';
-        const saved = process.env[key];
-        process.env[key] = 'invalid-mode';
-        try {
+        await withEnv({ INPUT_NIM_PROMPT_MODE: 'invalid-mode' }, async () => {
             const config = await loadConfig();
             assert.strictEqual(config.promptMode, 'append');
-        }
-        finally {
-            if (saved === undefined)
-                delete process.env[key];
-            else
-                process.env[key] = saved;
-        }
+        });
     });
 });
