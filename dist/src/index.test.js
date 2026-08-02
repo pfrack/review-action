@@ -7,7 +7,7 @@ import { severityTally } from './render.js';
 import { buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, buildClients, withAggregateTimeout } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, withAggregateTimeout } from './index.js';
 describe('buildSystemMessage', () => {
     it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
         const msg = buildSystemMessage('append', '');
@@ -24,6 +24,27 @@ describe('buildSystemMessage', () => {
     it('falls back to BASE_SYSTEM_PROMPT in replace mode with empty custom prompt', () => {
         const msg = buildSystemMessage('replace', '');
         assert.strictEqual(msg, BASE_SYSTEM_PROMPT);
+    });
+});
+describe('buildRawOutputBody — XSS escaping', () => {
+    it('escapes <script> tags in lastRawContent', () => {
+        const body = buildRawOutputBody('<!-- header -->', 'output <script>alert(1)</script>');
+        assert.ok(!body.includes('<script>'), 'literal <script> tag must not appear in body');
+        assert.ok(body.includes('\\<script\\>alert\\(1\\)\\</script\\>'), 'escaped form must be present');
+    });
+    it('escapes img onerror payloads', () => {
+        const body = buildRawOutputBody('summary', '<img src=x onerror=alert(1)>');
+        assert.ok(body.includes('\\<img'), 'escaped form must be present (leading backslash before <img)');
+        assert.ok(!/[^\\]<img /.test(body), 'un-escaped `<img ` (without leading backslash) must not appear');
+    });
+    it('still keeps the inner text readable after escaping', () => {
+        const body = buildRawOutputBody('summary', 'function foo() { return x < y; }');
+        assert.ok(body.includes('function foo'));
+        assert.ok(body.includes('\\<'), '< must be escaped');
+    });
+    it('passes summary body through unchanged', () => {
+        const body = buildRawOutputBody('### AI Code Review', 'content');
+        assert.ok(body.startsWith('### AI Code Review'));
     });
 });
 describe('OpenAIClient integration', () => {
@@ -156,6 +177,7 @@ function makeConfig(overrides = {}) {
         promptMode: 'append',
         customRules: '',
         revalidateFindings: false,
+        strictRevalidation: false,
         dropUnreferenced: false,
         modelTimeout: 90,
         chainTimeout: 0,

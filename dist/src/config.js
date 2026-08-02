@@ -57,6 +57,7 @@ export async function loadConfig() {
         promptMode,
         customRules: core.getInput('custom_rules') || '',
         revalidateFindings: core.getInput('revalidate_findings') === 'true',
+        strictRevalidation: core.getInput('strict_revalidation') === 'true',
         dropUnreferenced: core.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
             const raw = core.getInput('model_timeout') || '90';
