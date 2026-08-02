@@ -1,3 +1,5 @@
+import { RetryableError } from './retry.js';
+
 export function safeParseJson(content: string): unknown {
   const trimmed = content.trim();
   if (!trimmed) return undefined;
@@ -5,6 +7,23 @@ export function safeParseJson(content: string): unknown {
     return JSON.parse(trimmed);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Parse a Response body as JSON, throwing a retryable error (502) if the
+ * body is not valid JSON (e.g. an HTML error page from a proxy or a
+ * maintenance page). This lets `withRetry` retry the request instead of
+ * crashing with a raw `SyntaxError`.
+ */
+export async function safeParseJsonBody(resp: Response, source: string): Promise<unknown> {
+  try {
+    return await resp.json();
+  } catch (err) {
+    throw new RetryableError(
+      `${source} API returned non-JSON body (${err instanceof Error ? err.message : String(err)})`,
+      502,
+    );
   }
 }
 

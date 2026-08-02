@@ -7,7 +7,7 @@ import { severityTally } from './render.js';
 import { buildSystemPrompt, buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, type BatchResult, withAggregateTimeout } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, type BatchResult, withAggregateTimeout, executeReview, prioritizeChain } from './index.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { type FileBatch } from './batching.js';
 import { type Config } from './config.js';
@@ -489,5 +489,168 @@ describe('buildClients — custom models plural without singular', () => {
     });
     const clients = buildClients(config);
     assert.strictEqual(clients.custom, null);
+  });
+});
+
+describe('prioritizeChain', () => {
+  it('does not change chain order regardless of probe results', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'model-slow', provider: 'nim' },
+      { id: 'model-fast', provider: 'mistral' },
+      { id: 'model-medium', provider: 'groq' },
+    ];
+    const originalOrder = chain.map(m => m.id);
+
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: { probeModel: async () => true } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } } as unknown as OpenAIClient,
+      groq: { probeModel: async () => true } as unknown as OpenAIClient,
+      openrouter: null, kilocode: null, custom: null,
+    };
+
+    await prioritizeChain(chain, clients);
+    assert.deepStrictEqual(chain.map(m => m.id), originalOrder, 'chain order must not change after prioritizeChain');
+  });
+
+  it('logs probe results without reordering', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'head-model', provider: 'nim' },
+      { id: 'other-model', provider: 'mistral' },
+    ];
+    const originalOrder = chain.map(m => m.id);
+
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: { probeModel: async () => true } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => true } as unknown as OpenAIClient,
+      groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    await prioritizeChain(chain, clients);
+    assert.deepStrictEqual(chain.map(m => m.id), originalOrder);
+  });
+});
+
+describe('executeReview — batch loop resilience', () => {
+  it('continues to next batch when one batch throws', async () => {
+    // Build a diffs map where accessing 'throw.ts' throws — simulating
+    // an unexpected error inside runModelChainForBatch that escapes
+    // attemptModel's try/catch (e.g., a bug in chain setup).
+    const throwingDiffs: Record<string, string> = {};
+    Object.defineProperty(throwingDiffs, 'throw.ts', {
+      get() { throw new Error('simulated unexpected error'); },
+      enumerable: true,
+    });
+    throwingDiffs['b.ts'] = 'normal diff';
+    throwingDiffs['c.ts'] = 'normal diff';
+
+    const batch1: FileBatch = { files: ['throw.ts', 'b.ts'], diffs: throwingDiffs };
+    const batch2: FileBatch = { files: ['c.ts'], diffs: { 'c.ts': 'normal diff' } };
+
+    const config = makeConfig({ chainTimeout: 0 });
+    const callCounts: Record<string, number> = {};
+    const batch2Result: ChatResult = {
+      content: JSON.stringify({
+        findings: [{ file: 'c.ts', severity: 'Suggestion', issue: 'test finding', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'fix it' }],
+        summary: 'batch 2 summary',
+      }),
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      latency: 100,
+      finishReason: 'stop',
+    };
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient(() => ({ response: batch2Result }), callCounts),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+    const chain: TaggedModel[] = [{ id: 'model-a', provider: 'nim' }];
+
+    const result = await executeReview(
+      chain, clients, ['throw.ts', 'b.ts', 'c.ts'], throwingDiffs, [batch1, batch2], 'system', config,
+    );
+
+    // Batch 2 should still produce findings
+    assert.ok(result.review.findings.length > 0, 'batch 2 findings should be present');
+    assert.strictEqual(result.usedModel, 'model-a');
+    assert.strictEqual(result.batchCount, 2);
+    assert.strictEqual(callCounts['model-a'], 1, 'batch 2 should have called model-a');
+  });
+
+  it('with chainTimeout > 0 still catches throws from runBatch', async () => {
+    const throwingDiffs: Record<string, string> = {};
+    Object.defineProperty(throwingDiffs, 'throw.ts', {
+      get() { throw new Error('simulated unexpected error'); },
+      enumerable: true,
+    });
+
+    const batch1: FileBatch = { files: ['throw.ts'], diffs: throwingDiffs };
+
+    const config = makeConfig({ chainTimeout: 300 });
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient(() => ({ response: VALID_CHAT_RESULT })),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+    const chain: TaggedModel[] = [{ id: 'model-a', provider: 'nim' }];
+
+    const result = await executeReview(
+      chain, clients, ['throw.ts'], throwingDiffs, [batch1], 'system', config,
+    );
+
+    assert.strictEqual(result.review.findings.length, 0);
+    assert.strictEqual(result.batchCount, 1);
+  });
+});
+
+describe('runModelChainForBatch parallel logging', () => {
+  it('logs winner and cancelled model ids in parallel mode', async () => {
+    const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [
+      { id: 'slow-model', provider: 'nim' },
+      { id: 'fast-model', provider: 'nim' },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        if (model === 'slow-model') return { delayMs: 2000 };
+        return {};
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const messages: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (data: any) => {
+      if (typeof data === 'string') messages.push(data);
+      return true;
+    };
+    try {
+      await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    const parallelLog = messages.find(m => m.includes('Parallel:') && m.includes('fast-model') && m.includes('cancelled'));
+    assert.ok(parallelLog, `expected parallel log with winner+cancelled, got: ${JSON.stringify(messages)}`);
+  });
+
+  it('does not log parallel winner when only one model in chain', async () => {
+    const config = makeConfig({ parallelAttempts: 3, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [{ id: 'single-model', provider: 'nim' }];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient(() => ({})),
+      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+    };
+
+    const messages: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (data: any) => {
+      if (typeof data === 'string') messages.push(data);
+      return true;
+    };
+    try {
+      await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    const parallelLog = messages.find(m => m.includes('Parallel:'));
+    assert.strictEqual(parallelLog, undefined, 'no parallel log when only one model in chain');
   });
 });

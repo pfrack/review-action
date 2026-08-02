@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
-import { escapeMarkdown } from './utils.js';
+import { escapeMarkdown, safeParseJsonBody } from './utils.js';
 import type { ReviewFinding } from './review-schema.js';
 
 const GITHUB_API_TIMEOUT_MS = 30_000;
@@ -97,7 +97,7 @@ export async function createReview(
     return response;
   });
 
-  const data = await resp.json() as { id: number };
+  const data = await safeParseJsonBody(resp, 'GitHub') as { id: number };
   return data.id;
 }
 
@@ -134,7 +134,7 @@ export async function findExistingReview(
       throw err;
     }
 
-    const reviews = await resp.json() as { id: number; body?: string }[];
+    const reviews = await safeParseJsonBody(resp, 'GitHub') as { id: number; body?: string }[];
     for (const review of reviews) {
       if (review.body?.startsWith(AI_REVIEW_MARKER)) {
         return review.id;
@@ -159,21 +159,29 @@ export async function deleteReview(
   token: string,
 ): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
-  await withRetry(async () => {
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github+json',
-      },
-      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-    });
+  try {
+    await withRetry(async () => {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+        },
+        signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+      });
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+      if (!response.ok) {
+        const body = await response.text();
+        throw new RetryableError(`GitHub API returned ${response.status}: ${body.length > 200 ? '...' + body.slice(-200) : body}`, response.status);
+      }
+    });
+  } catch (err) {
+    if (err instanceof RetryableError && err.status === 404) {
+      core.warning('Review not found (404) when deleting — skipping');
+      return;
     }
-  });
+    throw err;
+  }
 }
 
 export const INLINE_COMMENT_THRESHOLD = 50;
@@ -261,7 +269,7 @@ export async function findExistingComment(repo: string, prNumber: number, token:
       throw err;
     }
 
-    const comments = await resp.json() as { id: number; body: string }[];
+    const comments = await safeParseJsonBody(resp, 'GitHub') as { id: number; body: string }[];
     for (const comment of comments) {
       if (comment.body.startsWith(AI_REVIEW_MARKER)) {
         return comment.id;
@@ -275,23 +283,31 @@ export async function findExistingComment(repo: string, prNumber: number, token:
   return null;
 }
 
-async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
+export async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-  await withRetry(async () => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json',
-      },
-      body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-    });
+  try {
+    await withRetry(async () => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify({ body }),
+        signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+      });
 
-    if (!response.ok) {
-      const responseBody = await response.text();
-      throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+      if (!response.ok) {
+        const responseBody = await response.text();
+        throw new RetryableError(`GitHub API returned ${response.status}: ${responseBody.length > 200 ? '...' + responseBody.slice(-200) : responseBody}`, response.status);
+      }
+    });
+  } catch (err) {
+    if (err instanceof RetryableError && err.status === 404) {
+      core.warning(`PR ${repo}#${prNumber} not found (404) when posting comment — skipping`);
+      return;
     }
-  });
+    throw err;
+  }
 }

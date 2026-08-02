@@ -632,4 +632,42 @@ describe('OpenAIClient signal/timeout', () => {
       mock.close();
     }
   });
+
+  it('chat() defaults missing usage to zeros', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+      }));
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      const result = await client.chat('model', [{ role: 'user', content: 'hi' }]);
+      assert.strictEqual(result.content, 'ok');
+      assert.deepStrictEqual(result.usage, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 });
+      assert.strictEqual(result.finishReason, 'stop');
+    } finally {
+      mock.close();
+    }
+  });
+
+  it('chat() defaults missing finish_reason to null (no false truncation)', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    });
+
+    try {
+      const client = new OpenAIClient(mock.url, 'key');
+      const result = await client.chat('model', [{ role: 'user', content: 'hi' }]);
+      assert.strictEqual(result.content, 'ok');
+      assert.strictEqual(result.finishReason, null);
+    } finally {
+      mock.close();
+    }
+  });
 });

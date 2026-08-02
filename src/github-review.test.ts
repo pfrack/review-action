@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment, createComment, findExistingComment } from './github-review.js';
+import { RetryableError } from './retry.js';
 import type { ReviewFinding } from './review-schema.js';
 
 function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
@@ -308,6 +309,127 @@ describe('deleteReview', () => {
       await deleteReview('owner/repo', 42, 200, 'token');
       assert.ok(capturedUrl.includes('/pulls/42/reviews/200'));
       assert.strictEqual(capturedMethod, 'DELETE');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('createComment', () => {
+  const originalFetch = globalThis.fetch;
+
+  it('posts a comment via POST to issues endpoint', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    globalThis.fetch = (async (url: string, init?: any) => {
+      capturedUrl = url;
+      capturedMethod = init?.method || '';
+      return { ok: true } as any;
+    }) as any;
+    try {
+      await createComment('owner/repo', 42, 'token', 'test body');
+      assert.ok(capturedUrl.includes('/issues/42/comments'));
+      assert.strictEqual(capturedMethod, 'POST');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('handles 404 gracefully — logs warning and does not throw', async () => {
+    globalThis.fetch = (async () => ({
+      ok: false,
+      status: 404,
+      text: async () => 'Not Found',
+    })) as any;
+    try {
+      await createComment('owner/repo', 42, 'token', 'test body');
+      // Should not throw
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('retries on 500 then succeeds', async () => {
+    let callCount = 0;
+    globalThis.fetch = (async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: false,
+          status: 500,
+          text: async () => 'Internal Server Error',
+        } as any;
+      }
+      return { ok: true } as any;
+    }) as any;
+    try {
+      await createComment('owner/repo', 42, 'token', 'test body');
+      assert.strictEqual(callCount, 2, 'should have retried once after 500');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('safeParseJsonBody — GitHub .json() guard', () => {
+  const originalFetch = globalThis.fetch;
+
+  it('createReview throws RetryableError 502 on non-JSON 200 body', async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    })) as any;
+    try {
+      await assert.rejects(
+        () => createReview('owner/repo', 42, 'abc123', [], 'summary', 'token'),
+        (err: unknown) => {
+          assert.ok(err instanceof RetryableError);
+          assert.strictEqual(err.status, 502);
+          assert.ok(err.message.includes('non-JSON'));
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('findExistingReview throws RetryableError 502 on non-JSON 200 body', async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    })) as any;
+    try {
+      await assert.rejects(
+        () => findExistingReview('owner/repo', 42, 'token'),
+        (err: unknown) => {
+          assert.ok(err instanceof RetryableError);
+          assert.strictEqual(err.status, 502);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('findExistingComment throws RetryableError 502 on non-JSON 200 body', async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    })) as any;
+    try {
+      await assert.rejects(
+        () => findExistingComment('owner/repo', 42, 'token'),
+        (err: unknown) => {
+          assert.ok(err instanceof RetryableError);
+          assert.strictEqual(err.status, 502);
+          return true;
+        },
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
