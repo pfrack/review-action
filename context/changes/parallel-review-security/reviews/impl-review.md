@@ -55,9 +55,8 @@
 - **Dimension**: Safety & Quality
 - **Location**: src/rules.ts:39
 - **Detail**: Pattern `/override\s+(?:your|the)\s+(?:system|default|prior)\s+(?:prompt|instructions|behavior)/i` matches legitimate rules like `"Override your system prompt with custom rules after review sign-off"`. The rule is blocked and silently dropped. Users writing legitimate security rules about prompt configuration may see their rules ignored with only a log-level message.
-- **Fix**: Tighten the regex (e.g., require a colon or imperative verb after the keyword, or require the pattern to start the rule) or add an escape hatch (e.g., rules prefixed with `safe:` bypass the filter).
-  - Strength: Reduces false positives without weakening the injection defense.
-  - Tradeoff: Slightly narrower pattern may miss edge-case injection phrasing; escape hatch adds complexity.
-  - Confidence: MEDIUM — requires testing against real-world rule wording.
-  - Blind spot: Haven't surveyed actual custom rules in the wild to measure false-positive rate.
-- **Decision**: FIXED
+- **Fix**: Custom rules come from the trusted `custom_rules` workflow input, so they are not subject to prompt-injection filtering. `validateRules` now surfaces injection-like content as a **warning** (logged, not silently dropped) and the `safe:` bypass prefix has been **removed** — a full bypass was itself a security risk (flagged by the review bot as a critical). This keeps legitimate rules from being dropped while avoiding an injection-detection escape hatch.
+  - Strength: No false-positive drops, no security-bypassing escape hatch.
+  - Tradeoff: Injection-like custom rules now reach the model (owner is warned via `core.warning`).
+  - Confidence: HIGH — trusted-config threat model.
+- **Decision**: FIXED (superseded the earlier `safe:` escape-hatch approach after the bot flagged it as critical)

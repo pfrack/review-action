@@ -36424,13 +36424,12 @@ function validateRules(rules) {
         if (rule.description.length > 500) {
             errors.push(`Rule ${i + 1} exceeds 500 characters (${rule.description.length})`);
         }
-        const effectiveDescription = rule.description.startsWith('safe:')
-            ? rule.description.slice(5).trim()
-            : rule.description;
+        // Custom rules are trusted repo configuration (the `custom_rules` action
+        // input). We surface injection-like content as a warning rather than
+        // silently dropping the rule, and deliberately provide no bypass prefix.
         for (const pattern of INJECTION_PATTERNS) {
-            if (pattern.test(effectiveDescription)) {
-                errors.push(`Rule ${i + 1} contains potential prompt injection`);
-                blockedRules.push(i);
+            if (pattern.test(rule.description)) {
+                errors.push(`Rule ${i + 1} looks like prompt injection — review before trusting`);
                 break;
             }
         }
@@ -36443,10 +36442,7 @@ function formatRulesForPrompt(rules) {
     const lines = ['## Custom Review Rules', 'Apply these additional rules during review:'];
     for (let i = 0; i < rules.length; i++) {
         const r = rules[i];
-        const description = r.description.startsWith('safe:')
-            ? r.description.slice(5).trim()
-            : r.description;
-        lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${description}`);
+        lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${r.description}`);
     }
     return lines.join('\n');
 }

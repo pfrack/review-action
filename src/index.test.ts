@@ -717,20 +717,20 @@ describe('run — orchestrator', () => {
     };
   }
 
-  function withEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
     const orig: Record<string, string | undefined> = {};
     for (const k of Object.keys(env)) {
       orig[k] = process.env[k];
       if (env[k] === undefined) delete process.env[k];
       else process.env[k] = env[k];
     }
-    return orig;
-  }
-
-  function restoreEnv(orig: Record<string, string | undefined>): void {
-    for (const k of Object.keys(orig)) {
-      if (orig[k] === undefined) delete process.env[k];
-      else process.env[k] = orig[k];
+    try {
+      return await fn();
+    } finally {
+      for (const k of Object.keys(orig)) {
+        if (orig[k] === undefined) delete process.env[k];
+        else process.env[k] = orig[k];
+      }
     }
   }
 
@@ -746,23 +746,23 @@ describe('run — orchestrator', () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = makeGithubFetch(captured, mock.url);
     const eventPath = join(tmpdir(), `event-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
-    const orig = withEnv({
-      GITHUB_REPOSITORY: REPO,
-      GITHUB_TOKEN: 'fake-token',
-      GITHUB_EVENT_PATH: eventPath,
-      INPUT_CUSTOM_API_URL: mock.url,
-      INPUT_CUSTOM_MODEL: 'mock-model',
-      INPUT_CUSTOM_API_KEY: 'test-key',
-      INPUT_MAX_FILES: '100',
-      INPUT_REVALIDATE_FINDINGS: 'false',
-      ...env,
-    });
-    writeFileSync(eventPath, JSON.stringify({ pull_request: { number: PR, head: { sha: 'abc123' } } }));
     try {
-      await run();
+      await withEnv({
+        GITHUB_REPOSITORY: REPO,
+        GITHUB_TOKEN: 'fake-token',
+        GITHUB_EVENT_PATH: eventPath,
+        INPUT_CUSTOM_API_URL: mock.url,
+        INPUT_CUSTOM_MODEL: 'mock-model',
+        INPUT_CUSTOM_API_KEY: 'test-key',
+        INPUT_MAX_FILES: '100',
+        INPUT_REVALIDATE_FINDINGS: 'false',
+        ...env,
+      }, async () => {
+        writeFileSync(eventPath, JSON.stringify({ pull_request: { number: PR, head: { sha: 'abc123' } } }));
+        await run();
+      });
     } finally {
       globalThis.fetch = realFetch;
-      restoreEnv(orig);
       delete process.env.NODE_TEST_CONTEXT;
       mock.close();
       try { unlinkSync(eventPath); } catch { /* ignore */ }
