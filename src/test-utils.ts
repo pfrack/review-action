@@ -11,3 +11,20 @@ export function startMockServer(handler: (req: IncomingMessage, res: ServerRespo
     });
   });
 }
+
+export async function withEnv(overrides: Record<string, string | undefined>, fn: () => unknown | Promise<unknown>): Promise<void> {
+  const orig: Record<string, string | undefined> = {};
+  for (const key of Object.keys(overrides)) {
+    orig[key] = process.env[key];
+    if (overrides[key] === undefined) delete process.env[key];
+    else process.env[key] = overrides[key];
+  }
+  try {
+    await fn();
+  } finally {
+    for (const key of Object.keys(orig)) {
+      if (orig[key] === undefined) delete process.env[key];
+      else process.env[key] = orig[key];
+    }
+  }
+}

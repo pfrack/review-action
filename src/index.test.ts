@@ -64,11 +64,18 @@ describe('buildRawOutputBody — XSS escaping', () => {
 });
 
 describe('OpenAIClient integration', () => {
-  it('returns parsed content on successful chat', async () => {
+  it('returns parsed ReviewJsonSchema-shaped content on successful chat', async () => {
     const mock = await startMockServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        choices: [{ message: { content: 'test response' } }],
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              findings: [{ file: 'src/a.ts', severity: 'Warning', issue: 'unused var', critical_action: 'not applicable', warning_action: 'remove it', suggestion_action: 'not applicable' }],
+              summary: 'review summary',
+            }),
+          },
+        }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }));
     });
@@ -79,7 +86,9 @@ describe('OpenAIClient integration', () => {
         schema: ReviewJsonSchema,
         format: 'json_schema',
       });
-      assert.ok(result.content.length > 0);
+      const parsed = JSON.parse(result.content);
+      assert.ok(Array.isArray(parsed.findings), 'content must parse to an object with a findings array');
+      assert.strictEqual(typeof parsed.summary, 'string', 'content must include a summary string');
     } finally {
       mock.close();
     }

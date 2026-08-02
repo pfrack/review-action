@@ -417,9 +417,9 @@ None — no runtime API, schema, or config changes. The only source edits are tw
 
 #### Automated
 
-- [ ] 3.1 `github-review.test.ts` pagination: page-2 marker id returned, exactly 2 fetches; no-match → null (review + comment)
-- [ ] 3.2 `openai-client.ts` `effectiveFormat` exported
-- [ ] 3.3 `openai-client.test.ts` `listModels` (happy + error), `sanitizeErrorBody` redaction, `effectiveFormat` 4 cases
+- [x] 3.1 `github-review.test.ts` pagination: page-2 marker id returned, exactly 2 fetches; no-match → null (review + comment) — 2b82e90
+- [x] 3.2 `openai-client.ts` `effectiveFormat` exported — 2b82e90
+- [x] 3.3 `openai-client.test.ts` `listModels` (happy + error), `sanitizeErrorBody` redaction, `effectiveFormat` 4 cases — 2b82e90
 
 #### Manual
 
