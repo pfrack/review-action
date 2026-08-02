@@ -54,7 +54,7 @@ export async function validateFindings(
   changedFiles: Set<string>,
   client?: OpenAIClient,
   model?: string,
-  config?: Pick<Config, 'dropUnreferenced' | 'revalidateFindings'>,
+  config?: Pick<Config, 'dropUnreferenced' | 'revalidateFindings' | 'strictRevalidation'>,
 ): Promise<{ valid: ReviewType; warnings: string[]; dropped: number }> {
   const warnings: string[] = [];
   const hunks = getFileHunks(filesDiff);
@@ -102,7 +102,9 @@ export async function validateFindings(
   let dropped = 0;
   if (client && model && validFindings.length > 0) {
     const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-    const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+    const revalidated = await revalidateFindings(validFindings, allDiff, client, model, {
+      strict: config?.strictRevalidation ?? false,
+    });
     validFindings.length = 0;
     validFindings.push(...revalidated.valid);
     dropped = revalidated.dropped;

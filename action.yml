@@ -101,6 +101,10 @@ inputs:
     description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
     required: false
     default: 'false'
+  strict_revalidation:
+    description: 'Drop all findings when LLM revalidation fails instead of passing them through unverified'
+    required: false
+    default: 'false'
   drop_unreferenced:
     description: 'Drop findings whose backtick-wrapped identifier or explicit `function X`/`variable X` reference is not present in the diff. Default true. Set false to keep them as soft warnings (legacy behavior).'
     required: false

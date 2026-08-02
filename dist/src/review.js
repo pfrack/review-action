@@ -82,7 +82,9 @@ export async function validateFindings(review, filesDiff, changedFiles, client, 
     let dropped = 0;
     if (client && model && validFindings.length > 0) {
         const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model, {
+            strict: config?.strictRevalidation ?? false,
+        });
         validFindings.length = 0;
         validFindings.push(...revalidated.valid);
         dropped = revalidated.dropped;

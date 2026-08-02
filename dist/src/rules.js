@@ -34,6 +34,7 @@ const INJECTION_PATTERNS = [
 ];
 export function validateRules(rules) {
     const errors = [];
+    const blockedRules = [];
     for (let i = 0; i < rules.length; i++) {
         const rule = rules[i];
         if (rule.description.length > 500) {
@@ -42,10 +43,12 @@ export function validateRules(rules) {
         for (const pattern of INJECTION_PATTERNS) {
             if (pattern.test(rule.description)) {
                 errors.push(`Rule ${i + 1} contains potential prompt injection`);
+                blockedRules.push(i);
+                break;
             }
         }
     }
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, blockedRules };
 }
 export function formatRulesForPrompt(rules) {
     if (rules.length === 0)

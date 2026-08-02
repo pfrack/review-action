@@ -26205,6 +26205,7 @@ async function loadConfig() {
         promptMode,
         customRules: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_rules') || '',
         revalidateFindings: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('revalidate_findings') === 'true',
+        strictRevalidation: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('strict_revalidation') === 'true',
         dropUnreferenced: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('drop_unreferenced') !== 'false',
         modelTimeout: (() => {
             const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('model_timeout') || '90';
@@ -26597,6 +26598,7 @@ async function createComment(repo, prNumber, token, body) {
 __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   Bo: () => (/* binding */ buildClients),
+/* harmony export */   Kt: () => (/* binding */ buildRawOutputBody),
 /* harmony export */   cK: () => (/* binding */ computeMaxTokens),
 /* harmony export */   ni: () => (/* binding */ withAggregateTimeout),
 /* harmony export */   od: () => (/* binding */ detectLanguage),
@@ -26968,6 +26970,9 @@ function validateConfig(config) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
 }
+function buildRawOutputBody(summaryBody, lastRawContent) {
+    return `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${(0,_utils_js__WEBPACK_IMPORTED_MODULE_10__/* .escapeMarkdown */ .FV)(lastRawContent)}\n\`\`\`\`\``;
+}
 function buildClients(config) {
     const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
     return {
@@ -27087,7 +27092,7 @@ async function dispatchOutput(context) {
         body = `${summaryBody}\nNo review content returned from any model.`;
     }
     if (config.promptMode === 'replace' && lastRawContent) {
-        body = `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``;
+        body = buildRawOutputBody(summaryBody, lastRawContent);
     }
     try {
         await (0,_github_review_js__WEBPACK_IMPORTED_MODULE_5__/* .postComment */ .Gy)(repo, prNumber, token, body);
@@ -27148,8 +27153,14 @@ async function run() {
     if (!rulesValidation.valid)
         for (const err of rulesValidation.errors)
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(err);
-    if (rules.length > 0)
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Loaded ${rules.length} custom rule(s)`);
+    const filteredRules = rulesValidation.blockedRules.length > 0
+        ? rules.filter((_, idx) => !rulesValidation.blockedRules.includes(idx))
+        : rules;
+    if (rulesValidation.blockedRules.length > 0) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Blocked ${rulesValidation.blockedRules.length} custom rule(s) matching prompt-injection patterns`);
+    }
+    if (filteredRules.length > 0)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Loaded ${filteredRules.length} custom rule(s)`);
     const reviewStartTime = Date.now();
     let filesDiff;
     try {
@@ -27185,7 +27196,7 @@ async function run() {
     const batches = filesToReview.length > 50 ? (0,_batching_js__WEBPACK_IMPORTED_MODULE_11__/* .batchFiles */ .u)(filesDiffMap, 50) : [];
     const useBatching = batches.length > 1;
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
-    const systemMessage = (0,_prompts_js__WEBPACK_IMPORTED_MODULE_6__/* .buildSystemMessage */ .HB)(config.promptMode, config.systemPrompt, detectedLanguage, rules);
+    const systemMessage = (0,_prompts_js__WEBPACK_IMPORTED_MODULE_6__/* .buildSystemMessage */ .HB)(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules);
     const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
     const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
     await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
@@ -28055,9 +28066,15 @@ const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (GENER
 function buildSystemMessage(promptMode, systemPrompt, language, rules) {
     const base = buildSystemPrompt(language, rules);
     if (promptMode === 'replace') {
-        return systemPrompt
-            ? `${systemPrompt}\n\n## Framework guidance\n${review_schema/* JSON_SCHEMA_DEFINITION */.n5}\n${SEVERITY_GUIDANCE}`
-            : base;
+        if (!systemPrompt)
+            return base;
+        const languageSecurity = language ? languagePrompts[language] : undefined;
+        const securitySection = languageSecurity
+            ? `\n\n## Language-specific security focus (${language})\n${languageSecurity}`
+            : '';
+        const rulesSection = (0,src_rules/* formatRulesForPrompt */.C5)(rules || []);
+        const rulesBlock = rulesSection ? `${rulesSection}\n\n` : '';
+        return `${systemPrompt}\n\n${rulesBlock}## Framework guidance\n${review_schema/* JSON_SCHEMA_DEFINITION */.n5}\n${SEVERITY_GUIDANCE}${securitySection}`;
     }
     return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
 }
@@ -36002,7 +36019,10 @@ __nccwpck_require__.d(__webpack_exports__, {
 var retry = __nccwpck_require__(9809);
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
+// EXTERNAL MODULE: ./src/utils.ts
+var utils = __nccwpck_require__(1798);
 ;// CONCATENATED MODULE: ./src/validation.ts
+
 
 function validateCodeContext(finding, diff, dropUnreferenced = true) {
     const issue = finding.issue;
@@ -36105,10 +36125,10 @@ function findContradictedNegativeClaims(issue, diff) {
     }
     return contradicted;
 }
-async function revalidateFindings(findings, diff, client, model) {
+async function revalidateFindings(findings, diff, client, model, options = {}) {
     if (findings.length === 0)
         return { valid: [], dropped: 0 };
-    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`).join('\n');
+    const findingsText = findings.map((f, i) => `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${(0,utils/* escapeMarkdown */.FV)(f.issue).slice(0, 200)}`).join('\n');
     const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
 For each finding, determine if it is a REAL issue or a HALLUCINATION (not supported by the code).
 
@@ -36136,13 +36156,27 @@ Example: [true, false, true]`;
             parsed = JSON.parse(result.content);
         }
         catch {
-            core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+            if (options.strict) {
+                core.warning('LLM revalidation failed (strict mode): could not parse model response — dropping all findings to prevent unverified security findings from passing through.');
+                return { valid: [], dropped: findings.length };
+            }
+            core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked — security findings may pass unverified.');
             return { valid: findings, dropped: 0 };
         }
-        if (!Array.isArray(parsed))
+        if (!Array.isArray(parsed)) {
+            if (options.strict) {
+                core.warning('LLM revalidation failed (strict mode): model returned non-array response — dropping all findings to prevent unverified security findings from passing through.');
+                return { valid: [], dropped: findings.length };
+            }
+            core.warning('LLM revalidation failed: model returned non-array response. All findings passed through unchecked — security findings may pass unverified.');
             return { valid: findings, dropped: 0 };
+        }
         if (parsed.length < findings.length) {
-            core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
+            if (options.strict) {
+                core.warning(`LLM revalidation failed (strict mode): returned ${parsed.length} result(s) for ${findings.length} finding(s) — dropping all findings to prevent unverified security findings from passing through.`);
+                return { valid: [], dropped: findings.length };
+            }
+            core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through — security findings may be unverified.`);
         }
         const valid = [];
         let dropped = 0;
@@ -36158,7 +36192,11 @@ Example: [true, false, true]`;
         return { valid, dropped };
     }
     catch {
-        core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+        if (options.strict) {
+            core.warning('LLM revalidation failed (strict mode): model call threw an error — dropping all findings to prevent unverified security findings from passing through.');
+            return { valid: [], dropped: findings.length };
+        }
+        core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked — security findings may pass unverified.');
         return { valid: findings, dropped: 0 };
     }
 }
@@ -36248,7 +36286,9 @@ async function validateFindings(review, filesDiff, changedFiles, client, model, 
     let dropped = 0;
     if (client && model && validFindings.length > 0) {
         const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
-        const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+        const revalidated = await revalidateFindings(validFindings, allDiff, client, model, {
+            strict: config?.strictRevalidation ?? false,
+        });
         validFindings.length = 0;
         validFindings.push(...revalidated.valid);
         dropped = revalidated.dropped;
@@ -36351,6 +36391,7 @@ const INJECTION_PATTERNS = [
 ];
 function validateRules(rules) {
     const errors = [];
+    const blockedRules = [];
     for (let i = 0; i < rules.length; i++) {
         const rule = rules[i];
         if (rule.description.length > 500) {
@@ -36359,10 +36400,12 @@ function validateRules(rules) {
         for (const pattern of INJECTION_PATTERNS) {
             if (pattern.test(rule.description)) {
                 errors.push(`Rule ${i + 1} contains potential prompt injection`);
+                blockedRules.push(i);
+                break;
             }
         }
     }
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, blockedRules };
 }
 function formatRulesForPrompt(rules) {
     if (rules.length === 0)
@@ -38454,9 +38497,10 @@ module.exports = parseParams
 /******/ var __webpack_exports__ = __nccwpck_require__(9407);
 /******/ __webpack_exports__ = await __webpack_exports__;
 /******/ var __webpack_exports__buildClients = __webpack_exports__.Bo;
+/******/ var __webpack_exports__buildRawOutputBody = __webpack_exports__.Kt;
 /******/ var __webpack_exports__computeMaxTokens = __webpack_exports__.cK;
 /******/ var __webpack_exports__detectLanguage = __webpack_exports__.od;
 /******/ var __webpack_exports__runModelChainForBatch = __webpack_exports__.pW;
 /******/ var __webpack_exports__withAggregateTimeout = __webpack_exports__.ni;
-/******/ export { __webpack_exports__buildClients as buildClients, __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
+/******/ export { __webpack_exports__buildClients as buildClients, __webpack_exports__buildRawOutputBody as buildRawOutputBody, __webpack_exports__computeMaxTokens as computeMaxTokens, __webpack_exports__detectLanguage as detectLanguage, __webpack_exports__runModelChainForBatch as runModelChainForBatch, __webpack_exports__withAggregateTimeout as withAggregateTimeout };
 /******/ 
