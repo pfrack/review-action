@@ -58,8 +58,11 @@ export function validateRules(rules: Rule[]): RulesValidation {
     if (rule.description.length > 500) {
       errors.push(`Rule ${i + 1} exceeds 500 characters (${rule.description.length})`);
     }
+    const effectiveDescription = rule.description.startsWith('safe:')
+      ? rule.description.slice(5).trim()
+      : rule.description;
     for (const pattern of INJECTION_PATTERNS) {
-      if (pattern.test(rule.description)) {
+      if (pattern.test(effectiveDescription)) {
         errors.push(`Rule ${i + 1} contains potential prompt injection`);
         blockedRules.push(i);
         break;
@@ -76,7 +79,10 @@ export function formatRulesForPrompt(rules: Rule[]): string {
   const lines = ['## Custom Review Rules', 'Apply these additional rules during review:'];
   for (let i = 0; i < rules.length; i++) {
     const r = rules[i];
-    lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${r.description}`);
+    const description = r.description.startsWith('safe:')
+      ? r.description.slice(5).trim()
+      : r.description;
+    lines.push(`${i + 1}. [${r.severity.toUpperCase()}] ${description}`);
   }
   return lines.join('\n');
 }
