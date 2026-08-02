@@ -394,8 +394,8 @@ None — no runtime API, schema, or config changes. The only source edits are tw
 
 #### Automated
 
-- [x] 1.1 `diff-utils.test.ts` split test asserts chunk count + `startLine` (1/11/21) for 3-hunk diff and `>3` for tiny `maxTokens`
-- [x] 1.2 `rules.test.ts` covers all 11 `INJECTION_PATTERNS` (9 new + 2 existing), plus benign-rule negative
+- [x] 1.1 `diff-utils.test.ts` split test asserts chunk count + `startLine` (1/11/21) for 3-hunk diff and `>3` for tiny `maxTokens` — 2b1616a
+- [x] 1.2 `rules.test.ts` covers all 11 `INJECTION_PATTERNS` (9 new + 2 existing), plus benign-rule negative — 2b1616a
 
 #### Manual
 

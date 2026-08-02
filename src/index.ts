@@ -579,7 +579,7 @@ async function writeMetrics(metrics: ReviewMetrics): Promise<void> {
   }
 }
 
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
   const config = await loadConfig();
   validateConfig(config);
   const clients = buildClients(config);
