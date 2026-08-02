@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import type { OpenAIClient } from './openai-client.js';
 import type { ReviewFinding, ReviewType } from './review-schema.js';
+import { escapeMarkdown } from './utils.js';
 
 interface CodeContextResult {
   valid: boolean;
@@ -115,11 +116,12 @@ export async function revalidateFindings(
   diff: string,
   client: OpenAIClient,
   model: string,
+  options: { strict?: boolean } = {},
 ): Promise<{ valid: ReviewFinding[]; dropped: number }> {
   if (findings.length === 0) return { valid: [], dropped: 0 };
 
   const findingsText = findings.map((f, i) =>
-    `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${f.issue.slice(0, 200)}`
+    `[${i}] ${f.severity} in ${f.file}:${f.line_start ?? 'file-level'}: ${escapeMarkdown(f.issue).slice(0, 200)}`
   ).join('\n');
 
   const prompt = `You are a code review validator. A reviewer produced these findings for a code diff.
@@ -151,14 +153,29 @@ Example: [true, false, true]`;
     try {
       parsed = JSON.parse(result.content);
     } catch {
-      core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
+      if (options.strict) {
+        core.warning('LLM revalidation failed (strict mode): could not parse model response — dropping all findings to prevent unverified security findings from passing through.');
+        return { valid: [], dropped: findings.length };
+      }
+      core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked — security findings may pass unverified.');
       return { valid: findings, dropped: 0 };
     }
 
-    if (!Array.isArray(parsed)) return { valid: findings, dropped: 0 };
+    if (!Array.isArray(parsed)) {
+      if (options.strict) {
+        core.warning('LLM revalidation failed (strict mode): model returned non-array response — dropping all findings to prevent unverified security findings from passing through.');
+        return { valid: [], dropped: findings.length };
+      }
+      core.warning('LLM revalidation failed: model returned non-array response. All findings passed through unchecked — security findings may pass unverified.');
+      return { valid: findings, dropped: 0 };
+    }
 
     if (parsed.length < findings.length) {
-      core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through`);
+      if (options.strict) {
+        core.warning(`LLM revalidation failed (strict mode): returned ${parsed.length} result(s) for ${findings.length} finding(s) — dropping all findings to prevent unverified security findings from passing through.`);
+        return { valid: [], dropped: findings.length };
+      }
+      core.warning(`LLM revalidation returned ${parsed.length} result(s) for ${findings.length} finding(s); missing entries will pass through — security findings may be unverified.`);
     }
 
     const valid: ReviewFinding[] = [];
@@ -173,7 +190,11 @@ Example: [true, false, true]`;
     }
     return { valid, dropped };
   } catch {
-    core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
+    if (options.strict) {
+      core.warning('LLM revalidation failed (strict mode): model call threw an error — dropping all findings to prevent unverified security findings from passing through.');
+      return { valid: [], dropped: findings.length };
+    }
+    core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked — security findings may pass unverified.');
     return { valid: findings, dropped: 0 };
   }
 }

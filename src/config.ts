@@ -31,6 +31,7 @@ export interface Config {
   promptMode: 'append' | 'replace';
   customRules: string;
   revalidateFindings: boolean;
+  strictRevalidation: boolean;
   dropUnreferenced: boolean;
   modelTimeout: number;
   chainTimeout: number;
@@ -98,6 +99,7 @@ export async function loadConfig(): Promise<Config> {
     promptMode,
     customRules: core.getInput('custom_rules') || '',
     revalidateFindings: core.getInput('revalidate_findings') === 'true',
+    strictRevalidation: core.getInput('strict_revalidation') === 'true',
     dropUnreferenced: core.getInput('drop_unreferenced') !== 'false',
     modelTimeout: (() => {
       const raw = core.getInput('model_timeout') || '90';

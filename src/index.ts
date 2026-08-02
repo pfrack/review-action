@@ -9,7 +9,7 @@ import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider, type TaggedModel } from './model-chain.js';
 import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
-import { safeParseJson, validateProviderUrl } from './utils.js';
+import { safeParseJson, validateProviderUrl, escapeMarkdown } from './utils.js';
 import { parseRules, validateRules, type Rule } from './rules.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
@@ -391,6 +391,10 @@ function validateConfig(config: Config): void {
   }
 }
 
+export function buildRawOutputBody(summaryBody: string, lastRawContent: string): string {
+  return `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${escapeMarkdown(lastRawContent)}\n\`\`\`\`\``;
+}
+
 export function buildClients(config: Config): Record<Provider, OpenAIClient | null> {
   const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
   return {
@@ -540,7 +544,7 @@ async function dispatchOutput(context: DispatchContext): Promise<{ critical: num
   }
 
   if (config.promptMode === 'replace' && lastRawContent) {
-    body = `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${lastRawContent}\n\`\`\`\`\``;
+    body = buildRawOutputBody(summaryBody, lastRawContent);
   }
 
   try {

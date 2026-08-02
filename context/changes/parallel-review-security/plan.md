@@ -224,12 +224,12 @@ Fix the HIGH-severity data-integrity issues: stored XSS in PR comments, unsaniti
 
 #### Automated
 
-- [ ] 1.1 `npm run build` succeeds after blocking injection rules
-- [ ] 1.2 `npm test` passes — all 439 existing tests green
-- [ ] 1.3 New test: injection-pattern rule excluded from prompt output
-- [ ] 1.4 New test: `validateRules` returns `blockedRules` with correct indices
-- [ ] 1.5 New test: `buildSystemMessage('replace', 'custom', 'go')` includes Go security focus
-- [ ] 1.6 New test: `buildSystemMessage('replace', '', 'go')` falls back to full base prompt
+- [x] 1.1 `npm run build` succeeds after blocking injection rules — 323d84c
+- [x] 1.2 `npm test` passes — all 439 existing tests green — 323d84c
+- [x] 1.3 New test: injection-pattern rule excluded from prompt output — 323d84c
+- [x] 1.4 New test: `validateRules` returns `blockedRules` with correct indices — 323d84c
+- [x] 1.5 New test: `buildSystemMessage('replace', 'custom', 'go')` includes Go security focus — 323d84c
+- [x] 1.6 New test: `buildSystemMessage('replace', '', 'go')` falls back to full base prompt — 323d84c
 
 #### Manual
 
