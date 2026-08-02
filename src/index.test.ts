@@ -719,17 +719,17 @@ describe('run — orchestrator', () => {
 
   async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
     const orig: Record<string, string | undefined> = {};
-    for (const k of Object.keys(env)) {
-      orig[k] = process.env[k];
-      if (env[k] === undefined) delete process.env[k];
-      else process.env[k] = env[k];
+    for (const key of Object.keys(env)) {
+      orig[key] = process.env[key];
+      if (env[key] === undefined) delete process.env[key];
+      else process.env[key] = env[key];
     }
     try {
       return await fn();
     } finally {
-      for (const k of Object.keys(orig)) {
-        if (orig[k] === undefined) delete process.env[k];
-        else process.env[k] = orig[k];
+      for (const key of Object.keys(orig)) {
+        if (orig[key] === undefined) delete process.env[key];
+        else process.env[key] = orig[key];
       }
     }
   }

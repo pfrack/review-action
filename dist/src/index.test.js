@@ -622,22 +622,22 @@ describe('run — orchestrator', () => {
     }
     async function withEnv(env, fn) {
         const orig = {};
-        for (const k of Object.keys(env)) {
-            orig[k] = process.env[k];
-            if (env[k] === undefined)
-                delete process.env[k];
+        for (const key of Object.keys(env)) {
+            orig[key] = process.env[key];
+            if (env[key] === undefined)
+                delete process.env[key];
             else
-                process.env[k] = env[k];
+                process.env[key] = env[key];
         }
         try {
             return await fn();
         }
         finally {
-            for (const k of Object.keys(orig)) {
-                if (orig[k] === undefined)
-                    delete process.env[k];
+            for (const key of Object.keys(orig)) {
+                if (orig[key] === undefined)
+                    delete process.env[key];
                 else
-                    process.env[k] = orig[k];
+                    process.env[key] = orig[key];
             }
         }
     }
