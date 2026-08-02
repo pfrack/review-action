@@ -20,7 +20,7 @@ export async function withEnv(overrides, fn) {
             process.env[key] = overrides[key];
     }
     try {
-        await fn();
+        return await fn();
     }
     finally {
         for (const key of Object.keys(orig)) {

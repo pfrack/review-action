@@ -12,7 +12,7 @@ export function startMockServer(handler: (req: IncomingMessage, res: ServerRespo
   });
 }
 
-export async function withEnv(overrides: Record<string, string | undefined>, fn: () => unknown | Promise<unknown>): Promise<void> {
+export async function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => T | Promise<T>): Promise<T> {
   const orig: Record<string, string | undefined> = {};
   for (const key of Object.keys(overrides)) {
     orig[key] = process.env[key];
@@ -20,7 +20,7 @@ export async function withEnv(overrides: Record<string, string | undefined>, fn:
     else process.env[key] = overrides[key];
   }
   try {
-    await fn();
+    return await fn();
   } finally {
     for (const key of Object.keys(orig)) {
       if (orig[key] === undefined) delete process.env[key];
