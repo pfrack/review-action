@@ -172,7 +172,7 @@ export interface ChatResult {
   content: string;
   usage: Usage;
   latency: number;
-  finishReason?: string;
+  finishReason?: string | null;
 }
 
 export interface StreamChunk {
@@ -360,9 +360,9 @@ export class OpenAIClient {
 
     return {
       content,
-      usage: data.usage,
+      usage: data.usage ?? { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
       latency: Date.now() - start,
-      finishReason: choice.finish_reason,
+      finishReason: choice.finish_reason ?? null,
     };
   }
 

@@ -10,9 +10,10 @@ export class RetryableError extends Error {
 }
 
 export function getRetryDelay(error: unknown, attempt: number, delayMs: number): number {
+  const jitter = delayMs * (0.5 + Math.random());
   const exponentialDelay = Math.min(delayMs * Math.pow(2, attempt), 30_000);
   const retryAfterMs = error instanceof RetryableError ? error.retryAfterMs ?? 0 : 0;
-  return Math.min(Math.max(exponentialDelay, retryAfterMs), 60_000);
+  return Math.min(Math.max(exponentialDelay + jitter, retryAfterMs), 60_000);
 }
 
 export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, delayMs = 1000): Promise<T> {

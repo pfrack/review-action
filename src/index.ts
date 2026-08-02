@@ -235,11 +235,13 @@ export async function runModelChainForBatch(
     const parallelCount = Math.min(config.parallelAttempts, availableChain.length);
     const controller = new AbortController();
     const attemptPromises: Promise<BatchResult | null>[] = [];
+    const attemptModelIds: string[] = [];
 
     for (let i = 0; i < parallelCount; i++) {
       const tagged = availableChain[i];
       const client = clients[tagged.provider]!;
       const delayMs = i * config.parallelThreshold * 1000;
+      attemptModelIds.push(tagged.id);
 
       attemptPromises.push((async () => {
         if (delayMs > 0) {
@@ -269,6 +271,11 @@ export async function runModelChainForBatch(
         fallbackContent = r.lastRawContent;
         fallbackModel = r.usedModel;
       }
+    }
+
+    if (winner && parallelCount > 1) {
+      const cancelledIds = attemptModelIds.filter((_id, idx) => settled[idx] === null);
+      core.info(`Parallel: ${winner.usedModel} won; cancelled ${cancelledIds.join(', ')}`);
     }
 
     if (winner) {
@@ -418,23 +425,20 @@ export function detectLanguage(files: string[]): string | undefined {
     .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
 }
 
-async function prioritizeChain(chain: { id: string; provider: Provider }[], clients: Record<Provider, OpenAIClient | null>): Promise<void> {
+export async function prioritizeChain(chain: { id: string; provider: Provider }[], clients: Record<Provider, OpenAIClient | null>): Promise<void> {
   try {
-    const fastest = await probeModels(chain, clients);
-    if (fastest) {
-      const fastestIndex = chain.findIndex(m => m.id === fastest.id && m.provider === fastest.provider);
-      if (fastestIndex > 0) {
-        const [fastestModel] = chain.splice(fastestIndex, 1);
-        chain.unshift(fastestModel);
-        core.info(`Fastest model: ${fastestModel.id} (${fastestModel.provider}) — moved to front of chain`);
-      }
+    const probed = await probeModels(chain, clients);
+    if (probed) {
+      core.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+    } else {
+      core.info(`Probe: no model available, using SWE-bench chain order`);
     }
   } catch (probeErr) {
     core.warning(`Model probing failed, using original chain order: ${probeErr}`);
   }
 }
 
-async function executeReview(
+export async function executeReview(
   chain: TaggedModel[],
   clients: Record<Provider, OpenAIClient | null>,
   filesToReview: string[],
@@ -453,9 +457,15 @@ async function executeReview(
     const runBatch = () => runModelChainForBatch(
       chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs,
     );
-    const result = config.chainTimeout > 0
-      ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
-      : await runBatch();
+    let result: BatchResult | null;
+    try {
+      result = config.chainTimeout > 0
+        ? await withAggregateTimeout(runBatch, config.chainTimeout * 1000)
+        : await runBatch();
+    } catch (err) {
+      core.warning(`Batch ${batchResults.length + 1}/${batches.length} failed: ${err} — ${batch.files.length} file(s) dropped`);
+      result = null;
+    }
     if (result === null) {
       core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
     }
