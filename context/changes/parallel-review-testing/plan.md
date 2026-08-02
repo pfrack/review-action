@@ -429,9 +429,9 @@ None — no runtime API, schema, or config changes. The only source edits are tw
 
 #### Automated
 
-- [ ] 4.1 `index.test.ts` bait test rewrites to parsed-JSON shape assertion
-- [ ] 4.2 `test-utils.ts` `withEnv()` helper added
-- [ ] 4.3 `config.test.ts` + `review.test.ts` refactored to `withEnv()`; all suites pass
+- [x] 4.1 `index.test.ts` bait test rewrites to parsed-JSON shape assertion — 6fb98c2
+- [x] 4.2 `test-utils.ts` `withEnv()` helper added — 6fb98c2
+- [x] 4.3 `config.test.ts` + `review.test.ts` refactored to `withEnv()`; all suites pass — 6fb98c2
 
 #### Manual
 
