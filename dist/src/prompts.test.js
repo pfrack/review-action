@@ -116,6 +116,17 @@ describe('buildSystemMessage — replace mode security preservation', () => {
         assert.ok(msg.includes('Language-specific security focus (go)'), 'must mark security section');
         assert.ok(msg.includes('Goroutine leaks and channel misuse'), 'must include Go focus area');
     });
+    it('replace-mode security section contains only focus areas, not the entire base prompt', () => {
+        const msg = buildSystemMessage('replace', 'Focus on style only', 'go');
+        const securityStart = msg.indexOf('## Language-specific security focus (go)');
+        assert.ok(securityStart >= 0, 'security section header present');
+        const securityBlock = msg.slice(securityStart);
+        assert.ok(!securityBlock.includes('## Severity Classification'), 'security block must not duplicate the severity guidance header');
+        assert.ok(!securityBlock.includes('Anti-patterns (do NOT flag these)'), 'security block must not include non-security anti-patterns content');
+        assert.ok(!securityBlock.includes('expert Go engineer'), 'security block must not duplicate the role description');
+        const severityGuidanceCount = (msg.match(/## Severity Classification/g) || []).length;
+        assert.strictEqual(severityGuidanceCount, 1, `severity guidance must appear exactly once, found ${severityGuidanceCount}`);
+    });
     it('falls back to the language-specific base prompt in replace mode with empty custom prompt', () => {
         const msg = buildSystemMessage('replace', '', 'go');
         assert.ok(msg.includes('Go engineer'), 'must use Go-specific base prompt');

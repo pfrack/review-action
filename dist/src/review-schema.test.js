@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Ajv } from 'ajv';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
 import { safeParseJson } from './utils.js';
+const ajv = new Ajv({ allErrors: true, strict: false });
 const fixturesDir = join(import.meta.dirname, '__fixtures__');
 function loadFixture(name) {
     const raw = readFileSync(join(fixturesDir, name), 'utf-8');
@@ -249,19 +251,34 @@ describe('ReviewJsonSchema — dual-schema structural equivalence', () => {
         assert.deepStrictEqual(lineEndType.sort(), ['null', 'number']);
         assert.deepStrictEqual(suggestionType.sort(), ['null', 'string']);
     });
-    it('drift detector: catches a field added to JSON Schema but not Zod', () => {
-        const drifted = {
-            ...ReviewJsonSchema,
-            properties: {
-                ...getProperties(ReviewJsonSchema),
-                rogueField: { type: 'string' },
-            },
+    it('drift detector: Zod and JSON Schema agree on a valid sample', () => {
+        const sample = {
+            findings: [{
+                    file: 'a.ts',
+                    severity: 'Critical',
+                    line_start: 10,
+                    line_end: 12,
+                    issue: 'SQL injection',
+                    suggestion: 'Use parameterized queries',
+                    critical_action: 'Fix immediately',
+                    warning_action: 'not applicable',
+                    suggestion_action: 'not applicable',
+                }],
+            summary: 'one finding',
         };
-        const itemDrifted = drifted.properties?.findings;
-        const driftedRequired = getRequired(getItems(itemDrifted));
-        assert.ok(driftedRequired !== undefined, 'drift variant constructs a valid node');
+        const zodAccepts = ReviewSchema.safeParse(sample).success;
+        const jsonSchemaAccepts = ajv.validate(ReviewJsonSchema, sample);
+        assert.strictEqual(zodAccepts, true, 'Zod accepts valid sample');
+        assert.strictEqual(jsonSchemaAccepts, true, 'JSON Schema accepts valid sample');
     });
-    it('drift detector: rejects sample missing field required only in JSON Schema', () => {
+    it('drift detector: Zod and JSON Schema agree on an invalid sample', () => {
+        const sample = { findings: [{ file: 'a.ts' }] };
+        const zodResult = ReviewSchema.safeParse(sample);
+        const jsonSchemaResult = ajv.validate(ReviewJsonSchema, sample);
+        assert.strictEqual(zodResult.success, false, 'Zod rejects incomplete sample');
+        assert.strictEqual(jsonSchemaResult, false, 'JSON Schema rejects incomplete sample');
+    });
+    it('drift detector: a field added to JSON Schema (and required) actually rejects a sample missing it', () => {
         const baseFindings = ReviewJsonSchema.properties?.findings;
         const baseItems = getItems(baseFindings);
         const drifted = {
@@ -287,12 +304,9 @@ describe('ReviewJsonSchema — dual-schema structural equivalence', () => {
                     suggestion_action: 'not applicable',
                 }],
         };
-        // Zod still accepts (it doesn't know about rogue_field).
+        const jsonSchemaResult = ajv.validate(drifted, sample);
+        assert.strictEqual(jsonSchemaResult, false, 'drifted JSON Schema must reject sample missing rogue_field');
         const zodResult = ReviewSchema.safeParse(sample);
-        assert.strictEqual(zodResult.success, true);
-        // The drifted JSON Schema would require an additional field.
-        const driftedFindings = drifted.properties?.findings;
-        const driftedRequired = getRequired(getItems(driftedFindings));
-        assert.ok(driftedRequired.includes('rogue_field'));
+        assert.strictEqual(zodResult.success, true, 'Zod has no opinion on rogue_field');
     });
 });

@@ -189,6 +189,15 @@ for (const [lang, data] of Object.entries(languagePromptData)) {
   ].join('\n');
 }
 
+export const languageSecurityFocusPrompts: Record<string, string> = {};
+
+for (const [lang, data] of Object.entries(languagePromptData)) {
+  languageSecurityFocusPrompts[lang] = [
+    `Language-specific security focus areas (${lang}):`,
+    ...data.focusAreas.map(a => `- ${a}`),
+  ].join('\n');
+}
+
 export function languageForFile(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   switch (ext) {
@@ -223,7 +232,7 @@ export function buildSystemMessage(promptMode: string, systemPrompt: string, lan
   const base = buildSystemPrompt(language, rules);
   if (promptMode === 'replace') {
     if (!systemPrompt) return base;
-    const languageSecurity = language ? languagePrompts[language] : undefined;
+    const languageSecurity = language ? languageSecurityFocusPrompts[language] : undefined;
     const securitySection = languageSecurity
       ? `\n\n## Language-specific security focus (${language})\n${languageSecurity}`
       : '';

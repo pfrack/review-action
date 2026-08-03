@@ -201,6 +201,7 @@ Fix the HIGH-severity data-integrity issues: stored XSS in PR comments, unsaniti
 - The `blockedRules` field addition to `RulesValidation` is additive — existing callers checking `.valid` and `.errors` are unaffected
 - The `strictRevalidation` config flag defaults to `false` — existing behavior preserved unless explicitly opted in
 - `replace` mode security guidance addition changes review output for `replace` users — they will now see security findings they previously missed. This is the intended fix, not a regression. Document in the change notes.
+- **Addendum (post-implementation)**: `replace` mode now also injects `custom_rules` into the prompt. Previously, custom rules were dropped along with the base prompt when `nim_prompt_mode: replace` was used. After this change, custom rules (already filtered by Phase 1.1 to drop injection matches) are appended to the user's custom prompt alongside the language-specific security focus areas. Users on `replace` mode can now combine a custom review focus with custom rules; this is a behavior expansion that was not described in the original Phase 1.3 contract.
 
 ## References
 
@@ -241,12 +242,12 @@ Fix the HIGH-severity data-integrity issues: stored XSS in PR comments, unsaniti
 
 #### Automated
 
-- [ ] 2.1 `npm run build` succeeds after all Phase 2 changes
-- [ ] 2.2 `npm test` passes — all existing + Phase 1 tests green
-- [ ] 2.3 New test: `lastRawContent` with `<script>` tags is escaped in comment body
-- [ ] 2.4 New test: finding `issue` with injection text is sanitized in revalidation prompt
-- [ ] 2.5 New test: `revalidateFindings` with `strictRevalidation=true` drops all on parse failure
-- [ ] 2.6 New test: dual-schema drift test passes (fails on deliberate drift)
+- [x] 2.1 `npm run build` succeeds after all Phase 2 changes — dbd17b7
+- [x] 2.2 `npm test` passes — all existing + Phase 1 tests green — dbd17b7
+- [x] 2.3 New test: `lastRawContent` with `<script>` tags is escaped in comment body — dbd17b7
+- [x] 2.4 New test: finding `issue` with injection text is sanitized in revalidation prompt — dbd17b7
+- [x] 2.5 New test: `revalidateFindings` with `strictRevalidation=true` drops all on parse failure — dbd17b7
+- [x] 2.6 New test: dual-schema drift test passes (fails on deliberate drift) — dbd17b7 (added real ajv-based equivalence check + diff-path sanitization as part of impl review)
 
 #### Manual
 
