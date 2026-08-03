@@ -175,17 +175,31 @@ export async function cleanupInlineReview(repo, prNumber, token) {
             return { resolved, failed: true };
         }
     }
-    // After resolving, the prior review may be empty; delete it so the
-    // resolved threads disappear from the diff view. If no review exists,
-    // deleteReview swallows 404s — safe to call.
+    // Delete ALL prior AI reviews (not just the first) in a loop, so any
+    // stale review objects from a previous run are removed before posting the
+    // new inline review. `findExistingReview` is re-queried each iteration;
+    // `deleteReview` returns without throwing on 404, so a missing review is safe.
     try {
-        const reviewId = await findExistingReview(repo, prNumber, token);
-        if (reviewId != null) {
+        let reviewId;
+        while ((reviewId = await findExistingReview(repo, prNumber, token)) !== null) {
             await deleteReview(repo, prNumber, reviewId, token);
         }
     }
     catch (err) {
         core.warning(`cleanupInlineReview: failed to delete prior review: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved, failed: true };
+    }
+    // Drain any prior AI body comments too, so switching from summary mode
+    // (or a prior run) leaves no stale `### AI Code Review` comment sitting
+    // alongside the new inline review. Each is re-queried until none remain.
+    try {
+        let commentId;
+        while ((commentId = await findExistingComment(repo, prNumber, token)) !== null) {
+            await deleteComment(repo, commentId, token);
+        }
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to delete prior comments: ${err instanceof Error ? err.message : String(err)}`);
         return { resolved, failed: true };
     }
     return { resolved, failed: false };

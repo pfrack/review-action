@@ -55,7 +55,12 @@ describe('cleanupInlineReview', () => {
     function makeCleanupFetch(opts) {
         const resolveCalls = [];
         const deleteCalls = [];
+        const commentDeleteCalls = [];
         const originalFetch = globalThis.fetch;
+        // Mutable pools so re-queries reflect prior deletes (mirrors GitHub:
+        // a GET returns only what hasn't been deleted yet).
+        const reviews = new Set(opts.existingReviewId != null ? [opts.existingReviewId] : []);
+        const comments = new Set(opts.aiComments ?? []);
         globalThis.fetch = (async (input, init) => {
             const url = typeof input === 'string' ? input : (input?.url ?? '');
             const method = (init?.method ?? 'GET').toUpperCase();
@@ -96,11 +101,21 @@ describe('cleanupInlineReview', () => {
             }
             // REST
             if (method === 'GET' && url.includes('/pulls/42/reviews')) {
-                const id = opts.existingReviewId ?? null;
-                return new Response(JSON.stringify(id != null ? [{ id, body: `${AI_REVIEW_MARKER}\nprev` }] : []), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify([...reviews].map((id) => ({ id, body: `${AI_REVIEW_MARKER}\nprev` }))), { status: 200, headers: { 'Content-Type': 'application/json' } });
             }
             if (method === 'DELETE' && url.includes('/pulls/42/reviews/')) {
-                deleteCalls.push(Number(url.split('/').pop()));
+                const id = Number(url.split('/').pop());
+                deleteCalls.push(id);
+                reviews.delete(id);
+                return new Response('', { status: 200 });
+            }
+            if (method === 'GET' && url.includes('/issues/42/comments')) {
+                return new Response(JSON.stringify([...comments].map((id) => ({ id, body: `${AI_REVIEW_MARKER}\nc` }))), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'DELETE' && url.includes('/issues/comments/')) {
+                const id = Number(url.split('/').pop());
+                commentDeleteCalls.push(id);
+                comments.delete(id);
                 return new Response('', { status: 200 });
             }
             return new Response('{}', { status: 200 });
@@ -108,6 +123,7 @@ describe('cleanupInlineReview', () => {
         return {
             resolveCalls,
             deleteCalls,
+            commentDeleteCalls,
             restore: () => { globalThis.fetch = originalFetch; },
         };
     }
@@ -182,6 +198,24 @@ describe('cleanupInlineReview', () => {
             const result = await cleanupInlineReview('owner/repo', 42, 'token');
             assert.deepStrictEqual(result, { resolved: 1, failed: false });
             assert.deepStrictEqual(mock.deleteCalls, []);
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('drains prior AI body comments and deletes all prior reviews before posting inline', async () => {
+        const threads = [
+            { id: 'PRRT_a', isResolved: false, isOutdated: true },
+        ];
+        const mock = makeCleanupFetch({ threads, existingReviewId: 200, aiComments: [500] });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 1, failed: false });
+            // outdated thread resolved, prior review deleted, AND the stale summary
+            // comment that would otherwise linger is removed.
+            assert.deepStrictEqual(mock.resolveCalls, ['PRRT_a']);
+            assert.deepStrictEqual(mock.deleteCalls, [200]);
+            assert.deepStrictEqual(mock.commentDeleteCalls, [500]);
         }
         finally {
             mock.restore();
