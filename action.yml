@@ -1,5 +1,5 @@
 name: 'NIM Code Review'
-description: 'AI-powered code review using NVIDIA NIM models with fallback'
+description: 'AI-powered code review using NVIDIA NIM models with fallback. Set `comment_mode: inline` to post line-anchored review comments (requires `pull-requests: write`; falls back to summary mode automatically if unavailable)'
 branding:
   icon: 'search'
   color: 'green'

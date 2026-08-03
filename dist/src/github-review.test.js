@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment, createComment, findExistingComment } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, postComment, updateComment, createComment, findExistingComment, cleanupInlineReview } from './github-review.js';
+import { AI_REVIEW_MARKER } from './github-review.js';
 import { RetryableError } from './retry.js';
 function makeFinding(overrides = {}) {
     return {
@@ -48,6 +49,143 @@ describe('formatFindingComment', () => {
         const finding = makeFinding({ warning_action: 'Investigate race condition' });
         const comment = formatFindingComment(finding);
         assert.ok(comment.includes('Investigate race condition'));
+    });
+});
+describe('cleanupInlineReview', () => {
+    function makeCleanupFetch(opts) {
+        const resolveCalls = [];
+        const deleteCalls = [];
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (async (input, init) => {
+            const url = typeof input === 'string' ? input : (input?.url ?? '');
+            const method = (init?.method ?? 'GET').toUpperCase();
+            const bodyStr = init?.body ? (typeof init.body === 'string' ? init.body : '') : '';
+            // GraphQL (listReviewThreads / resolveReviewThread)
+            if (url.includes('/graphql')) {
+                if (bodyStr.includes('reviewThreads')) {
+                    return new Response(JSON.stringify({
+                        data: {
+                            repository: {
+                                pullRequest: {
+                                    reviewThreads: {
+                                        nodes: opts.threads.map((t) => ({
+                                            id: t.id,
+                                            isResolved: t.isResolved,
+                                            isOutdated: t.isOutdated,
+                                            path: t.path ?? 'src/x.ts',
+                                            line: t.line ?? null,
+                                            comments: { nodes: [{ body: t.body ?? 'body' }] },
+                                        })),
+                                    },
+                                },
+                            },
+                        },
+                    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+                if (bodyStr.includes('resolveReviewThread')) {
+                    if (opts.resolveShouldThrow) {
+                        return new Response(JSON.stringify({ errors: [{ message: 'permission denied' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                    }
+                    const parsed = JSON.parse(bodyStr);
+                    // @octokit/graphql wraps the options object, so threadId nests
+                    // under variables.variables.
+                    resolveCalls.push(parsed.variables.variables.threadId);
+                    return new Response(JSON.stringify({ data: { resolveReviewThread: { thread: { id: parsed.variables.threadId, isResolved: true } } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+                return new Response('{}', { status: 200 });
+            }
+            // REST
+            if (method === 'GET' && url.includes('/pulls/42/reviews')) {
+                const id = opts.existingReviewId ?? null;
+                return new Response(JSON.stringify(id != null ? [{ id, body: `${AI_REVIEW_MARKER}\nprev` }] : []), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'DELETE' && url.includes('/pulls/42/reviews/')) {
+                deleteCalls.push(Number(url.split('/').pop()));
+                return new Response('', { status: 200 });
+            }
+            return new Response('{}', { status: 200 });
+        });
+        return {
+            resolveCalls,
+            deleteCalls,
+            restore: () => { globalThis.fetch = originalFetch; },
+        };
+    }
+    it('resolves all isOutdated threads, deletes the prior review, returns failed:false', async () => {
+        const threads = [
+            { id: 'PRRT_a', isResolved: false, isOutdated: true },
+            { id: 'PRRT_b', isResolved: false, isOutdated: true },
+            { id: 'PRRT_c', isResolved: true, isOutdated: true },
+            { id: 'PRRT_d', isResolved: false, isOutdated: false },
+        ];
+        const mock = makeCleanupFetch({ threads, existingReviewId: 200 });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 2, failed: false });
+            assert.deepStrictEqual(mock.resolveCalls, ['PRRT_a', 'PRRT_b']);
+            assert.deepStrictEqual(mock.deleteCalls, [200]);
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('returns failed:true when resolveReviewThread throws', async () => {
+        const threads = [
+            { id: 'PRRT_a', isResolved: false, isOutdated: true },
+            { id: 'PRRT_b', isResolved: false, isOutdated: true },
+        ];
+        const mock = makeCleanupFetch({ threads, resolveShouldThrow: true, existingReviewId: 200 });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 0, failed: true });
+            // First resolve attempt failed before delete was attempted.
+            assert.deepStrictEqual(mock.deleteCalls, []);
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('skips already-resolved threads', async () => {
+        const threads = [
+            { id: 'PRRT_a', isResolved: false, isOutdated: true },
+            { id: 'PRRT_b', isResolved: true, isOutdated: true },
+        ];
+        const mock = makeCleanupFetch({ threads, existingReviewId: 200 });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 1, failed: false });
+            assert.deepStrictEqual(mock.resolveCalls, ['PRRT_a']);
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('does not resolve non-outdated unresolved threads', async () => {
+        const threads = [
+            { id: 'PRRT_a', isResolved: false, isOutdated: true },
+            { id: 'PRRT_b', isResolved: false, isOutdated: false },
+        ];
+        const mock = makeCleanupFetch({ threads, existingReviewId: 200 });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 1, failed: false });
+            assert.deepStrictEqual(mock.resolveCalls, ['PRRT_a']);
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('deletes no prior review when none exists but still returns failed:false', async () => {
+        const threads = [{ id: 'PRRT_a', isResolved: false, isOutdated: true }];
+        const mock = makeCleanupFetch({ threads, existingReviewId: null });
+        try {
+            const result = await cleanupInlineReview('owner/repo', 42, 'token');
+            assert.deepStrictEqual(result, { resolved: 1, failed: false });
+            assert.deepStrictEqual(mock.deleteCalls, []);
+        }
+        finally {
+            mock.restore();
+        }
     });
 });
 describe('shouldUseInlineComments', () => {

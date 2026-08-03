@@ -106,6 +106,13 @@ export async function loadConfig() {
             }
             return parsed;
         })(),
+        commentMode: (() => {
+            const raw = core.getInput('comment_mode') || 'summary';
+            if (raw === 'summary' || raw === 'inline')
+                return raw;
+            core.warning(`Invalid comment_mode "${raw}", must be "summary" or "inline". Defaulting to "summary".`);
+            return 'summary';
+        })(),
     };
     const openRouterInput = splitCSV(core.getInput('openrouter_models'));
     if (openRouterInput.length > 0) {

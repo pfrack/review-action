@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown, safeParseJsonBody } from './utils.js';
+import { listReviewThreads, resolveReviewThread } from './github-graphql.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export const AI_REVIEW_MARKER = '### AI Code Review';
 export function formatFindingComment(finding) {
@@ -142,6 +143,52 @@ export async function deleteReview(repo, prNumber, reviewId, token) {
 export const INLINE_COMMENT_THRESHOLD = 50;
 export function shouldUseInlineComments(findings) {
     return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
+/**
+ * List existing review threads on the PR, resolve any that GitHub has
+ * marked `isOutdated`, then delete the (now-empty) prior review so the
+ * resolved threads disappear from view. Non-outdated threads remain
+ * unresolved for human resolution via the GitHub UI.
+ *
+ * Returns `{ resolved, failed: false }` on full success, or
+ * `{ resolved, failed: true }` if any step threw (caller falls back to
+ * summary mode for that run).
+ */
+export async function cleanupInlineReview(repo, prNumber, token) {
+    let threads = [];
+    let resolved = 0;
+    try {
+        threads = await listReviewThreads(repo, prNumber, token);
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to list threads: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved: 0, failed: true };
+    }
+    const outdatedUnresolved = threads.filter((t) => !t.isResolved && t.isOutdated);
+    for (const thread of outdatedUnresolved) {
+        try {
+            await resolveReviewThread(thread.id, token);
+            resolved++;
+        }
+        catch (err) {
+            core.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
+            return { resolved, failed: true };
+        }
+    }
+    // After resolving, the prior review may be empty; delete it so the
+    // resolved threads disappear from the diff view. If no review exists,
+    // deleteReview swallows 404s — safe to call.
+    try {
+        const reviewId = await findExistingReview(repo, prNumber, token);
+        if (reviewId != null) {
+            await deleteReview(repo, prNumber, reviewId, token);
+        }
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to delete prior review: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved, failed: true };
+    }
+    return { resolved, failed: false };
 }
 export async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
