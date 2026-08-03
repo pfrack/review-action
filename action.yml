@@ -122,9 +122,9 @@ inputs:
     required: false
     default: '0'
   parallel_attempts:
-    description: 'Number of models to try in parallel after the threshold without a successful response. 1 = fully sequential (default). 2-5 enables staggered parallel fallback.'
+    description: 'Number of models to try in parallel via staggered starts. Default 3 (light parallel). Set to 1 for fully sequential. Range 2-5 enables staggered parallel fallback: the head model starts immediately, and each subsequent model starts after parallel_threshold seconds if no winner has emerged.'
     required: false
-    default: '1'
+    default: '3'
   parallel_threshold:
     description: 'Seconds to wait before starting the next model in parallel (when parallel_attempts > 1). The head model always starts first; this controls how long to wait before launching fallback copies.'
     required: false

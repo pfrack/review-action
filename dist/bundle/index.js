@@ -26151,6 +26151,9 @@ __webpack_async_result__();
 /* harmony import */ var _openai_client_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(6689);
 
 
+const PARALLEL_ATTEMPTS_DEFAULT = 3;
+const PARALLEL_ATTEMPTS_MIN = 1;
+const PARALLEL_ATTEMPTS_MAX = 5;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -26240,11 +26243,11 @@ async function loadConfig() {
             return parsed;
         })(),
         parallelAttempts: (() => {
-            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_attempts') || '1';
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_attempts') || String(PARALLEL_ATTEMPTS_DEFAULT);
             const parsed = Number.parseInt(raw, 10);
-            if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 1.`);
-                return 1;
+            if (Number.isNaN(parsed) || parsed < PARALLEL_ATTEMPTS_MIN || parsed > PARALLEL_ATTEMPTS_MAX) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_attempts "${raw}", must be ${PARALLEL_ATTEMPTS_MIN}-${PARALLEL_ATTEMPTS_MAX}. Defaulting to ${PARALLEL_ATTEMPTS_DEFAULT}.`);
+                return PARALLEL_ATTEMPTS_DEFAULT;
             }
             return parsed;
         })(),
