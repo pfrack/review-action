@@ -720,8 +720,8 @@ pause is needed before tagging.
 
 #### Automated
 
-- [ ] 2.1 `npm test` passes (existing + new `src/previous-findings.test.ts` + extended `src/prompts.test.ts`)
-- [ ] 2.2 `npx tsc --noEmit` passes
+- [x] 2.1 `npm test` passes (existing + new `src/previous-findings.test.ts` + extended `src/prompts.test.ts`) — 3d8833c
+- [x] 2.2 `npx tsc --noEmit` passes — 3d8833c
 
 #### Manual
 
