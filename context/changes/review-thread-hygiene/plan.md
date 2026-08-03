@@ -747,8 +747,8 @@ pause is needed before tagging.
 
 #### Automated
 
-- [x] 4.1 `npm test` passes
-- [x] 4.2 `npm run build` produces clean bundle
+- [x] 4.1 `npm test` passes — 8a0660d
+- [x] 4.2 `npm run build` produces clean bundle — 8a0660d
 
 #### Manual
 
