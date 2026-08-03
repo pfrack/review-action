@@ -259,9 +259,9 @@ npm test
 
 ### Phase 1: Flip the default (config + action.yml)
 #### Automated
-- [x] 1.1 Update `action.yml` parallel_attempts description (line 125) and default (line 127): `1` → `3`
-- [x] 1.2 Update `src/config.ts` parallelAttempts parser default and warning (lines 134, 137, 138): `1` → `3`
-- [x] 1.3 Verify `makeConfig` test helper stays at `parallelAttempts: 1` (do not edit)
+- [x] 1.1 Update `action.yml` parallel_attempts description (line 125) and default (line 127): `1` → `3` — 33c4559
+- [x] 1.2 Update `src/config.ts` parallelAttempts parser default and warning (lines 134, 137, 138): `1` → `3` — 33c4559
+- [x] 1.3 Verify `makeConfig` test helper stays at `parallelAttempts: 1` (do not edit) — 33c4559
 
 ### Phase 2: Config tests for the new defaults
 #### Automated
