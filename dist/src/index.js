@@ -3,7 +3,9 @@ import { OpenAIClient } from './openai-client.js';
 import { loadConfig } from './config.js';
 import { fetchDiff, shouldExclude, validateFindings, DiffTooLargeError } from './review.js';
 import { renderReview, severityTally } from './render.js';
-import { postComment, findExistingComment, deleteComment, findExistingReview, deleteReview, AI_REVIEW_MARKER } from './github-review.js';
+import { postComment, findExistingComment, deleteComment, findExistingReview, deleteReview, AI_REVIEW_MARKER, createReview, shouldUseInlineComments, cleanupInlineReview, INLINE_COMMENT_THRESHOLD } from './github-review.js';
+import { listReviewThreads } from './github-graphql.js';
+import { formatPreviousFindings } from './previous-findings.js';
 import { buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
@@ -445,8 +447,8 @@ async function safeCleanup(repo, prNumber, token) {
         core.warning(`Failed to clean up previous review output: ${err}`);
     }
 }
-async function dispatchOutput(context) {
-    const { repo, prNumber, token, config, review, reviewableFiles, filesToReview, truncated, usedModel, lastRawContent } = context;
+export async function dispatchOutput(context) {
+    const { repo, prNumber, token, config, review, reviewableFiles, truncated, usedModel, lastRawContent, commitSha } = context;
     const modelShort = usedModel.split('/').pop() || usedModel;
     const { critical, warning, suggestion } = severityTally(review);
     const tally = [
@@ -456,9 +458,11 @@ async function dispatchOutput(context) {
     ].filter(Boolean).join(' · ');
     const modelLabel = modelShort || 'Unavailable (no model completed)';
     const summaryBody = `${AI_REVIEW_MARKER}\n\n<sub>Model: ${modelLabel}</sub>\n\n${tally || 'No findings'}\n`;
-    // Single cleanup at the start — removes ALL previous AI comments and reviews
-    await safeCleanup(repo, prNumber, token);
     if (review.findings.length === 0) {
+        // No findings: remove any prior output and post a friendly note.
+        // Inline mode has nothing to anchor here, so it shares the summary
+        // cleanup path (the prior review, if any, is removed).
+        await safeCleanup(repo, prNumber, token);
         try {
             const message = usedModel
                 ? 'No issues found. LGTM!'
@@ -485,9 +489,34 @@ async function dispatchOutput(context) {
     if (config.promptMode === 'replace' && lastRawContent) {
         body = buildRawOutputBody(summaryBody, lastRawContent);
     }
+    // Inline mode: auto-resolve outdated threads, then post line-anchored
+    // review comments. Any cleanup failure or too-many-findings case falls
+    // back to the summary path below — users always get output.
+    if (config.commentMode === 'inline') {
+        const cleanup = await cleanupInlineReview(repo, prNumber, token);
+        if (cleanup.failed) {
+            core.warning('Inline cleanup failed; falling back to summary mode for this run');
+        }
+        else if (shouldUseInlineComments(review.findings)) {
+            try {
+                await createReview(repo, prNumber, commitSha, review.findings, body, token);
+                core.info(`Posted inline review with ${review.findings.length} finding(s)`);
+                return { critical, warning, suggestion };
+            }
+            catch (err) {
+                core.warning(`Failed to post inline review: ${err instanceof Error ? err.message : String(err)} — falling back to summary mode`);
+            }
+        }
+        else {
+            core.warning(`More than ${INLINE_COMMENT_THRESHOLD} inline comments would be posted; falling back to summary mode`);
+        }
+        // fall through to summary path below
+    }
+    // Summary path (unchanged for comment_mode: summary / unset).
+    await safeCleanup(repo, prNumber, token);
     try {
         await postComment(repo, prNumber, token, body);
-        core.info(`Posted comment with ${review.findings.length} findings`);
+        core.info(`Posted comment with ${review.findings.length} finding(s)`);
     }
     catch (err) {
         core.warning(`Failed to post comment: ${err}`);
@@ -531,6 +560,7 @@ export async function run() {
     });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
+    const commitSha = event.pull_request.head.sha;
     const repo = process.env.GITHUB_REPOSITORY;
     if (!repo)
         throw new Error('GITHUB_REPOSITORY not set');
@@ -587,9 +617,23 @@ export async function run() {
     const batches = filesToReview.length > 50 ? batchFiles(filesDiffMap, 50) : [];
     const useBatching = batches.length > 1;
     core.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
-    const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules);
+    // Load previous review threads to feed into the model as context.
+    // Failure is non-fatal: if the GraphQL call fails (no permission,
+    // network error), the run continues with no carry-over.
+    let previousFindingsBlock = '';
+    try {
+        const previousThreads = await listReviewThreads(repo, prNumber, token);
+        previousFindingsBlock = formatPreviousFindings(previousThreads);
+        if (previousFindingsBlock) {
+            core.info(`Loaded ${previousThreads.filter(t => !t.isResolved).length} unresolved previous finding(s) as carry-over context`);
+        }
+    }
+    catch (err) {
+        core.warning(`Could not load previous findings; continuing without carry-over context: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules, previousFindingsBlock);
     const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
-    const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent });
+    const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent, commitSha });
     await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }
 const inTest = process.argv.includes('--test') || !!process.env.NODE_TEST_CONTEXT;

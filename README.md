@@ -63,6 +63,7 @@ jobs:
 | `drop_unreferenced` | `true` | Drop findings whose backtick-wrapped identifier or explicit `function X` / `variable X` reference is not present in the diff. Set `false` to keep them as soft `Note:` warnings (legacy behavior). |
 | `model_timeout` | `60` | Timeout in seconds for each individual model call (0 = no per-model limit) |
 | `chain_timeout` | `0` | Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models) |
+| `comment_mode` | `summary` | Output mode: `summary` (one PR comment, default) or `inline` (line-anchored review comments via the GitHub Reviews API). Inline mode requires `pull-requests: write` and auto-resolves `isOutdated` review threads on re-review. |
 
 At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_api_key`, `kilocode_api_key`, or `custom_api_url` + `custom_model`/`custom_models` is required. When multiple providers are configured, models are merged into a single fallback chain sorted by SWE-bench Verified score. Free-tier models (`:free` suffix) rank last in the chain.
 
@@ -81,8 +82,26 @@ At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_ap
 
 ### Output Modes
 
-- **Comment mode** — Posts a PR comment with findings grouped by severity, including a severity tally header.
+- **Summary mode** (default) — Posts a single PR comment with findings grouped by severity, including a severity tally header.
 - **LGTM** — When no findings survive validation, posts a clean "LGTM" comment.
+- **Inline mode** (`comment_mode: inline`) — Posts one line-anchored review comment per finding via the GitHub Reviews API, so each issue is attached to the exact file:line it was raised on. Inline mode requires the `pull-requests: write` permission (the example workflow above already grants it). If that permission is missing, or the re-review cleanup call fails, the action automatically falls back to summary mode for that run — you always get output, never a silent skip.
+
+#### Re-review hygiene (inline mode)
+
+On each run in inline mode, the action lists the PR's existing review threads via the GitHub GraphQL API and resolves any that GitHub has marked `isOutdated` (e.g. the anchored line was edited or deleted in a later commit). Threads that are still valid are left for humans to resolve through the GitHub UI. This prevents the "outdated comment" clutter that used to accumulate on re-review.
+
+#### Previous-review context
+
+Regardless of mode, the unresolved findings from the previous review of the PR are included in the model's system prompt as a clearly delimited, explicitly untrusted data block. The model uses them only to judge whether an issue was already fixed — they are capped at 20 threads and 4000 characters and never acted on as instructions.
+
+#### Inline mode example
+
+```yaml
+      - uses: pfrack/review-action@v1
+        with:
+          nim_api_key: ${{ secrets.NIM_API_KEY }}
+          comment_mode: inline   # post line-anchored review comments
+```
 
 ### Severity Rendering
 

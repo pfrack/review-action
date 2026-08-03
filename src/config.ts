@@ -38,6 +38,7 @@ export interface Config {
   maxTokens: number;
   parallelAttempts: number;
   parallelThreshold: number;
+  commentMode: 'summary' | 'inline';
 }
 
 export function splitCSV(s: string): string[] {
@@ -146,6 +147,12 @@ export async function loadConfig(): Promise<Config> {
         return 40;
       }
       return parsed;
+    })(),
+    commentMode: (() => {
+      const raw = core.getInput('comment_mode') || 'summary';
+      if (raw === 'summary' || raw === 'inline') return raw;
+      core.warning(`Invalid comment_mode "${raw}", must be "summary" or "inline". Defaulting to "summary".`);
+      return 'summary';
     })(),
   };
 

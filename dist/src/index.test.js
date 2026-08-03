@@ -10,7 +10,7 @@ import { severityTally } from './render.js';
 import { buildSystemMessage, BASE_SYSTEM_PROMPT, SEVERITY_GUIDANCE } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { startMockServer } from './test-utils.js';
-import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, withAggregateTimeout, executeReview, prioritizeChain, run } from './index.js';
+import { computeMaxTokens, runModelChainForBatch, buildClients, buildRawOutputBody, withAggregateTimeout, executeReview, prioritizeChain, run, dispatchOutput } from './index.js';
 describe('buildSystemMessage', () => {
     it('returns BASE_SYSTEM_PROMPT when no custom prompt', () => {
         const msg = buildSystemMessage('append', '');
@@ -196,6 +196,7 @@ function makeConfig(overrides = {}) {
         maxTokens: 0,
         parallelAttempts: 1,
         parallelThreshold: 40,
+        commentMode: 'summary',
         ...overrides,
     };
 }
@@ -692,5 +693,167 @@ describe('run — orchestrator', () => {
         await runWithEnv({ INPUT_EXCLUDE_PATTERNS: '*.ts' }, captured);
         assert.strictEqual(captured.length, 1);
         assert.ok(captured[0].includes('No reviewable files found'), 'excluded-files path must post the no-reviewable-files comment');
+    });
+});
+describe('dispatchOutput — comment_mode branch', () => {
+    const REPO = 'octocat/hello';
+    const PR = 42;
+    function makeDispatchFetch(posts, behavior) {
+        const originalFetch = globalThis.fetch;
+        // Track the AI review id(s) so that a DELETE makes the subsequent
+        // GET /reviews return an empty list — mirroring GitHub, which removes
+        // the review on DELETE. Without this, cleanupPreviousOutput's
+        // `while (findExistingReview() !== null)` loop would never terminate.
+        const reviews = new Set(behavior.existingReviewId != null ? [behavior.existingReviewId] : []);
+        globalThis.fetch = (async (input, init) => {
+            const url = typeof input === 'string' ? input : (input?.url ?? '');
+            const method = (init?.method ?? 'GET').toUpperCase();
+            const bodyStr = init?.body ? (typeof init.body === 'string' ? init.body : '') : '';
+            if (url.includes('/graphql')) {
+                if (behavior.listThreadsThrow) {
+                    return new Response(JSON.stringify({ errors: [{ message: 'boom' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+                if (bodyStr.includes('reviewThreads')) {
+                    return new Response(JSON.stringify(behavior.listThreadsResponse ?? { data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+                if (bodyStr.includes('resolveReviewThread')) {
+                    return new Response(JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'x', isResolved: true } } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+                return new Response('{}', { status: 200 });
+            }
+            if (method === 'GET' && url.includes('/pulls/42/reviews')) {
+                const list = [...reviews].map((id) => ({ id, body: '### AI Code Review\nprev' }));
+                return new Response(JSON.stringify(list), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'DELETE' && url.includes('/pulls/42/reviews/')) {
+                const id = Number(url.split('/').pop());
+                reviews.delete(id);
+                return new Response('', { status: 200 });
+            }
+            if (method === 'GET' && url.includes('/issues/42/comments')) {
+                return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            if (method === 'POST' && (url.endsWith('/issues/42/comments') || url.endsWith('/pulls/42/reviews'))) {
+                posts.push({ url, body: bodyStr });
+                return new Response(JSON.stringify({ id: 1 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+            return new Response('{}', { status: 200 });
+        });
+        return { restore: () => { globalThis.fetch = originalFetch; } };
+    }
+    function makeReview(findingsCount, lineAnchored = true) {
+        const findings = Array.from({ length: findingsCount }, (_, i) => ({
+            file: 'src/a.ts',
+            line_start: lineAnchored ? i + 1 : undefined,
+            severity: 'Warning',
+            issue: 'unused variable',
+            critical_action: 'not applicable',
+            warning_action: 'remove unused variable',
+            suggestion_action: 'not applicable',
+        }));
+        return { findings, summary: 'review summary' };
+    }
+    function makeContext(overrides, review) {
+        const config = makeConfig(overrides);
+        return {
+            repo: REPO,
+            prNumber: PR,
+            token: 'fake-token',
+            config,
+            review,
+            reviewableFiles: ['src/a.ts'],
+            filesToReview: ['src/a.ts'],
+            truncated: false,
+            usedModel: 'test-model',
+            lastRawContent: '',
+            commitSha: 'abc123',
+        };
+    }
+    // Capture @actions/core `::warning::` annotations from stdout. Reassigning
+    // `core.warning` on the module namespace throws (ESM namespaces are
+    // read-only), so we spy on the underlying stream instead.
+    function captureWarnings() {
+        const warnings = [];
+        const orig = process.stdout.write.bind(process.stdout);
+        const spy = (chunk, ...args) => {
+            const s = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
+            if (s.includes('::warning'))
+                warnings.push(s);
+            return orig(chunk, ...args);
+        };
+        process.stdout.write = spy;
+        return {
+            warnings,
+            restore: () => { process.stdout.write = orig; },
+        };
+    }
+    it('inline mode posts a review (createReview), not a summary comment', async () => {
+        const posts = [];
+        const mock = makeDispatchFetch(posts, {
+            listThreadsResponse: { data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } },
+            existingReviewId: 200,
+        });
+        try {
+            await dispatchOutput(makeContext({ commentMode: 'inline' }, makeReview(2)));
+            const reviewPosts = posts.filter((p) => p.url.endsWith('/pulls/42/reviews'));
+            const commentPosts = posts.filter((p) => p.url.endsWith('/issues/42/comments'));
+            assert.strictEqual(reviewPosts.length, 1, 'exactly one inline review should be posted');
+            assert.strictEqual(commentPosts.length, 0, 'no summary comment should be posted in inline mode');
+            assert.ok(reviewPosts[0].body.includes('"comments"'), 'review should carry inline comments');
+        }
+        finally {
+            mock.restore();
+        }
+    });
+    it('inline mode falls back to summary comment when cleanup fails', async () => {
+        const posts = [];
+        const cap = captureWarnings();
+        const mock = makeDispatchFetch(posts, { listThreadsThrow: true });
+        try {
+            await dispatchOutput(makeContext({ commentMode: 'inline' }, makeReview(2)));
+            const reviewPosts = posts.filter((p) => p.url.endsWith('/pulls/42/reviews'));
+            const commentPosts = posts.filter((p) => p.url.endsWith('/issues/42/comments'));
+            assert.strictEqual(reviewPosts.length, 0, 'no inline review should be posted on cleanup failure');
+            assert.strictEqual(commentPosts.length, 1, 'summary fallback comment should be posted');
+            assert.ok(cap.warnings.some((w) => w.toLowerCase().includes('cleanup failed') || w.toLowerCase().includes('fall back to summary')), 'cleanup failure should warn about fallback');
+        }
+        finally {
+            mock.restore();
+            cap.restore();
+        }
+    });
+    it('inline mode falls back to summary comment when too many findings', async () => {
+        const posts = [];
+        const cap = captureWarnings();
+        const mock = makeDispatchFetch(posts, {
+            listThreadsResponse: { data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } },
+            existingReviewId: 200,
+        });
+        try {
+            await dispatchOutput(makeContext({ commentMode: 'inline' }, makeReview(60)));
+            const reviewPosts = posts.filter((p) => p.url.endsWith('/pulls/42/reviews'));
+            const commentPosts = posts.filter((p) => p.url.endsWith('/issues/42/comments'));
+            assert.strictEqual(reviewPosts.length, 0, 'no inline review should be posted when over the threshold');
+            assert.strictEqual(commentPosts.length, 1, 'summary fallback comment should be posted');
+            assert.ok(cap.warnings.some((w) => w.toLowerCase().includes('summary mode') || w.toLowerCase().includes('falling back to summary')), 'over-threshold should warn about fallback');
+        }
+        finally {
+            mock.restore();
+            cap.restore();
+        }
+    });
+    it('summary mode (default) posts exactly the summary comment path', async () => {
+        const posts = [];
+        const mock = makeDispatchFetch(posts, { existingReviewId: 200 });
+        try {
+            await dispatchOutput(makeContext({ commentMode: 'summary' }, makeReview(2)));
+            const reviewPosts = posts.filter((p) => p.url.endsWith('/pulls/42/reviews'));
+            const commentPosts = posts.filter((p) => p.url.endsWith('/issues/42/comments'));
+            assert.strictEqual(reviewPosts.length, 0, 'no inline review in summary mode');
+            assert.strictEqual(commentPosts.length, 1, 'summary comment posted');
+        }
+        finally {
+            mock.restore();
+        }
     });
 });

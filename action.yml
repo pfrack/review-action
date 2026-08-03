@@ -1,5 +1,5 @@
 name: 'NIM Code Review'
-description: 'AI-powered code review using NVIDIA NIM models with fallback'
+description: 'AI-powered code review using NVIDIA NIM models with fallback. Set `comment_mode: inline` to post line-anchored review comments (requires `pull-requests: write`; falls back to summary mode automatically if unavailable)'
 branding:
   icon: 'search'
   color: 'green'
@@ -129,6 +129,10 @@ inputs:
     description: 'Seconds to wait before starting the next model in parallel (when parallel_attempts > 1). The head model always starts first; this controls how long to wait before launching fallback copies.'
     required: false
     default: '40'
+  comment_mode:
+    description: 'Comment output mode: "summary" (one body comment, default) or "inline" (line-anchored review comments via the GitHub Reviews API). Inline mode requires `pull-requests: write` permission and falls back to summary mode if the GraphQL cleanup call fails.'
+    required: false
+    default: 'summary'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'

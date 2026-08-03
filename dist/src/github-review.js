@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown, safeParseJsonBody } from './utils.js';
+import { listReviewThreads, resolveReviewThread } from './github-graphql.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
 export const AI_REVIEW_MARKER = '### AI Code Review';
 export function formatFindingComment(finding) {
@@ -142,6 +143,79 @@ export async function deleteReview(repo, prNumber, reviewId, token) {
 export const INLINE_COMMENT_THRESHOLD = 50;
 export function shouldUseInlineComments(findings) {
     return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
+/**
+ * List existing review threads on the PR, resolve any that GitHub has
+ * marked `isOutdated`, then delete the (now-empty) prior review so the
+ * resolved threads disappear from view. Non-outdated threads remain
+ * unresolved for human resolution via the GitHub UI.
+ *
+ * Returns `{ resolved, failed: false }` on full success, or
+ * `{ resolved, failed: true }` if any step threw (caller falls back to
+ * summary mode for that run).
+ */
+export async function cleanupInlineReview(repo, prNumber, token) {
+    let threads = [];
+    let resolved = 0;
+    try {
+        threads = await listReviewThreads(repo, prNumber, token);
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to list threads: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved: 0, failed: true };
+    }
+    const outdatedUnresolved = threads.filter((t) => !t.isResolved && t.isOutdated);
+    // Resolve outdated threads with bounded concurrency (GitHub's resolveReviewThread
+    // is a per-thread mutation with no batch API). Caps in-flight requests so re-review
+    // latency doesn't scale linearly with the number of outdated threads.
+    const CONCURRENCY = 5;
+    let idx = 0;
+    const worker = async () => {
+        while (idx < outdatedUnresolved.length) {
+            const thread = outdatedUnresolved[idx++];
+            try {
+                await resolveReviewThread(thread.id, token);
+                resolved++;
+            }
+            catch (err) {
+                core.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
+                return false;
+            }
+        }
+        return true;
+    };
+    const ok = await Promise.all(Array.from({ length: Math.min(CONCURRENCY, outdatedUnresolved.length) }, () => worker())).then((results) => results.every(Boolean));
+    if (!ok) {
+        return { resolved, failed: true };
+    }
+    // Delete ALL prior AI reviews (not just the first) in a loop, so any
+    // stale review objects from a previous run are removed before posting the
+    // new inline review. `findExistingReview` is re-queried each iteration;
+    // `deleteReview` returns without throwing on 404, so a missing review is safe.
+    try {
+        let reviewId;
+        while ((reviewId = await findExistingReview(repo, prNumber, token)) !== null) {
+            await deleteReview(repo, prNumber, reviewId, token);
+        }
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to delete prior review: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved, failed: true };
+    }
+    // Drain any prior AI body comments too, so switching from summary mode
+    // (or a prior run) leaves no stale `### AI Code Review` comment sitting
+    // alongside the new inline review. Each is re-queried until none remain.
+    try {
+        let commentId;
+        while ((commentId = await findExistingComment(repo, prNumber, token)) !== null) {
+            await deleteComment(repo, commentId, token);
+        }
+    }
+    catch (err) {
+        core.warning(`cleanupInlineReview: failed to delete prior comments: ${err instanceof Error ? err.message : String(err)}`);
+        return { resolved, failed: true };
+    }
+    return { resolved, failed: false };
 }
 export async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
