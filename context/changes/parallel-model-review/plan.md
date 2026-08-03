@@ -276,5 +276,5 @@ npm test
 
 ### Phase 4: Verify
 #### Automated
-- [ ] 4.1 `npm run build` passes
-- [ ] 4.2 `npm test` passes
+- [x] 4.1 `npm run build` passes — 6de0c52
+- [x] 4.2 `npm test` passes — 6de0c52

@@ -1,7 +1,7 @@
 ---
 id: parallel-model-review
 title: "Parallel Model Review"
-status: planning
+status: implemented
 created: 2026-08-03
 updated: 2026-08-03
 type: feature
