@@ -731,9 +731,9 @@ pause is needed before tagging.
 
 #### Automated
 
-- [ ] 3.1 `npm test` passes (extended `src/github-review.test.ts` + extended `src/index.test.ts`)
-- [ ] 3.2 `npx tsc --noEmit` passes
-- [ ] 3.3 `npm run build` produces clean bundle
+- [x] 3.1 `npm test` passes (extended `src/github-review.test.ts` + extended `src/index.test.ts`) — 7b5f606
+- [x] 3.2 `npx tsc --noEmit` passes — 7b5f606
+- [x] 3.3 `npm run build` produces clean bundle — 7b5f606
 
 #### Manual
 
