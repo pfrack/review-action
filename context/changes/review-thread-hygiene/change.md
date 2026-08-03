@@ -2,7 +2,7 @@
 change_id: review-thread-hygiene
 created: 2026-08-03
 updated: 2026-08-03
-status: implemented
+status: impl_reviewed
 title: "Configurable inline mode with auto-resolve of outdated threads + previous-finding context"
 ---
 

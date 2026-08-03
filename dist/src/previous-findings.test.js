@@ -48,6 +48,15 @@ test('formatPreviousFindings: escapes markdown-special characters in body', () =
     const rawBacktickCount = (out.match(/(^|[^\\])`/g) || []).length;
     assert.equal(rawBacktickCount, 0);
 });
+test('formatPreviousFindings: escapes markdown-special characters in path', () => {
+    const out = formatPreviousFindings([
+        mkThread({ path: 'src/*star*_and_`tick`.ts', line: 1, body: 'finding' }),
+    ]);
+    // path is part of the untrusted carry-over block, so metacharacters must be escaped.
+    assert.ok(out.includes('\\*'), 'stars in path should be backslash-escaped');
+    assert.ok(out.includes('\\_'), 'underscores in path should be backslash-escaped');
+    assert.ok(out.includes('\\`tick\\`'), 'backticks in path should be backslash-escaped');
+});
 test('formatPreviousFindings: collapses whitespace in body to single spaces', () => {
     const out = formatPreviousFindings([
         mkThread({ body: 'line1\nline2\n\nline3' }),
