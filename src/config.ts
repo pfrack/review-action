@@ -131,11 +131,11 @@ export async function loadConfig(): Promise<Config> {
       return parsed;
     })(),
     parallelAttempts: (() => {
-      const raw = core.getInput('parallel_attempts') || '1';
+      const raw = core.getInput('parallel_attempts') || '3';
       const parsed = Number.parseInt(raw, 10);
       if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
-        core.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 1.`);
-        return 1;
+        core.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 3.`);
+        return 3;
       }
       return parsed;
     })(),
