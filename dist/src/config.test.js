@@ -335,3 +335,70 @@ describe('loadConfig — custom_swe_score', () => {
         });
     });
 });
+describe('loadConfig — parallel fields', () => {
+    const BASE = {
+        INPUT_NIM_API_KEY: 'nim-key',
+        INPUT_NIM_BASE_URL: '',
+        INPUT_NIM_MODELS: '',
+        INPUT_MAX_FILES: '',
+        INPUT_EXCLUDE_PATTERNS: '',
+        INPUT_NIM_SYSTEM_PROMPT: '',
+        INPUT_NIM_PROMPT_MODE: '',
+        INPUT_OPENROUTER_API_KEY: '',
+        INPUT_OPENROUTER_MODELS: '',
+        INPUT_MODEL_TIMEOUT: '',
+        INPUT_CHAIN_TIMEOUT: '',
+        INPUT_PARALLEL_ATTEMPTS: '',
+        INPUT_PARALLEL_THRESHOLD: '',
+    };
+    it('defaults parallelAttempts to 3 and parallelThreshold to 40', async () => {
+        await withEnv({ ...BASE }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelAttempts, 3);
+            assert.strictEqual(config.parallelThreshold, 40);
+        });
+    });
+    it('reads custom valid values', async () => {
+        await withEnv({ ...BASE, INPUT_PARALLEL_ATTEMPTS: '2', INPUT_PARALLEL_THRESHOLD: '20' }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelAttempts, 2);
+            assert.strictEqual(config.parallelThreshold, 20);
+        });
+    });
+    it('accepts boundary values 1 and 5 for parallel_attempts', async () => {
+        await withEnv({ ...BASE, INPUT_PARALLEL_ATTEMPTS: '1' }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelAttempts, 1);
+        });
+        await withEnv({ ...BASE, INPUT_PARALLEL_ATTEMPTS: '5' }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelAttempts, 5);
+        });
+    });
+    it('accepts boundary values 5 and 120 for parallel_threshold', async () => {
+        await withEnv({ ...BASE, INPUT_PARALLEL_THRESHOLD: '5' }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelThreshold, 5);
+        });
+        await withEnv({ ...BASE, INPUT_PARALLEL_THRESHOLD: '120' }, async () => {
+            const config = await loadConfig();
+            assert.strictEqual(config.parallelThreshold, 120);
+        });
+    });
+    it('warns and falls back to 3 for out-of-range or non-numeric parallel_attempts', async () => {
+        for (const bad of ['0', '6', '-1', 'abc']) {
+            await withEnv({ ...BASE, INPUT_PARALLEL_ATTEMPTS: bad }, async () => {
+                const config = await loadConfig();
+                assert.strictEqual(config.parallelAttempts, 3, `value "${bad}" should fall back to 3`);
+            });
+        }
+    });
+    it('warns and falls back to 40 for out-of-range or non-numeric parallel_threshold', async () => {
+        for (const bad of ['4', '121', '-1', 'abc', '0']) {
+            await withEnv({ ...BASE, INPUT_PARALLEL_THRESHOLD: bad }, async () => {
+                const config = await loadConfig();
+                assert.strictEqual(config.parallelThreshold, 40, `value "${bad}" should fall back to 40`);
+            });
+        }
+    });
+});

@@ -270,9 +270,9 @@ npm test
 
 ### Phase 3: README documentation
 #### Automated
-- [ ] 3.1 Fix stale `model_timeout` default in README: `60` → `90` (lines 64, 75)
-- [ ] 3.2 Add `parallel_attempts` and `parallel_threshold` rows to Inputs table (after line 65)
-- [ ] 3.3 Add "Parallel Model Fallback" section to README (after line 82)
+- [x] 3.1 Fix stale `model_timeout` default in README: `60` → `90` (lines 64, 75) — 56d6743
+- [x] 3.2 Add `parallel_attempts` and `parallel_threshold` rows to Inputs table (after line 65) — 56d6743
+- [x] 3.3 Add "Parallel Model Fallback" section to README (after line 82) — 56d6743
 
 ### Phase 4: Verify
 #### Automated

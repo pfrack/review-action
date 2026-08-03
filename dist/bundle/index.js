@@ -26240,11 +26240,11 @@ async function loadConfig() {
             return parsed;
         })(),
         parallelAttempts: (() => {
-            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_attempts') || '1';
+            const raw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('parallel_attempts') || '3';
             const parsed = Number.parseInt(raw, 10);
             if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
-                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 1.`);
-                return 1;
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 3.`);
+                return 3;
             }
             return parsed;
         })(),
