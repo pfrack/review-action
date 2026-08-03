@@ -138,7 +138,9 @@ describe('cleanupInlineReview', () => {
         try {
             const result = await cleanupInlineReview('owner/repo', 42, 'token');
             assert.deepStrictEqual(result, { resolved: 2, failed: false });
-            assert.deepStrictEqual(mock.resolveCalls, ['PRRT_a', 'PRRT_b']);
+            // Resolve order is non-deterministic under bounded concurrency.
+            assert.deepStrictEqual([...new Set(mock.resolveCalls)].sort(), ['PRRT_a', 'PRRT_b']);
+            assert.strictEqual(mock.resolveCalls.length, 2);
             assert.deepStrictEqual(mock.deleteCalls, [200]);
         }
         finally {

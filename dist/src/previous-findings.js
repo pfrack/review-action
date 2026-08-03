@@ -29,7 +29,7 @@ export function formatPreviousFindings(threads, maxThreads = 20, maxChars = 4000
             omitted = unresolved.length - lines.length;
             break;
         }
-        const loc = thread.line != null ? `${thread.path}:${thread.line}` : thread.path;
+        const loc = escapeMarkdown(thread.line != null ? `${thread.path}:${thread.line}` : thread.path);
         const body = escapeMarkdown(thread.body).replace(/\s+/g, ' ').trim();
         const line = `- ${loc} — ${body}`;
         const candidate = lines.length === 0 ? line : `\n${line}`;

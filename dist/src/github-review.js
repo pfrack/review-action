@@ -165,15 +165,28 @@ export async function cleanupInlineReview(repo, prNumber, token) {
         return { resolved: 0, failed: true };
     }
     const outdatedUnresolved = threads.filter((t) => !t.isResolved && t.isOutdated);
-    for (const thread of outdatedUnresolved) {
-        try {
-            await resolveReviewThread(thread.id, token);
-            resolved++;
+    // Resolve outdated threads with bounded concurrency (GitHub's resolveReviewThread
+    // is a per-thread mutation with no batch API). Caps in-flight requests so re-review
+    // latency doesn't scale linearly with the number of outdated threads.
+    const CONCURRENCY = 5;
+    let idx = 0;
+    const worker = async () => {
+        while (idx < outdatedUnresolved.length) {
+            const thread = outdatedUnresolved[idx++];
+            try {
+                await resolveReviewThread(thread.id, token);
+                resolved++;
+            }
+            catch (err) {
+                core.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
+                return false;
+            }
         }
-        catch (err) {
-            core.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
-            return { resolved, failed: true };
-        }
+        return true;
+    };
+    const ok = await Promise.all(Array.from({ length: Math.min(CONCURRENCY, outdatedUnresolved.length) }, () => worker())).then((results) => results.every(Boolean));
+    if (!ok) {
+        return { resolved, failed: true };
     }
     // Delete ALL prior AI reviews (not just the first) in a loop, so any
     // stale review objects from a previous run are removed before posting the

@@ -27352,15 +27352,28 @@ async function cleanupInlineReview(repo, prNumber, token) {
         return { resolved: 0, failed: true };
     }
     const outdatedUnresolved = threads.filter((t) => !t.isResolved && t.isOutdated);
-    for (const thread of outdatedUnresolved) {
-        try {
-            await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .resolveReviewThread */ .z)(thread.id, token);
-            resolved++;
+    // Resolve outdated threads with bounded concurrency (GitHub's resolveReviewThread
+    // is a per-thread mutation with no batch API). Caps in-flight requests so re-review
+    // latency doesn't scale linearly with the number of outdated threads.
+    const CONCURRENCY = 5;
+    let idx = 0;
+    const worker = async () => {
+        while (idx < outdatedUnresolved.length) {
+            const thread = outdatedUnresolved[idx++];
+            try {
+                await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .resolveReviewThread */ .z)(thread.id, token);
+                resolved++;
+            }
+            catch (err) {
+                _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
+                return false;
+            }
         }
-        catch (err) {
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`cleanupInlineReview: failed to resolve thread ${thread.id}: ${err instanceof Error ? err.message : String(err)}`);
-            return { resolved, failed: true };
-        }
+        return true;
+    };
+    const ok = await Promise.all(Array.from({ length: Math.min(CONCURRENCY, outdatedUnresolved.length) }, () => worker())).then((results) => results.every(Boolean));
+    if (!ok) {
+        return { resolved, failed: true };
     }
     // Delete ALL prior AI reviews (not just the first) in a loop, so any
     // stale review objects from a previous run are removed before posting the
@@ -28857,7 +28870,7 @@ function formatPreviousFindings(threads, maxThreads = 20, maxChars = 4000) {
             omitted = unresolved.length - lines.length;
             break;
         }
-        const loc = thread.line != null ? `${thread.path}:${thread.line}` : thread.path;
+        const loc = (0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(thread.line != null ? `${thread.path}:${thread.line}` : thread.path);
         const body = (0,_utils_js__WEBPACK_IMPORTED_MODULE_0__/* .escapeMarkdown */ .FV)(thread.body).replace(/\s+/g, ' ').trim();
         const line = `- ${loc} — ${body}`;
         const candidate = lines.length === 0 ? line : `\n${line}`;
