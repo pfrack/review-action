@@ -1,5 +1,8 @@
 import * as core from '@actions/core';
 import { OpenAIClient } from './openai-client.js';
+const PARALLEL_ATTEMPTS_DEFAULT = 3;
+const PARALLEL_ATTEMPTS_MIN = 1;
+const PARALLEL_ATTEMPTS_MAX = 5;
 export function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -89,11 +92,11 @@ export async function loadConfig() {
             return parsed;
         })(),
         parallelAttempts: (() => {
-            const raw = core.getInput('parallel_attempts') || '3';
+            const raw = core.getInput('parallel_attempts') || String(PARALLEL_ATTEMPTS_DEFAULT);
             const parsed = Number.parseInt(raw, 10);
-            if (Number.isNaN(parsed) || parsed < 1 || parsed > 5) {
-                core.warning(`Invalid parallel_attempts "${raw}", must be 1-5. Defaulting to 3.`);
-                return 3;
+            if (Number.isNaN(parsed) || parsed < PARALLEL_ATTEMPTS_MIN || parsed > PARALLEL_ATTEMPTS_MAX) {
+                core.warning(`Invalid parallel_attempts "${raw}", must be ${PARALLEL_ATTEMPTS_MIN}-${PARALLEL_ATTEMPTS_MAX}. Defaulting to ${PARALLEL_ATTEMPTS_DEFAULT}.`);
+                return PARALLEL_ATTEMPTS_DEFAULT;
             }
             return parsed;
         })(),
