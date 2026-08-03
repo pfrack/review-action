@@ -61,8 +61,10 @@ jobs:
 | `custom_rules` | `''` | Custom review rules (one per line, supports severity prefixes) |
 | `revalidate_findings` | `false` | Re-validate findings with LLM before posting (reduces false positives, adds latency) |
 | `drop_unreferenced` | `true` | Drop findings whose backtick-wrapped identifier or explicit `function X` / `variable X` reference is not present in the diff. Set `false` to keep them as soft `Note:` warnings (legacy behavior). |
-| `model_timeout` | `60` | Timeout in seconds for each individual model call (0 = no per-model limit) |
+| `model_timeout` | `90` | Timeout in seconds for each individual model call (0 = no per-model limit) |
 | `chain_timeout` | `0` | Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models) |
+| `parallel_attempts` | `3` | Number of models to try in parallel via staggered starts. Default 3 (light parallel). Set to 1 for fully sequential. Range 2-5. The head model starts immediately; each subsequent model starts after `parallel_threshold` seconds if no winner has emerged. |
+| `parallel_threshold` | `40` | Seconds to wait before starting the next parallel model (when `parallel_attempts` > 1). Range 5-120. |
 | `comment_mode` | `summary` | Output mode: `summary` (one PR comment, default) or `inline` (line-anchored review comments via the GitHub Reviews API). Inline mode requires `pull-requests: write` and auto-resolves `isOutdated` review threads on re-review. |
 
 At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_api_key`, `kilocode_api_key`, or `custom_api_url` + `custom_model`/`custom_models` is required. When multiple providers are configured, models are merged into a single fallback chain sorted by SWE-bench Verified score. Free-tier models (`:free` suffix) rank last in the chain.
@@ -72,13 +74,47 @@ At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_ap
 1. **Diff fetch** — Downloads the PR diff from GitHub. Skips reviews for diffs >5 MB.
 2. **Model probing** — Probes models in the chain (batches of 3, 10s timeout) and moves the fastest-responding model to the front.
 3. **Batching** — If the PR has >50 files, splits them into batches of 50 and reviews each batch independently.
-4. **Model chain** — Tries each model in the combined fallback chain (custom → providers sorted by SWE-bench score, free-tier forced last). Each individual model call has a 60s timeout (`model_timeout`); if a model doesn't respond in time, it's skipped immediately. By default, the chain runs until a model succeeds or all models are exhausted (no aggregate limit). Set `chain_timeout` to impose a hard cap.
+4. **Model chain** — Tries each model in the combined fallback chain (custom → providers sorted by SWE-bench score, free-tier forced last). Each individual model call has a 90s timeout (`model_timeout`); if a model doesn't respond in time, it's skipped immediately. By default, the chain runs until a model succeeds or all models are exhausted (no aggregate limit). Set `chain_timeout` to impose a hard cap.
 5. **Structured output** — Each model is prompted to respond in JSON matching a Zod-validated `Review` schema with typed `Finding` objects (file, severity, line range, issue, suggestion, plus per-severity action fields).
 6. **Parse + retry** — Responses are validated via `safeParse()`. On failure, the action retries once with the validation error appended. Parse failures cause a model skip (next model in chain).
 7. **Diff validation** — Each finding is checked: `file` must exist in the PR's changed files, `line_start..line_end` must overlap a changed hunk (with adaptive tolerance). Hallucinated findings are dropped with a warning.
 8. **Code context validation** — Backtick-wrapped identifiers and explicit references in findings are checked against the diff text.
 9. **LLM revalidation** (optional) — When `revalidate_findings: true`, findings are re-validated by asking the model which are real vs hallucinated.
 10. **Render** — The validated `Review` object is rendered into a deterministic markdown PR comment with severity-bucketed sections. Previous AI review comments/reviews are cleaned up before posting.
+
+### Parallel Model Fallback
+
+By default, the action runs **light parallel** (`parallel_attempts: 3`):
+after a configurable delay, fallback models start in parallel with the head
+model. The first model to return validated findings wins; in-flight siblings
+are aborted. This cuts wall-clock latency when the head model is slow or
+fails, without paying for parallel calls in the happy path.
+
+**How staggering works** (with defaults `parallel_attempts: 3`,
+`parallel_threshold: 40s`):
+
+| Sibling | Starts at | Fires only if |
+|---------|-----------|--------------|
+| Head (model 0) | t=0s | always |
+| Sibling 1 | t=40s | head hasn't returned valid findings yet |
+| Sibling 2 | t=80s | head AND sibling 1 haven't returned yet |
+
+If the head model succeeds in under 40s, **no siblings start** — you get
+latency insurance for zero additional cost.
+
+**Cost insulation**: parallel mode multiplies calls only in the
+slow/failure case, not the happy path. Siblings are provider fallback
+models (free-tier by default); the `AbortController` cancels in-flight
+siblings the moment a winner emerges; and each call's output is bounded by
+the adaptive token cap (4,096–16,384 tokens). Set `parallel_attempts: 1`
+for fully sequential execution.
+
+```yaml
+- uses: pfrack/review-action@v1
+  with:
+    nim_api_key: ${{ secrets.NIM_API_KEY }}
+    parallel_attempts: 1   # opt out of parallel, run fully sequential
+```
 
 ### Output Modes
 

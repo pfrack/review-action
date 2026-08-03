@@ -265,8 +265,8 @@ npm test
 
 ### Phase 2: Config tests for the new defaults
 #### Automated
-- [ ] 2.1 Add `loadConfig — parallel fields` test block to `src/config.test.ts` (6 new test cases)
-- [ ] 2.2 Verify existing BASE blocks in `config.test.ts` still pass with new defaults (no changes needed)
+- [x] 2.1 Add `loadConfig — parallel fields` test block to `src/config.test.ts` (6 new test cases) — 76853e5
+- [x] 2.2 Verify existing BASE blocks in `config.test.ts` still pass with new defaults (no changes needed) — 76853e5
 
 ### Phase 3: README documentation
 #### Automated
