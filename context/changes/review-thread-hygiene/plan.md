@@ -708,9 +708,9 @@ pause is needed before tagging.
 
 #### Automated
 
-- [ ] 1.1 `npm test` passes (all existing tests + new `src/github-graphql.test.ts`)
-- [ ] 1.2 `npx tsc --noEmit` passes with new dep
-- [ ] 1.3 `npx ncc build src/index.ts -o /tmp/ncc-test` succeeds
+- [x] 1.1 `npm test` passes (all existing tests + new `src/github-graphql.test.ts`) — 6a50ab4
+- [x] 1.2 `npx tsc --noEmit` passes with new dep — 6a50ab4
+- [x] 1.3 `npx ncc build src/index.ts -o /tmp/ncc-test` succeeds — 6a50ab4
 
 #### Manual
 
