@@ -13,6 +13,8 @@ checkpoint:
       decision: "only bench current 7 from action.yml; replace failures from SWE-bench ranked list"
     - topic: "ranking algorithm"
       decision: "effective score = SWE-bench × latency penalty; no historical win tracking needed"
+      status: "implemented"
+      implemented_in: "bench-reorder.ts rankModels/rankModelsTwoTier (Phase 1 of bench-ejects-best-models)"
     - topic: "model discovery"
       decision: "new models checked only if they appear in NIM API and have SWE-bench data above current worst"
     - topic: "stats persistence"

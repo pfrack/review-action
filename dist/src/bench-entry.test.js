@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { OpenAIClient } from './openai-client.js';
-import { deterministicMatch, normalizeModelId, readmitCatalogModels, mapWithConcurrency } from './bench-entry.js';
+import { deterministicMatch, normalizeModelId, readmitCatalogModels, mapWithConcurrency, classifyFailedModels } from './bench-entry.js';
 const LEADERBOARD = [
     { modelId: 'deepseek-ai/deepseek-v4-pro', score: 0.806, org: 'deepseek' },
     { modelId: 'meta/llama-3.3-70b-instruct', score: 0.62, org: 'meta' },
@@ -154,6 +154,52 @@ function makeActionYml(tmpDir, models) {
     return path;
 }
 const BENCH_PROMPT = 'review this code';
+describe('classifyFailedModels', () => {
+    it('classifies probe-pass + catalog-listed as demoted with probe latency', async () => {
+        const { demoted, transient, permanent } = await classifyFailedModels(['nvidia/llama-3.1-nemotron-ultra-253b-v1'], async () => true, new Set(['nvidia/llama-3.1-nemotron-ultra-253b-v1']));
+        assert.strictEqual(demoted.length, 1);
+        assert.strictEqual(demoted[0].model, 'nvidia/llama-3.1-nemotron-ultra-253b-v1');
+        assert.strictEqual(typeof demoted[0].probeLatency, 'number');
+        assert.deepStrictEqual(transient, []);
+        assert.deepStrictEqual(permanent, []);
+    });
+    it('classifies probe-pass as demoted even when not in catalog', async () => {
+        const { demoted, transient, permanent } = await classifyFailedModels(['custom/off-catalog'], async () => true, new Set(['nvidia/llama-3.1-nemotron-ultra-253b-v1']));
+        assert.strictEqual(demoted.length, 1);
+        assert.strictEqual(demoted[0].model, 'custom/off-catalog');
+        assert.deepStrictEqual(transient, []);
+        assert.deepStrictEqual(permanent, []);
+    });
+    it('classifies probe-fail + catalog-listed as transient', async () => {
+        const { demoted, transient, permanent } = await classifyFailedModels(['nvidia/llama-3.1-nemotron-ultra-253b-v1'], async () => false, new Set(['nvidia/llama-3.1-nemotron-ultra-253b-v1']));
+        assert.deepStrictEqual(demoted, []);
+        assert.deepStrictEqual(transient, ['nvidia/llama-3.1-nemotron-ultra-253b-v1']);
+        assert.deepStrictEqual(permanent, []);
+    });
+    it('classifies probe-fail + not-in-catalog as permanently unavailable', async () => {
+        const { demoted, transient, permanent } = await classifyFailedModels(['custom/off-catalog'], async () => false, new Set(['nvidia/llama-3.1-nemotron-ultra-253b-v1']));
+        assert.deepStrictEqual(demoted, []);
+        assert.deepStrictEqual(transient, []);
+        assert.deepStrictEqual(permanent, ['custom/off-catalog']);
+    });
+    it('classifies probe-fail as permanently unavailable when no catalog is available', async () => {
+        const { demoted, transient, permanent } = await classifyFailedModels(['mistralai/mistral-large'], async () => false);
+        assert.deepStrictEqual(demoted, []);
+        assert.deepStrictEqual(transient, []);
+        assert.deepStrictEqual(permanent, ['mistralai/mistral-large']);
+    });
+    it('handles mixed failures and preserves classification per model', async () => {
+        const probeResults = new Map([
+            ['healthy-model', true],
+            ['transient-model', false],
+            ['gone-model', false],
+        ]);
+        const { demoted, transient, permanent } = await classifyFailedModels(['healthy-model', 'transient-model', 'gone-model'], async (m) => probeResults.get(m) ?? false, new Set(['healthy-model', 'transient-model']));
+        assert.deepStrictEqual(demoted, [{ model: 'healthy-model', probeLatency: demoted[0].probeLatency }]);
+        assert.deepStrictEqual(transient, ['transient-model']);
+        assert.deepStrictEqual(permanent, ['gone-model']);
+    });
+});
 describe('readmitCatalogModels', () => {
     let testDir;
     let actionPath;

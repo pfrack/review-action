@@ -72,7 +72,7 @@ At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_ap
 ## How It Works
 
 1. **Diff fetch** — Downloads the PR diff from GitHub. Skips reviews for diffs >5 MB.
-2. **Model probing** — Probes models in the chain (batches of 3, 10s timeout) and moves the fastest-responding model to the front.
+2. **Model probing** — Probes models in the chain (batches of 3, 10s timeout). The probe is diagnostic only: it never reorders the chain. The chain order always stays sorted by SWE-bench Verified score, so a faster model cannot leapfrog a higher-scoring head.
 3. **Batching** — If the PR has >50 files, splits them into batches of 50 and reviews each batch independently.
 4. **Model chain** — Tries each model in the combined fallback chain (custom → providers sorted by SWE-bench score, free-tier forced last). Each individual model call has a 90s timeout (`model_timeout`); if a model doesn't respond in time, it's skipped immediately. By default, the chain runs until a model succeeds or all models are exhausted (no aggregate limit). Set `chain_timeout` to impose a hard cap.
 5. **Structured output** — Each model is prompted to respond in JSON matching a Zod-validated `Review` schema with typed `Finding` objects (file, severity, line range, issue, suggestion, plus per-severity action fields).

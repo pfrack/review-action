@@ -8,6 +8,13 @@ import { loadHistory, saveHistory, detectNewModels, detectRemovedModels, updateH
 function envOrDefault(key, def) {
     return process.env[key] || def;
 }
+function parsePositiveIntEnv(key, def) {
+    const raw = envOrDefault(key, String(def));
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 1)
+        throw new Error(`${key} must be a positive integer`);
+    return n;
+}
 const SYNTHETIC_REVIEW_PROMPT = `You are a helpful coding assistant. Review the following code snippet for bugs, security issues, and performance problems. Respond in concise markdown with findings.
 
 \`\`\`python
@@ -38,6 +45,35 @@ export async function mapWithConcurrency(items, concurrency, fn) {
         results.push(...outcomes);
     }
     return results;
+}
+/**
+ * Classify benchmark-failed models using the probe as the availability signal:
+ *   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
+ *   probe-fail  + catalog-listed  → transient (re-probed next run)
+ *   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
+ * `availableModels` is optional: when absent (e.g. catalog fetch failed), a
+ * probe-fail is treated as permanently unavailable — the model is excluded
+ * and dropped from the removal set.
+ */
+export async function classifyFailedModels(failed, probeModel, availableModels) {
+    const demoted = [];
+    const transient = [];
+    const permanent = [];
+    for (const model of failed) {
+        const probeStart = Date.now();
+        const probeOk = await probeModel(model);
+        const probeLatency = Date.now() - probeStart;
+        if (probeOk) {
+            demoted.push({ model, probeLatency });
+        }
+        else if (availableModels && availableModels.has(model)) {
+            transient.push(model);
+        }
+        else {
+            permanent.push(model);
+        }
+    }
+    return { demoted, transient, permanent };
 }
 /**
  * Read current models from action.yml for a given provider target.
@@ -357,7 +393,7 @@ async function main() {
         iterations = n;
     }
     const benchPrompt = envOrDefault('BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
-    const concurrency = parseInt(envOrDefault('BENCH_CONCURRENCY', '1'), 10);
+    const concurrency = parsePositiveIntEnv('BENCH_CONCURRENCY', 1);
     process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations (concurrency ${concurrency})...\n\n`);
     // Benchmark current models
     const results = [];
@@ -388,7 +424,7 @@ async function main() {
     // action.yml and benchmarks those that pass the probe. Replaces the
     // file-based removed-models recheck path for NIM.
     if (isNim && availableModels) {
-        const readmitLimit = parseInt(envOrDefault('BENCH_READMIT_LIMIT', '5'), 10);
+        const readmitLimit = parsePositiveIntEnv('BENCH_READMIT_LIMIT', 5);
         const { results: reAdmittedResults, reAdmitted } = await readmitCatalogModels({
             availableModels,
             actionPath,
@@ -408,44 +444,33 @@ async function main() {
     //   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
     //   probe-fail  + catalog-listed  → transient (re-probed next run)
     //   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
-    const transientFailed = [];
-    if (failed.length > 0) {
-        for (const model of failed) {
-            const probeStart = Date.now();
-            const probeOk = await client.probeModel(model);
-            const probeLatency = Date.now() - probeStart;
-            if (probeOk) {
-                process.stderr.write(`  ${model}: demoted — slow but healthy (probe ok, ${Math.round(probeLatency / 1000)}s)\n`);
-                // Replace the all-failed result with a synthetic result using probe
-                // latency so the model appears in the table and is ranked by effective
-                // score (with latency penalty) instead of being dropped entirely.
-                const idx = results.findIndex(r => r.model === model);
-                if (idx >= 0) {
-                    results.splice(idx, 1);
-                }
-                results.push({
-                    model,
-                    iterations: [{
-                            ttft: 0,
-                            latency: probeLatency,
-                            completionTokens: 8,
-                            tokensPerSec: 8 / (probeLatency / 1000),
-                            error: null,
-                        }],
-                });
-            }
-            else if (availableModels && availableModels.has(model)) {
-                process.stderr.write(`  ${model}: transient — will re-probe next run\n`);
-                transientFailed.push(model);
-            }
-            else {
-                process.stderr.write(`  ${model}: permanently unavailable (not in catalog)\n`);
-            }
+    const { demoted, transient } = await classifyFailedModels(failed, model => client.probeModel(model), availableModels ?? undefined);
+    for (const { model, probeLatency } of demoted) {
+        process.stderr.write(`  ${model}: demoted — slow but healthy (probe ok, ${Math.round(probeLatency / 1000)}s)\n`);
+        // Replace the all-failed result with a synthetic result using probe
+        // latency so the model appears in the table and is ranked by effective
+        // score (with latency penalty) instead of being dropped entirely.
+        const idx = results.findIndex(r => r.model === model);
+        if (idx >= 0) {
+            results.splice(idx, 1);
         }
+        results.push({
+            model,
+            iterations: [{
+                    ttft: 0,
+                    latency: probeLatency,
+                    completionTokens: 8,
+                    tokensPerSec: 8 / (probeLatency / 1000),
+                    error: null,
+                }],
+        });
+    }
+    for (const model of transient) {
+        process.stderr.write(`  ${model}: transient — will re-probe next run\n`);
     }
     // Keep only transient models in `failed` for the replacement logic below
     failed.length = 0;
-    failed.push(...transientFailed);
+    failed.push(...transient);
     // Replace remaining failed models (transient only) with next best from SWE-bench.
     // Replacement uses the hardcoded SWE-bench table which is NIM-specific,
     // so only run it for NIM endpoints.
@@ -504,7 +529,7 @@ async function main() {
         }
         if (toRecheck.length === 0) {
             // Nothing to recheck; just persist the cleanup.
-            const finalRemoved = new Set([...transientFailed]);
+            const finalRemoved = new Set([...transient]);
             writeRemovedModels([...finalRemoved], removedModelsPath);
             removedModels = [...finalRemoved];
         }
@@ -512,7 +537,7 @@ async function main() {
             process.stderr.write(`\nRechecking ${toRecheck.length} previously removed model(s)...\n`);
             const recovered = [];
             const stillFailed = [];
-            const concurrency = parseInt(envOrDefault('BENCH_RECHECK_CONCURRENCY', '3'), 10);
+            const concurrency = parsePositiveIntEnv('BENCH_RECHECK_CONCURRENCY', 3);
             // Process models in batches of `concurrency`
             for (let i = 0; i < toRecheck.length; i += concurrency) {
                 const batch = toRecheck.slice(i, i + concurrency);
@@ -553,7 +578,7 @@ async function main() {
             // are dropped (they are now in the main list), and any new transient
             // failures from this run are merged in (deduplicated).
             const finalRemoved = new Set(stillFailed);
-            for (const m of transientFailed)
+            for (const m of transient)
                 finalRemoved.add(m);
             writeRemovedModels([...finalRemoved], removedModelsPath);
             removedModels = [...finalRemoved];
@@ -562,9 +587,9 @@ async function main() {
             }
         }
     }
-    else if (removedModelsPath && transientFailed.length > 0) {
+    else if (removedModelsPath && transient.length > 0) {
         // No recheck needed, but persist transient failures for file-based providers.
-        const finalRemoved = new Set([...removedModels, ...transientFailed]);
+        const finalRemoved = new Set([...removedModels, ...transient]);
         writeRemovedModels([...finalRemoved], removedModelsPath);
     }
     // NIM (no REMOVED_MODELS_PATH): nothing to persist — re-admission is
