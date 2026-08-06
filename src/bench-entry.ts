@@ -442,13 +442,7 @@ async function main(): Promise<void> {
     models = [...models, ...discoveredModels];
   }
 
-  let iterations = 2;
-  const iterEnv = process.env.BENCH_ITERATIONS;
-  if (iterEnv) {
-    const n = parseInt(iterEnv, 10);
-    if (isNaN(n)) throw new Error('BENCH_ITERATIONS must be an integer');
-    iterations = n;
-  }
+  const iterations = parsePositiveIntEnv('BENCH_ITERATIONS', 2);
 
   const benchPrompt = envOrDefault('BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
 

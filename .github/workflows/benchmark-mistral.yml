@@ -69,13 +69,21 @@ jobs:
               git commit --amend --no-edit --date="$(date -R)"
               git checkout -- .
               git clean -fd
-              git pull --rebase origin main
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
               git push --force-with-lease
             else
               git commit -m "chore: update mistral model order from daily benchmark [skip ci]"
               git checkout -- .
               git clean -fd
-              git pull --rebase origin main
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
               git push
             fi
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)

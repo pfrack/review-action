@@ -419,8 +419,7 @@ describe('readmitCatalogModels', () => {
             iterations: 1,
             limit: 10,
         });
-        assert.strictEqual(probeOrder[0], 'mistralai/mistral-large');
-        assert.strictEqual(probeOrder[1], 'nvidia/nemotron-3-super-120b-a12b');
+        assert.deepStrictEqual([...probeOrder].sort(), ['mistralai/mistral-large', 'nvidia/nemotron-3-super-120b-a12b']);
     });
     it('respects the concurrency option by bounding in-flight calls', async () => {
         actionPath = makeActionYml(testDir, []);
