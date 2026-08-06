@@ -345,6 +345,7 @@ The NIM benchmark runs models sequentially (`bench-entry.ts:387-410`). With 11 m
 
 ## Migration Notes
 
+- `.github/workflows/benchmark.yml` is replaced by 5 per-provider workflows (Phase 6). The old file is deleted; the new files keep the same job bodies under new `name`/schedule headers. The shared `benchmark-commit` concurrency group is retained so concurrent runs across providers still serialize their push to `main`.
 - `removed-models.txt` is deleted from the repo. The NIM benchmark job no longer sets `REMOVED_MODELS_PATH`. If the file exists locally, it is ignored.
 - Existing `removed-models.txt` contents (the 5 ejected models) are effectively reset — all will be re-discovered from the catalog on the next NIM benchmark run. This is the desired behavior: catalog-listed models should not persist in an ejection file.
 - The latency penalty change in `rankModels` affects all providers (NIM, Mistral, OR, Kilo) since both `rankModels` and `rankModelsTwoTier` use `getEffectiveScore`. This is intentional — slow-but-healthy models should be demoted across all providers, not just NIM.
@@ -374,7 +375,7 @@ The NIM benchmark runs models sequentially (`bench-entry.ts:387-410`). With 11 m
 - `README.md:258-262` — stale default chain listing
 - `README.md:274` — stale probe promotion claim
 - `shape-notes.md:15` — "effective score = SWE × latency penalty" (now implemented, no longer stale)
-- `.github/workflows/benchmark.yml:36` — NIM job's `REMOVED_MODELS_PATH` (to be removed)
+- `.github/workflows/benchmark-nim.yml` — NIM job (was `benchmark.yml`; no `REMOVED_MODELS_PATH`, opts into `BENCH_CONCURRENCY: '3'`). Split into 5 per-provider workflows in Phase 6 (see Progress).
 - `src/bench-entry.ts:387-410` — sequential main benchmark loop (to be parallelized in Phase 5)
 - `src/bench-entry.ts:546-551` — existing bounded-concurrency batch pattern (`BENCH_RECHECK_CONCURRENCY`, default 3) to reuse in Phase 5
 
@@ -458,3 +459,37 @@ The NIM benchmark runs models sequentially (`bench-entry.ts:387-410`). With 11 m
 - [ ] 5.6 `BENCH_MODELS=model-a,model-b` run completes in ~⅓ sequential time
 - [ ] 5.7 Full 11-model run completes without rate-limit failure
 - [ ] 5.8 Re-admission + failure classification observable in a single run
+
+### Phase 6: Split Benchmark into Staggered Per-Provider Workflows
+
+Follow-up decided during implementation review (2026-08-06): a GitHub hosted-runner provisioning
+failure on one provider cancelled a single job in the monolithic `benchmark.yml` run. Per-provider
+workflows give each provider its own run status and remove cross-job coupling, while staggered crons
+(10 min apart) serialize pushes to `main` from the shared `action.yml`/`src/bench-reorder.ts`.
+
+**Design**: replace `.github/workflows/benchmark.yml` (5 parallel jobs, one run) with 5 per-provider
+workflows, each running on its own schedule but sharing the `benchmark-commit` concurrency group so an
+overlapping manual dispatch or delayed rerun still serializes against other providers:
+
+- `.github/workflows/benchmark-nim.yml` — cron `0 6 * * *`
+- `.github/workflows/benchmark-mistral.yml` — cron `10 6 * * *`
+- `.github/workflows/benchmark-groq.yml` — cron `20 6 * * *`
+- `.github/workflows/benchmark-openrouter.yml` — cron `30 6 * * *`
+- `.github/workflows/benchmark-kilocode.yml` — cron `40 6 * * *`
+
+Each workflow keeps its provider-specific env (secrets, `BENCH_BASE_URL`, `REMOVED_MODELS_PATH`,
+`ACTION_TARGET`, model lists, `BENCH_AUTO_FREE`, `BENCH_SCORES_FILE`) and the Phase 6 hardening from
+the review (`--force-with-lease` on branch pushes; rebase conflicts fail explicitly with `exit 1`
+instead of being masked).
+
+#### Automated
+
+- [x] 6.1 `benchmark.yml` deleted; 5 per-provider workflow files added — 7cdfb0d
+- [x] 6.2 All 5 workflow files parse as valid YAML; cron/group/jobs verified — 7cdfb0d
+- [x] 6.3 Provider-specific env preserved per workflow (no secret/model drift vs original jobs) — 7cdfb0d
+
+#### Manual
+
+- [ ] 6.4 Next scheduled run shows 5 separate workflow runs, one per provider
+- [ ] 6.5 A runner-provisioning failure on one provider leaves the other 4 runs unaffected
+- [ ] 6.6 Manual `workflow_dispatch` of one provider does not clobber another provider's commit (serialized via shared concurrency group)
