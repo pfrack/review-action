@@ -113,7 +113,7 @@ describe('rankModels', () => {
     assert.strictEqual(ranked[2], 'meta/llama-3.3-70b-instruct');
   });
 
-  it('ranks by SWE score regardless of latency', () => {
+  it('ranks by effective score with latency penalty applied', () => {
     const rows: ParsedRow[] = [
       { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 150_000, tokensPerSec: 30, errors: 0 },
       { model: 'stepfun-ai/step-3.7-flash', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
@@ -121,22 +121,40 @@ describe('rankModels', () => {
     const latencies = { 'deepseek-ai/deepseek-v4-pro': 150_000, 'stepfun-ai/step-3.7-flash': 5000 };
 
     const ranked = rankModels(rows, latencies);
-    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
-    assert.strictEqual(ranked[1], 'stepfun-ai/step-3.7-flash');
+    // deepseek: SWE 0.806, latency 150s → heavy penalty 0.5 → eff 0.403
+    // stepfun:  SWE 0.744, latency 5s  → no penalty 1.0   → eff 0.744
+    assert.strictEqual(ranked[0], 'stepfun-ai/step-3.7-flash');
+    assert.strictEqual(ranked[1], 'deepseek-ai/deepseek-v4-pro');
   });
 
-  it('uses latency as tiebreaker for same SWE score', () => {
+  it('ranks fast lower-SWE model above slow higher-SWE model under latency penalty', () => {
     const rows: ParsedRow[] = [
-      { model: 'unknown/a', ttftMs: 100, latencyMs: 20000, tokensPerSec: 50, errors: 0 },
-      { model: 'unknown/b', ttftMs: 100, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 130_000, tokensPerSec: 20, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 200, latencyMs: 70_000, tokensPerSec: 40, errors: 0 },
     ];
-    const latencies = { 'unknown/a': 20000, 'unknown/b': 5000 };
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 130_000, 'minimaxai/minimax-m3': 70_000 };
 
     const ranked = rankModels(rows, latencies);
-    assert.strictEqual(ranked[0], 'unknown/b'); // faster
+    // deepseek: SWE 0.806, 130s → heavy penalty 0.5 → eff 0.403
+    // minimax:  SWE 0.805, 70s  → linear penalty (0.7 + ratio adjustment) → eff ~0.805 * (1.0 - 0.3 * 0.167) ≈ 0.755
+    assert.strictEqual(ranked[0], 'minimaxai/minimax-m3');
+    assert.strictEqual(ranked[1], 'deepseek-ai/deepseek-v4-pro');
   });
 
-  it('excludes fully failed models', () => {
+  it('includes model with partial errors when tokensPerSec > 0', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 0, latencyMs: 47_800, tokensPerSec: 35, errors: 1 },
+    ];
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'minimaxai/minimax-m3': 47_800 };
+
+    const ranked = rankModels(rows, latencies);
+    assert.strictEqual(ranked.length, 2);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'minimaxai/minimax-m3');
+  });
+
+  it('excludes fully failed models (tokensPerSec = 0)', () => {
     const rows: ParsedRow[] = [
       { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
       { model: 'dead/model', ttftMs: 0, latencyMs: 0, tokensPerSec: 0, errors: 5 },
@@ -703,7 +721,7 @@ describe('rankModelsTwoTier', () => {
     assert.strictEqual(ranked[1], 'new/slow');
   });
 
-  it('uses latency as tiebreaker within known tier', () => {
+  it('preserves input order when effective scores are equal (known tier)', () => {
     const rows: ParsedRow[] = [
       { model: 'unknown/a', ttftMs: 200, latencyMs: 8000, tokensPerSec: 80, errors: 0 },
       { model: 'unknown/b', ttftMs: 200, latencyMs: 2000, tokensPerSec: 80, errors: 0 },
@@ -712,8 +730,10 @@ describe('rankModelsTwoTier', () => {
     const latencies = { 'unknown/a': 8000, 'unknown/b': 2000 };
 
     const ranked = rankModelsTwoTier(rows, known, latencies);
-    assert.strictEqual(ranked[0], 'unknown/b');
-    assert.strictEqual(ranked[1], 'unknown/a');
+    // Both have SWE 0.5, latency under 60s → same effective score.
+    // No secondary tiebreaker; stable sort preserves input order.
+    assert.strictEqual(ranked[0], 'unknown/a');
+    assert.strictEqual(ranked[1], 'unknown/b');
   });
 
   it('excludes fully failed models', () => {
@@ -739,6 +759,20 @@ describe('rankModelsTwoTier', () => {
     const ranked = rankModelsTwoTier(rows, known, undefined, fetched);
     assert.strictEqual(ranked[0], 'new-vendor/model-x');
     assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+  });
+
+  it('relaxes alive filter: partial-error model with tokensPerSec > 0 stays in ranking', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 0, latencyMs: 47_800, tokensPerSec: 35, errors: 1 },
+    ];
+    const known = new Set(['deepseek-ai/deepseek-v4-pro', 'minimaxai/minimax-m3']);
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'minimaxai/minimax-m3': 47_800 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    assert.strictEqual(ranked.length, 2);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'minimaxai/minimax-m3');
   });
 });
 

@@ -291,13 +291,12 @@ The custom model is tried before provider models in the fallback chain. Custom e
 
 ## Default NIM Fallback Chain
 
-1. `deepseek-ai/deepseek-v4-pro` — SWE-bench: 0.806
-2. `minimaxai/minimax-m3` — SWE-bench: 0.805
-3. `z-ai/glm-5.2` — SWE-bench: 0.778
-4. `nvidia/nemotron-3-ultra-550b-a55b` — SWE-bench: 0.700
-5. `nvidia/nemotron-3-super-120b-a12b` — SWE-bench: 0.680
+The default NIM fallback chain is auto-ranked daily by the benchmark workflow. The current order in `action.yml` is always the source of truth. Models are sorted by SWE-bench Verified score with a latency penalty — slower models are ranked lower even if their SWE-bench score is higher, but they are not dropped entirely (only models that fail the probe or are absent from the provider catalog are excluded).
 
-Models are sorted by SWE-bench Verified score. On error (rate limit, 500, timeout, network failure), the next model is tried. Transient failures are retried once with exponential backoff before falling through.
+```bash
+# Read the current default chain:
+yq '.inputs.nim_models.default' action.yml
+```
 
 ## SWE-bench Scoring
 
@@ -307,7 +306,7 @@ The `resolve-swe` script (`npm run resolve-swe`) automatically resolves models a
 
 ## Model Probing
 
-Before sending the review request, the action probes models in the chain to find the fastest-responding one. Models are probed in batches of 3 with a 10-second timeout. The fastest probed model is moved to the front of the chain — but only if its SWE-bench score is within `PROBE_PROMOTE_MAX_HEAD_GAP` (0.02) of the SWE-sorted chain head. A faster probe on a much-lower-SWE model is **not** allowed to leapfrog the head, so e.g. `mistral-medium-3.5` (0.776) cannot displace `deepseek-v4-pro` (0.806). This reduces latency when higher-ranked models are temporarily slow or unavailable while preserving the SWE-bench ordering.
+Before sending the review request, the action probes models in the chain in batches of 3 with a 10-second timeout. The probe result is logged for observability but does **not** change the chain order — the SWE-bench-sorted chain head is always tried first. The `PROBE_PROMOTE_MAX_HEAD_GAP` (0.02) cap gates only the probe logging output, not reordering. This preserves the SWE-bench ordering while giving visibility into model responsiveness.
 
 ## Per-Language Prompts
 
@@ -362,6 +361,7 @@ npm run build
 export BENCH_API_KEY=your-key
 export BENCH_ITERATIONS=5              # default: 2
 export BENCH_PROMPT="..."              # optional custom prompt
+export BENCH_CONCURRENCY=3             # optional: parallel models (default: 1 = sequential)
 node dist/src/bench-entry.js
 ```
 

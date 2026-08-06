@@ -239,33 +239,33 @@ export function getEffectiveScore(model: string, latencies?: Record<string, numb
 }
 
 /**
- * Rank models by SWE-bench score descending. Latency is used only as
- * a tiebreaker between models with the same SWE score.
- * Only includes models that worked today (tokensPerSec > 0).
+ * Rank models by effective score (SWE-bench × latency penalty) descending.
+ * Models with partial errors are included as long as at least one iteration
+ * produced tokens (tokensPerSec > 0). No separate latency tiebreaker is
+ * applied — the latency penalty encoded in getEffectiveScore already
+ * demotes slow models.
  */
 export function rankModels(
   rows: ParsedRow[],
   latencies?: Record<string, number>,
   fetchedScores?: Map<string, number>,
 ): string[] {
-  const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
+  const alive = rows.filter(r => r.tokensPerSec > 0);
 
   return alive
     .map(r => r.model)
     .sort((a, b) => {
-      const sweA = getSweBenchScore(a, fetchedScores);
-      const sweB = getSweBenchScore(b, fetchedScores);
-      if (sweB !== sweA) return sweB - sweA;
-      const latA = latencies?.[a] ?? Infinity;
-      const latB = latencies?.[b] ?? Infinity;
-      return latA - latB;
+      const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+      const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+      return effB - effA;
     });
 }
 
 /**
- * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by SWE score
- * descending, then new models (not in SWE_BENCH_SCORES) sorted by latency
- * ascending. Known models always rank above new models.
+ * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by effective score
+ * (SWE-bench × latency penalty) descending, then new models (not in
+ * SWE_BENCH_SCORES) sorted by latency ascending. Known models always rank
+ * above new models.
  */
 export function rankModelsTwoTier(
   rows: ParsedRow[],
@@ -273,7 +273,7 @@ export function rankModelsTwoTier(
   latencies?: Record<string, number>,
   fetchedScores?: Map<string, number>,
 ): string[] {
-  const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
+  const alive = rows.filter(r => r.tokensPerSec > 0);
 
   const known: string[] = [];
   const unknown: string[] = [];
@@ -286,12 +286,9 @@ export function rankModelsTwoTier(
   }
 
   known.sort((a, b) => {
-    const sweA = getSweBenchScore(a, fetchedScores);
-    const sweB = getSweBenchScore(b, fetchedScores);
-    if (sweB !== sweA) return sweB - sweA;
-    const latA = latencies?.[a] ?? Infinity;
-    const latB = latencies?.[b] ?? Infinity;
-    return latA - latB;
+    const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+    const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+    return effB - effA;
   });
 
   unknown.sort((a, b) => {
