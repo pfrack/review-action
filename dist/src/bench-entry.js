@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { OpenAIClient } from './openai-client.js';
 import { runBenchmark, formatMarkdownTable } from './bench.js';
 import { SWE_BENCH_SCORES, fetchSweBenchScores } from './bench-reorder.js';
@@ -7,6 +7,13 @@ import { splitCSV } from './config.js';
 import { loadHistory, saveHistory, detectNewModels, detectRemovedModels, updateHistory } from './model-history.js';
 function envOrDefault(key, def) {
     return process.env[key] || def;
+}
+function parsePositiveIntEnv(key, def) {
+    const raw = envOrDefault(key, String(def));
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 1)
+        throw new Error(`${key} must be a positive integer`);
+    return n;
 }
 const SYNTHETIC_REVIEW_PROMPT = `You are a helpful coding assistant. Review the following code snippet for bugs, security issues, and performance problems. Respond in concise markdown with findings.
 
@@ -25,6 +32,49 @@ def process_order(items, discount):
     }
 \`\`\``;
 const TARGET_COUNT = 7;
+/**
+ * Run an async map over `items` with bounded concurrency, preserving input
+ * order in the result. Each batch is awaited before the next starts, so the
+ * result array always matches `items` order regardless of completion times.
+ */
+export async function mapWithConcurrency(items, concurrency, fn) {
+    const results = [];
+    for (let i = 0; i < items.length; i += concurrency) {
+        const batch = items.slice(i, i + concurrency);
+        const outcomes = await Promise.all(batch.map(fn));
+        results.push(...outcomes);
+    }
+    return results;
+}
+/**
+ * Classify benchmark-failed models using the probe as the availability signal:
+ *   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
+ *   probe-fail  + catalog-listed  → transient (re-probed next run)
+ *   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
+ * `availableModels` is optional: when absent (e.g. catalog fetch failed), a
+ * probe-fail is treated as permanently unavailable — the model is excluded
+ * and dropped from the removal set.
+ */
+export async function classifyFailedModels(failed, probeModel, availableModels) {
+    const demoted = [];
+    const transient = [];
+    const permanent = [];
+    for (const model of failed) {
+        const probeStart = Date.now();
+        const probeOk = await probeModel(model);
+        const probeLatency = Date.now() - probeStart;
+        if (probeOk) {
+            demoted.push({ model, probeLatency });
+        }
+        else if (availableModels && availableModels.has(model)) {
+            transient.push(model);
+        }
+        else {
+            permanent.push(model);
+        }
+    }
+    return { demoted, transient, permanent };
+}
 /**
  * Read current models from action.yml for a given provider target.
  * Target is the action.yml input key (e.g. 'openrouter_models').
@@ -57,6 +107,59 @@ function getReplacements(activeModels, availableModels) {
         .filter(([model]) => !availableModels || availableModels.has(model))
         .sort((a, b) => b[1] - a[1])
         .map(([model]) => model);
+}
+/**
+ * Catalog-driven re-admission pass (NIM only).
+ *
+ * Probes all SWE_BENCH_SCORES models that are (a) in the live NIM catalog
+ * and (b) not currently in action.yml's model list. Models that pass the
+ * probe are benchmarked and their results are added to the output.
+ *
+ * This replaces the file-based removed-models recheck path for NIM:
+ * each run re-discovers catalog-listed models instead of persisting
+ * ejections across runs.
+ */
+export async function readmitCatalogModels(opts) {
+    const limit = opts.limit ?? 5;
+    const concurrency = opts.concurrency ?? 3;
+    const currentModels = new Set(readCurrentModels(opts.actionPath));
+    // NIM SWE_BENCH_SCORES models in the catalog but not in action.yml
+    const candidates = Object.entries(SWE_BENCH_SCORES)
+        .filter(([model]) => opts.availableModels.has(model))
+        .filter(([model]) => !currentModels.has(model))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([model]) => model);
+    const results = [];
+    const reAdmitted = [];
+    const outcomes = await mapWithConcurrency(candidates, concurrency, async (model) => {
+        const ok = await opts.client.probeModel(model);
+        if (!ok) {
+            process.stderr.write(`  ${model}: probe fail, skipping\n`);
+            return { model, admitted: false, result: null };
+        }
+        process.stderr.write(`  ${model}: probe ok, benchmarking...\n`);
+        const result = await runBenchmark(opts.client, model, {
+            prompt: opts.benchPrompt,
+            iterations: opts.iterations,
+            temperature: 0.2,
+            maxTokens: 1024,
+        });
+        const errCount = result.iterations.filter(it => it.error !== null).length;
+        if (errCount === opts.iterations) {
+            process.stderr.write(`  ${model}: FAILED\n`);
+            return { model, admitted: false, result: null };
+        }
+        process.stderr.write(`  ${model}: done (${errCount} errors)\n`);
+        return { model, admitted: true, result };
+    });
+    for (const o of outcomes) {
+        if (o.admitted && o.result) {
+            results.push(o.result);
+            reAdmitted.push(o.model);
+        }
+    }
+    return { results, reAdmitted };
 }
 /**
  * Normalize a model id for comparison: lowercase, strip org prefix, strip
@@ -178,6 +281,7 @@ async function main() {
     const baseURL = envOrDefault('BENCH_BASE_URL', 'https://integrate.api.nvidia.com/v1');
     const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
     const client = new OpenAIClient(baseURL, apiKey);
+    const isNim = baseURL.includes('nvidia.com');
     // Fetch provider catalog to distinguish transient vs permanent failures
     let availableModels = null;
     try {
@@ -188,16 +292,20 @@ async function main() {
     catch (err) {
         process.stderr.write(`Warning: could not fetch model list: ${err}\n`);
     }
-    // Track removed-models in memory for this run. Read once at startup,
-    // drop permanently-gone models, and persist the final set at the end.
-    // This avoids races between multiple read/write pairs during a single run
-    // and is safe because bench-entry is a single-process script.
-    let removedModels = readRemovedModels();
-    if (availableModels) {
-        const before = removedModels.length;
-        removedModels = removedModels.filter(m => availableModels.has(m));
-        if (removedModels.length !== before) {
-            process.stderr.write(`Cleaned ${before - removedModels.length} permanently removed model(s) from removed-models.txt\n`);
+    // Track removed-models in memory for this run. NIM no longer uses a
+    // removed-models file; re-admission is catalog-driven via
+    // readmitCatalogModels. OR/Kilo jobs set REMOVED_MODELS_PATH and retain
+    // the file-based flow.
+    const removedModelsPath = process.env.REMOVED_MODELS_PATH;
+    let removedModels = [];
+    if (removedModelsPath && existsSync(removedModelsPath)) {
+        removedModels = readRemovedModels(removedModelsPath);
+        if (availableModels) {
+            const before = removedModels.length;
+            removedModels = removedModels.filter(m => availableModels.has(m));
+            if (removedModels.length !== before) {
+                process.stderr.write(`Cleaned ${before - removedModels.length} permanently removed model(s) from removed-models.txt\n`);
+            }
         }
     }
     // Determine models to benchmark
@@ -285,12 +393,12 @@ async function main() {
         iterations = n;
     }
     const benchPrompt = envOrDefault('BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
-    process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations...\n\n`);
+    const concurrency = parsePositiveIntEnv('BENCH_CONCURRENCY', 1);
+    process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations (concurrency ${concurrency})...\n\n`);
     // Benchmark current models
     const results = [];
     const failed = [];
-    for (const model of models) {
-        process.stderr.write(`  ${model} ...`);
+    const outcomes = await mapWithConcurrency(models, concurrency, async (model) => {
         const start = Date.now();
         const result = await runBenchmark(client, model, {
             prompt: benchPrompt,
@@ -301,19 +409,71 @@ async function main() {
         const elapsed = Date.now() - start;
         const errCount = result.iterations.filter(it => it.error !== null).length;
         const allFailed = errCount === iterations;
-        if (allFailed) {
-            process.stderr.write(` FAILED (${Math.round(elapsed / 1000)}s)\n`);
-            failed.push(model);
-        }
-        else {
-            process.stderr.write(` done in ${Math.round(elapsed / 1000)}s (${errCount} errors)\n`);
-        }
-        results.push(result);
+        const line = allFailed
+            ? `  ${model} ... FAILED (${Math.round(elapsed / 1000)}s)`
+            : `  ${model} ... done in ${Math.round(elapsed / 1000)}s (${errCount} errors)`;
+        process.stderr.write(line + '\n');
+        return { model, result, allFailed };
+    });
+    for (const o of outcomes) {
+        results.push(o.result);
+        if (o.allFailed)
+            failed.push(o.model);
     }
-    // Replace failed models with next best from SWE-bench.
+    // Catalog-driven re-admission (NIM only) — probes catalog models not in
+    // action.yml and benchmarks those that pass the probe. Replaces the
+    // file-based removed-models recheck path for NIM.
+    if (isNim && availableModels) {
+        const readmitLimit = parsePositiveIntEnv('BENCH_READMIT_LIMIT', 5);
+        const { results: reAdmittedResults, reAdmitted } = await readmitCatalogModels({
+            availableModels,
+            actionPath,
+            client,
+            benchPrompt,
+            iterations,
+            limit: readmitLimit,
+            concurrency,
+        });
+        results.push(...reAdmittedResults);
+        if (reAdmitted.length > 0) {
+            process.stderr.write(`Re-admitted ${reAdmitted.length} catalog model(s): ${reAdmitted.join(', ')}\n`);
+        }
+    }
+    // Classify failures using the probe as the availability signal.
+    // Three-way classification:
+    //   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
+    //   probe-fail  + catalog-listed  → transient (re-probed next run)
+    //   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
+    const { demoted, transient } = await classifyFailedModels(failed, model => client.probeModel(model), availableModels ?? undefined);
+    for (const { model, probeLatency } of demoted) {
+        process.stderr.write(`  ${model}: demoted — slow but healthy (probe ok, ${Math.round(probeLatency / 1000)}s)\n`);
+        // Replace the all-failed result with a synthetic result using probe
+        // latency so the model appears in the table and is ranked by effective
+        // score (with latency penalty) instead of being dropped entirely.
+        const idx = results.findIndex(r => r.model === model);
+        if (idx >= 0) {
+            results.splice(idx, 1);
+        }
+        results.push({
+            model,
+            iterations: [{
+                    ttft: 0,
+                    latency: probeLatency,
+                    completionTokens: 8,
+                    tokensPerSec: 8 / (probeLatency / 1000),
+                    error: null,
+                }],
+        });
+    }
+    for (const model of transient) {
+        process.stderr.write(`  ${model}: transient — will re-probe next run\n`);
+    }
+    // Keep only transient models in `failed` for the replacement logic below
+    failed.length = 0;
+    failed.push(...transient);
+    // Replace remaining failed models (transient only) with next best from SWE-bench.
     // Replacement uses the hardcoded SWE-bench table which is NIM-specific,
     // so only run it for NIM endpoints.
-    const isNim = baseURL.includes('nvidia.com');
     if (failed.length > 0 && isNim) {
         process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
         const replacements = getReplacements(models, availableModels ?? undefined);
@@ -353,22 +513,11 @@ async function main() {
             }
         }
     }
-    // Classify failures. Transient ones are tracked in-memory and persisted
-    // together with recheck results at the end of the run.
-    const transientFailed = [];
-    if (failed.length > 0) {
-        for (const model of failed) {
-            if (availableModels && !availableModels.has(model)) {
-                process.stderr.write(`  ${model}: permanently removed from provider (not retried)\n`);
-            }
-            else {
-                process.stderr.write(`  ${model}: transient failure (will retry next run)\n`);
-                transientFailed.push(model);
-            }
-        }
-    }
-    // Recheck previously removed models (concurrent with limit)
-    if (removedModels.length > 0) {
+    // Recheck previously removed models.
+    // NIM no longer uses a removed-models file — re-admission is catalog-driven
+    // via readmitCatalogModels above. OR/Kilo jobs set REMOVED_MODELS_PATH and
+    // retain the file-based recheck path.
+    if (removedModelsPath && removedModels.length > 0) {
         // Skip models that are already in the active list — they will be
         // benchmarked as part of the main run, so rechecking here would duplicate
         // work. Also drops them from the removed-models file below.
@@ -380,15 +529,15 @@ async function main() {
         }
         if (toRecheck.length === 0) {
             // Nothing to recheck; just persist the cleanup.
-            const finalRemoved = new Set([...transientFailed]);
-            writeRemovedModels([...finalRemoved]);
+            const finalRemoved = new Set([...transient]);
+            writeRemovedModels([...finalRemoved], removedModelsPath);
             removedModels = [...finalRemoved];
         }
         else {
             process.stderr.write(`\nRechecking ${toRecheck.length} previously removed model(s)...\n`);
             const recovered = [];
             const stillFailed = [];
-            const concurrency = parseInt(envOrDefault('BENCH_RECHECK_CONCURRENCY', '3'), 10);
+            const concurrency = parsePositiveIntEnv('BENCH_RECHECK_CONCURRENCY', 3);
             // Process models in batches of `concurrency`
             for (let i = 0; i < toRecheck.length; i += concurrency) {
                 const batch = toRecheck.slice(i, i + concurrency);
@@ -429,20 +578,22 @@ async function main() {
             // are dropped (they are now in the main list), and any new transient
             // failures from this run are merged in (deduplicated).
             const finalRemoved = new Set(stillFailed);
-            for (const m of transientFailed)
+            for (const m of transient)
                 finalRemoved.add(m);
-            writeRemovedModels([...finalRemoved]);
+            writeRemovedModels([...finalRemoved], removedModelsPath);
             removedModels = [...finalRemoved];
             if (recovered.length > 0) {
                 process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
             }
         }
     }
-    else if (transientFailed.length > 0) {
-        // No recheck needed, but still persist the new transient failures.
-        const finalRemoved = new Set([...removedModels, ...transientFailed]);
-        writeRemovedModels([...finalRemoved]);
+    else if (removedModelsPath && transient.length > 0) {
+        // No recheck needed, but persist transient failures for file-based providers.
+        const finalRemoved = new Set([...removedModels, ...transient]);
+        writeRemovedModels([...finalRemoved], removedModelsPath);
     }
+    // NIM (no REMOVED_MODELS_PATH): nothing to persist — re-admission is
+    // catalog-driven each run via readmitCatalogModels.
     // Update model history for hybrid discovery
     if (process.env.BENCH_AUTO_FREE === 'true' && availableModels) {
         const provider = resolveProvider();
