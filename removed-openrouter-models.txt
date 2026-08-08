@@ -1,3 +1,1 @@
-nvidia/nemotron-nano-12b-v2-vl:free
-inclusionai/ling-3.0-tiny:free
 google/gemma-4-31b-it:free
