@@ -19,9 +19,9 @@
     "models": [
       "kilo-auto/free",
       "stepfun/step-3.7-flash:free",
-      "inclusionai/ling-3.0-flash:free",
       "poolside/laguna-s-2.1:free",
       "tencent/hy3:free",
+      "inclusionai/ling-3.0-tiny:free",
       "poolside/laguna-xs-2.1:free",
       "cohere/north-mini-code:free",
       "nvidia/nemotron-3.5-content-safety:free",

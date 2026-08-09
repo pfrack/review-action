@@ -21,7 +21,7 @@
   },
   "openrouter": {
     "models": [
-      "inclusionai/ling-3.0-flash:free",
+      "inclusionai/ling-3.0-tiny:free",
       "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1:free",
       "cohere/north-mini-code:free",

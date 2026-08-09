@@ -13,7 +13,7 @@ inputs:
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
-    default: 'minimaxai/minimax-m3,deepseek-ai/deepseek-v4-flash,z-ai/glm-5.2,mistralai/mistral-medium-3.5-128b,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron,nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,nvidia/llama-3.3-nemotron-super-49b-v1.5,thinkingmachines/inkling,openai/gpt-oss-20b,nvidia/llama-3.3-nemotron-super-49b-v1,meta/llama-3.1-70b-instruct'
+    default: 'minimaxai/minimax-m3,z-ai/glm-5.2,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron,nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,nvidia/llama-3.3-nemotron-super-49b-v1.5,openai/gpt-oss-20b,thinkingmachines/inkling,nvidia/llama-3.3-nemotron-super-49b-v1,meta/llama-3.3-70b-instruct,poolside/laguna-xs-2.1,meta/llama-3.1-70b-instruct'
   mistral_api_key:
     description: 'Mistral API key (enables Mistral models in fallback chain)'
     default: ''
@@ -41,7 +41,7 @@ inputs:
     default: 'https://openrouter.ai/api/v1'
   openrouter_models:
     description: 'Comma-separated OpenRouter model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'inclusionai/ling-3.0-flash:free,openrouter/free,nvidia/nemotron-3.5-content-safety:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-nano-30b-a3b:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,poolside/laguna-s-2.1:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-nano-9b-v2:free,cohere/north-mini-code:free,openai/gpt-oss-20b:free'
+    default: 'nvidia/nemotron-3.5-content-safety:free,nvidia/nemotron-3-nano-30b-a3b:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,poolside/laguna-s-2.1:free,nvidia/nemotron-3-super-120b-a12b:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-ultra-550b-a55b:free,openrouter/free,nvidia/nemotron-nano-9b-v2:free,cohere/north-mini-code:free,openai/gpt-oss-20b:free,google/gemma-4-26b-a4b-it:free,inclusionai/ling-3.0-tiny:free,nvidia/nemotron-nano-12b-v2-vl:free'
   openrouter_free_only:
     description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
     default: 'false'
@@ -54,7 +54,7 @@ inputs:
     default: 'https://api.kilo.ai/api/gateway'
   kilocode_models:
     description: 'Comma-separated Kilo model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'nvidia/nemotron-3.5-content-safety:free,kilo-auto/free,inclusionai/ling-3.0-flash:free,poolside/laguna-xs-2.1:free,stepfun/step-3.7-flash:free,poolside/laguna-s-2.1:free,tencent/hy3:free,nvidia/nemotron-3-ultra-550b-a55b:free,openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
+    default: 'nvidia/nemotron-3.5-content-safety:free,inclusionai/ling-3.0-tiny:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,stepfun/step-3.7-flash:free,kilo-auto/free,poolside/laguna-s-2.1:free,tencent/hy3:free,poolside/laguna-xs-2.1:free,openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-ultra-550b-a55b:free'
   kilocode_free_only:
     description: 'Filter Kilo models to only use free-tier (:free suffix) models'
     default: 'false'
