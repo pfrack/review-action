@@ -27206,8 +27206,15 @@ async function listReviewThreads(repo, prNumber, token, client = graphql2) {
     let page = 0;
     do {
         const data = await withGraphQLRetry(async () => {
+            // @octokit/graphql treats every key except `headers` as a top-level
+            // GraphQL variable, so variables are passed flat (not nested under
+            // `variables:`, which octokit would forward as a single "variables"
+            // variable and leave $owner/$name/$number unprovided).
             return await client(LIST_THREADS_QUERY, {
-                variables: { owner, name, number: prNumber, cursor },
+                owner,
+                name,
+                number: prNumber,
+                cursor,
                 headers: { authorization: `bearer ${token}` },
             });
         });
@@ -27242,7 +27249,7 @@ async function listReviewThreads(repo, prNumber, token, client = graphql2) {
 async function resolveReviewThread(threadId, token, client = graphql2) {
     await withGraphQLRetry(async () => {
         await client(RESOLVE_THREAD_MUTATION, {
-            variables: { threadId },
+            threadId,
             headers: { authorization: `bearer ${token}` },
         });
     });

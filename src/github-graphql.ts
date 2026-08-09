@@ -96,7 +96,7 @@ export type ReviewThreadNode = {
  */
 export type GraphQLClient = {
   <T>(query: string, params?: {
-    variables?: Record<string, unknown>;
+    [key: string]: unknown;
     headers?: Record<string, string>;
   }): Promise<T>;
 };
@@ -191,8 +191,15 @@ export async function listReviewThreads(
   let page = 0;
   do {
     const data = await withGraphQLRetry(async () => {
+      // @octokit/graphql treats every key except `headers` as a top-level
+      // GraphQL variable, so variables are passed flat (not nested under
+      // `variables:`, which octokit would forward as a single "variables"
+      // variable and leave $owner/$name/$number unprovided).
       return await client<ListThreadsResponse>(LIST_THREADS_QUERY, {
-        variables: { owner, name, number: prNumber, cursor },
+        owner,
+        name,
+        number: prNumber,
+        cursor,
         headers: { authorization: `bearer ${token}` },
       });
     });
@@ -235,7 +242,7 @@ export async function resolveReviewThread(
 ): Promise<void> {
   await withGraphQLRetry(async () => {
     await client(RESOLVE_THREAD_MUTATION, {
-      variables: { threadId },
+      threadId,
       headers: { authorization: `bearer ${token}` },
     });
   });

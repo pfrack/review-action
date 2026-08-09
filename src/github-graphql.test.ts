@@ -13,7 +13,12 @@ import { RetryableError } from './retry.js';
 function stubClient(
   handler: (query: string, params: any) => unknown,
 ): GraphQLClient {
-  const fn = (async (query: string, params: any) => handler(query, params)) as GraphQLClient;
+  const fn = (async (query: string, params: any) => {
+    // Mimic @octokit/graphql: every key except `headers` is collected into a
+    // `variables` object, so callers can assert on `params.variables.*`.
+    const { headers, ...variables } = params ?? {};
+    return handler(query, { ...params, variables, headers });
+  }) as GraphQLClient;
   return fn;
 }
 
