@@ -458,24 +458,35 @@ async function main(): Promise<void> {
 
   const outcomes = await mapWithConcurrency(models, concurrency, async model => {
     const start = Date.now();
+    try {
+      const result = await runBenchmark(client, model, {
+        prompt: benchPrompt,
+        iterations,
+        temperature: 0.2,
+        maxTokens: 1024,
+      });
 
-    const result = await runBenchmark(client, model, {
-      prompt: benchPrompt,
-      iterations,
-      temperature: 0.2,
-      maxTokens: 1024,
-    });
+      const elapsed = Date.now() - start;
+      const errCount = result.iterations.filter(it => it.error !== null).length;
+      const allFailed = errCount === iterations;
 
-    const elapsed = Date.now() - start;
-    const errCount = result.iterations.filter(it => it.error !== null).length;
-    const allFailed = errCount === iterations;
+      const line = allFailed
+        ? `  ${model} ... FAILED (${Math.round(elapsed / 1000)}s)`
+        : `  ${model} ... done in ${Math.round(elapsed / 1000)}s (${errCount} errors)`;
+      process.stderr.write(line + '\n');
 
-    const line = allFailed
-      ? `  ${model} ... FAILED (${Math.round(elapsed / 1000)}s)`
-      : `  ${model} ... done in ${Math.round(elapsed / 1000)}s (${errCount} errors)`;
-    process.stderr.write(line + '\n');
-
-    return { model, result, allFailed };
+      return { model, result, allFailed };
+    } catch (err) {
+      // runBenchmark should normally return a result with error fields, but a
+      // thrown rejection (e.g. client setup failure) must not abort the whole
+      // suite. Capture it as a fully-failed result so the model is classified.
+      process.stderr.write(`  ${model} ... ERROR: ${(err as Error).message}\n`);
+      return {
+        model,
+        result: { model, iterations: [] },
+        allFailed: true,
+      };
+    }
   });
 
   for (const o of outcomes) {

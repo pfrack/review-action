@@ -166,8 +166,12 @@ interface MockServerHandle {
 
 function startMockServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<MockServerHandle> {
   const probedModels: string[] = [];
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const server = createServer(handler);
+    server.once('error', (err) => {
+      server.close();
+      reject(err);
+    });
     server.listen(0, () => {
       const addr = server.address()!;
       const port = typeof addr === 'string' ? 0 : addr.port;
@@ -285,7 +289,19 @@ describe('readmitCatalogModels', () => {
       let body = '';
       req.on('data', (chunk) => body += chunk);
       req.on('end', () => {
-        const payload = JSON.parse(body);
+        let payload: any;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid JSON body' }));
+          return;
+        }
+        if (typeof payload.model !== 'string' || !Array.isArray(payload.messages)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'missing model or messages' }));
+          return;
+        }
         if (payload.stream) {
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
           res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'x' } }] })}\n\n`);
