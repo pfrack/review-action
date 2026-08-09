@@ -25773,6 +25773,7 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'inclusionai/ling-3.0-tiny:free': 0.5,
     'tencent/hy3:free': 0.5,
     'google/gemma-4-26b-a4b-it:free': 0.5,
     'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
@@ -25826,31 +25827,30 @@ function getEffectiveScore(model, latencies, maxLatencyMs = DEFAULT_MAX_LATENCY_
     return swe * 0.5;
 }
 /**
- * Rank models by SWE-bench score descending. Latency is used only as
- * a tiebreaker between models with the same SWE score.
- * Only includes models that worked today (tokensPerSec > 0).
+ * Rank models by effective score (SWE-bench × latency penalty) descending.
+ * Models with partial errors are included as long as at least one iteration
+ * produced tokens (tokensPerSec > 0). No separate latency tiebreaker is
+ * applied — the latency penalty encoded in getEffectiveScore already
+ * demotes slow models.
  */
 function rankModels(rows, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
+    const alive = rows.filter(r => r.tokensPerSec > 0);
     return alive
         .map(r => r.model)
         .sort((a, b) => {
-        const sweA = getSweBenchScore(a, fetchedScores);
-        const sweB = getSweBenchScore(b, fetchedScores);
-        if (sweB !== sweA)
-            return sweB - sweA;
-        const latA = latencies?.[a] ?? Infinity;
-        const latB = latencies?.[b] ?? Infinity;
-        return latA - latB;
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        return effB - effA;
     });
 }
 /**
- * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by SWE score
- * descending, then new models (not in SWE_BENCH_SCORES) sorted by latency
- * ascending. Known models always rank above new models.
+ * Two-tier ranking: known models (in SWE_BENCH_SCORES) sorted by effective score
+ * (SWE-bench × latency penalty) descending, then new models (not in
+ * SWE_BENCH_SCORES) sorted by latency ascending. Known models always rank
+ * above new models.
  */
 function rankModelsTwoTier(rows, knownModels, latencies, fetchedScores) {
-    const alive = rows.filter(r => r.tokensPerSec > 0 && r.errors === 0);
+    const alive = rows.filter(r => r.tokensPerSec > 0);
     const known = [];
     const unknown = [];
     for (const model of alive.map(r => r.model)) {
@@ -25862,13 +25862,9 @@ function rankModelsTwoTier(rows, knownModels, latencies, fetchedScores) {
         }
     }
     known.sort((a, b) => {
-        const sweA = getSweBenchScore(a, fetchedScores);
-        const sweB = getSweBenchScore(b, fetchedScores);
-        if (sweB !== sweA)
-            return sweB - sweA;
-        const latA = latencies?.[a] ?? Infinity;
-        const latB = latencies?.[b] ?? Infinity;
-        return latA - latB;
+        const effA = getEffectiveScore(a, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        const effB = getEffectiveScore(b, latencies, DEFAULT_MAX_LATENCY_MS, fetchedScores);
+        return effB - effA;
     });
     unknown.sort((a, b) => {
         const latA = latencies?.[a] ?? Infinity;
@@ -26356,10 +26352,14 @@ function loadEvent() {
 
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
-  s: () => (/* binding */ listReviewThreads),
-  z: () => (/* binding */ resolveReviewThread)
+  s0: () => (/* binding */ listReviewThreads),
+  zq: () => (/* binding */ resolveReviewThread)
 });
 
+// UNUSED EXPORTS: withGraphQLRetry
+
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: ./node_modules/universal-user-agent/index.js
 function getUserAgent() {
   if (typeof navigator === "object" && "userAgent" in navigator) {
@@ -27088,14 +27088,73 @@ function withCustomRequest(customRequest) {
 
 // EXTERNAL MODULE: ./src/retry.ts
 var retry = __nccwpck_require__(9809);
+// EXTERNAL MODULE: ./src/openai-client.ts
+var openai_client = __nccwpck_require__(6689);
 ;// CONCATENATED MODULE: ./src/github-graphql.ts
 
 
+
+
+/**
+ * Detect errors thrown by `@octokit/graphql` (= `RequestError` from
+ * `@octokit/request-error`). Octokit stamps these with `name = 'HttpError'`
+ * and a numeric `status`; plain errors lack both. We duck-type rather than
+ * import `@octokit/request-error` directly: it's a transitive dep, and the
+ * shape is stable enough across versions for a 4-line check.
+ */
+function isOctokitRequestError(err) {
+    return (typeof err === 'object' &&
+        err !== null &&
+        err instanceof Error &&
+        err.name === 'HttpError' &&
+        typeof err.status === 'number');
+}
+/**
+ * Pull `Retry-After` from an octokit response headers object. Octokit
+ * normalizes keys to lowercase in its typed surface, but real responses
+ * occasionally arrive with PascalCase; check both so the parser is
+ * case-insensitive without coupling to the exact runtime.
+ */
+function extractRetryAfterHeader(headers) {
+    if (!headers)
+        return null;
+    return headers['retry-after'] ?? headers['Retry-After'] ?? null;
+}
+/**
+ * Wrap a `client<T>(...)` thunk so that transient HTTP failures thrown by
+ * `@octokit/graphql` (status 429 or >= 500) surface as `RetryableError`
+ * and are picked up by `withRetry`'s existing backoff. Non-transient errors
+ * (4xx, GraphQL `errors` array without an HTTP failure, plain `Error`s,
+ * `TypeError`s) propagate unchanged so they reach the existing call-site
+ * handlers and the summary fallback.
+ */
+async function withGraphQLRetry(fn, maxRetries = 2, delayMs = 1000) {
+    return (0,retry/* withRetry */.bD)(async () => {
+        try {
+            return await fn();
+        }
+        catch (err) {
+            if (isOctokitRequestError(err) && (err.status === 429 || err.status >= 500)) {
+                const retryAfterMs = err.status === 429
+                    ? (0,openai_client/* parseRetryAfter */.mu)(extractRetryAfterHeader(err.response?.headers))
+                    : undefined;
+                const retryable = new retry/* RetryableError */.dw(err.message, err.status, retryAfterMs);
+                retryable.cause = err;
+                throw retryable;
+            }
+            throw err;
+        }
+    }, maxRetries, delayMs);
+}
 const LIST_THREADS_QUERY = `
-  query($owner: String!, $name: String!, $number: Int!) {
+  query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
     repository(owner: $owner, name: $name) {
       pullRequest(number: $number) {
-        reviewThreads(first: 100) {
+        reviewThreads(first: 100, after: $cursor) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
           nodes {
             id
             isResolved
@@ -27124,39 +27183,64 @@ const RESOLVE_THREAD_MUTATION = `
   }
 `;
 /**
- * List up to 100 review threads on a pull request, flattened for the
- * action's consumers. Throws on GraphQL errors (caller handles).
+ * Maximum number of GraphQL pages `listReviewThreads` will walk before
+ * bailing out with a warning, mirroring the `maxPages = 50` bound the
+ * REST list helpers already use. GitHub caps `reviewThreads` at 100 nodes
+ * per page, so this ceiling bounds worst-case API pressure and memory.
+ */
+const MAX_THREAD_PAGES = 50;
+/**
+ * List every review thread on a pull request (across all GraphQL pages),
+ * flattened for the action's consumers. Walks `pageInfo`/`endCursor` until
+ * `hasNextPage` is false, bounded by `MAX_THREAD_PAGES`. Throws on GraphQL
+ * errors (caller handles) — no error is swallowed mid-pagination, so an
+ * incomplete set never silently reaches the callers.
  */
 async function listReviewThreads(repo, prNumber, token, client = graphql2) {
     const [owner, name] = repo.split('/');
     if (!owner || !name) {
         throw new Error(`Invalid repo "${repo}", expected "owner/name"`);
     }
-    const data = await (0,retry/* withRetry */.bD)(async () => {
-        return await client(LIST_THREADS_QUERY, {
-            variables: { owner, name, number: prNumber },
-            headers: { authorization: `bearer ${token}` },
+    const all = [];
+    let cursor = null;
+    let page = 0;
+    do {
+        const data = await withGraphQLRetry(async () => {
+            return await client(LIST_THREADS_QUERY, {
+                variables: { owner, name, number: prNumber, cursor },
+                headers: { authorization: `bearer ${token}` },
+            });
         });
-    });
-    const threads = data?.repository?.pullRequest?.reviewThreads?.nodes;
-    if (!Array.isArray(threads)) {
-        return [];
-    }
-    return threads.map((node) => ({
-        id: node.id,
-        isResolved: node.isResolved,
-        isOutdated: node.isOutdated,
-        path: node.path,
-        line: node.line,
-        body: node.comments?.nodes?.[0]?.body ?? '',
-    }));
+        const rt = data?.repository?.pullRequest?.reviewThreads;
+        const nodes = rt?.nodes;
+        if (Array.isArray(nodes)) {
+            for (const node of nodes) {
+                all.push({
+                    id: node.id,
+                    isResolved: node.isResolved,
+                    isOutdated: node.isOutdated,
+                    path: node.path,
+                    line: node.line,
+                    body: node.comments?.nodes?.[0]?.body ?? '',
+                });
+            }
+        }
+        const pageInfo = rt?.pageInfo;
+        cursor = pageInfo?.hasNextPage ? (pageInfo?.endCursor ?? null) : null;
+        page++;
+        if (page >= MAX_THREAD_PAGES && cursor) {
+            core.warning(`listReviewThreads: hit max page limit (${MAX_THREAD_PAGES}) — some threads may be unprocessed`);
+            cursor = null;
+        }
+    } while (cursor);
+    return all;
 }
 /**
  * Mark a review thread as resolved via the GraphQL resolveReviewThread
  * mutation. Throws on GraphQL errors (caller handles).
  */
 async function resolveReviewThread(threadId, token, client = graphql2) {
-    await (0,retry/* withRetry */.bD)(async () => {
+    await withGraphQLRetry(async () => {
         await client(RESOLVE_THREAD_MUTATION, {
             variables: { threadId },
             headers: { authorization: `bearer ${token}` },
@@ -27348,7 +27432,7 @@ async function cleanupInlineReview(repo, prNumber, token) {
     let threads = [];
     let resolved = 0;
     try {
-        threads = await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .listReviewThreads */ .s)(repo, prNumber, token);
+        threads = await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .listReviewThreads */ .s0)(repo, prNumber, token);
     }
     catch (err) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`cleanupInlineReview: failed to list threads: ${err instanceof Error ? err.message : String(err)}`);
@@ -27364,7 +27448,7 @@ async function cleanupInlineReview(repo, prNumber, token) {
         while (idx < outdatedUnresolved.length) {
             const thread = outdatedUnresolved[idx++];
             try {
-                await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .resolveReviewThread */ .z)(thread.id, token);
+                await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_3__/* .resolveReviewThread */ .zq)(thread.id, token);
                 resolved++;
             }
             catch (err) {
@@ -28184,7 +28268,7 @@ async function run() {
     // network error), the run continues with no carry-over.
     let previousFindingsBlock = '';
     try {
-        const previousThreads = await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_6__/* .listReviewThreads */ .s)(repo, prNumber, token);
+        const previousThreads = await (0,_github_graphql_js__WEBPACK_IMPORTED_MODULE_6__/* .listReviewThreads */ .s0)(repo, prNumber, token);
         previousFindingsBlock = (0,_previous_findings_js__WEBPACK_IMPORTED_MODULE_7__/* .formatPreviousFindings */ .R)(previousThreads);
         if (previousFindingsBlock) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Loaded ${previousThreads.filter(t => !t.isResolved).length} unresolved previous finding(s) as carry-over context`);
@@ -28423,9 +28507,10 @@ __webpack_async_result__();
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   gP: () => (/* binding */ OpenAIClient)
+/* harmony export */   gP: () => (/* binding */ OpenAIClient),
+/* harmony export */   mu: () => (/* binding */ parseRetryAfter)
 /* harmony export */ });
-/* unused harmony exports parseRetryAfter, sanitizeErrorBody, effectiveFormat, stripThinkingContent, extractJsonFromText */
+/* unused harmony exports sanitizeErrorBody, effectiveFormat, stripThinkingContent, extractJsonFromText */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(7484);
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(_actions_core__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);

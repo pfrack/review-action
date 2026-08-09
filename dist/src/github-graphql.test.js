@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { listReviewThreads, resolveReviewThread, } from './github-graphql.js';
+import { listReviewThreads, resolveReviewThread, withGraphQLRetry, } from './github-graphql.js';
+import { RetryableError } from './retry.js';
 /** Build a stub GraphQL client that returns the canned response. */
 function stubClient(handler) {
     const fn = (async (query, params) => handler(query, params));
@@ -119,6 +120,86 @@ test('resolveReviewThread: throws when the client rejects', async () => {
         throw new Error('GraphQL error: permissions denied');
     });
     await assert.rejects(() => resolveReviewThread('PRRT_x', 'tok', client), /permissions denied/);
+});
+/**
+ * Build a duck-typed `RequestError`-shaped object that satisfies
+ * `isOctokitRequestError`. Avoids the deep import of
+ * `@octokit/request-error` (transitive dep) — the shape is stable enough
+ * across octokit versions for these tests.
+ */
+function makeRequestError(status, headers = {}) {
+    const err = new Error(`octokit ${status}`);
+    err.name = 'HttpError';
+    err.status = status;
+    err.response = { headers };
+    return err;
+}
+describe('withGraphQLRetry', () => {
+    test('withGraphQLRetry: retries once on 429 with Retry-After and succeeds on the second call', async () => {
+        let calls = 0;
+        const result = await withGraphQLRetry(async () => {
+            calls++;
+            if (calls === 1)
+                throw makeRequestError(429, { 'retry-after': '2' });
+            return 'ok';
+        }, 2, 1);
+        assert.equal(result, 'ok');
+        assert.equal(calls, 2);
+    });
+    test('withGraphQLRetry: retries up to maxRetries then surfaces persistent 5xx as RetryableError', async () => {
+        let calls = 0;
+        const original = makeRequestError(500);
+        await assert.rejects(() => withGraphQLRetry(async () => {
+            calls++;
+            throw original;
+        }, 2, 1), (err) => err instanceof RetryableError &&
+            err.status === 500 &&
+            err.cause === original);
+        assert.equal(calls, 3);
+    });
+    test('withGraphQLRetry: does not retry on 4xx and propagates the original error unchanged', async () => {
+        let calls = 0;
+        const original = makeRequestError(401);
+        await assert.rejects(() => withGraphQLRetry(async () => {
+            calls++;
+            throw original;
+        }, 2, 1), (err) => err === original);
+        assert.equal(calls, 1);
+    });
+    test('withGraphQLRetry: retries on 429 with unparseable Retry-After header (falls back to default backoff)', async () => {
+        let calls = 0;
+        const result = await withGraphQLRetry(async () => {
+            calls++;
+            if (calls === 1)
+                throw makeRequestError(429, { 'retry-after': '0.5' });
+            return 'ok';
+        }, 2, 1);
+        assert.equal(result, 'ok');
+        assert.equal(calls, 2);
+    });
+    test('withGraphQLRetry: does not translate plain Error (non-RequestError) and propagates unchanged', async () => {
+        let calls = 0;
+        const original = new Error('boom');
+        await assert.rejects(() => withGraphQLRetry(async () => {
+            calls++;
+            throw original;
+        }, 2, 1), (err) => err === original);
+        assert.equal(calls, 1);
+    });
+    test('withGraphQLRetry: translates a RequestError-shaped error into RetryableError with status and retryAfterMs', async () => {
+        const original = makeRequestError(429, { 'retry-after': '2' });
+        let calls = 0;
+        await assert.rejects(() => withGraphQLRetry(async () => {
+            calls++;
+            throw original;
+        }, 0, 1), (err) => {
+            if (!(err instanceof RetryableError))
+                return false;
+            const cause = err.cause;
+            return err.status === 429 && err.retryAfterMs === 2000 && cause === original;
+        });
+        assert.equal(calls, 1);
+    });
 });
 test('ReviewThreadNode: shape matches the documented contract', () => {
     // Compile-time + runtime guard for the public type contract.

@@ -1,0 +1,100 @@
+name: Daily Model Benchmark - Mistral
+
+on:
+  schedule:
+    - cron: '10 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: benchmark-commit
+  cancel-in-progress: false
+
+jobs:
+  benchmark-mistral:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run Mistral benchmark
+        env:
+          BENCH_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          BENCH_BASE_URL: 'https://api.mistral.ai/v1'
+          BENCH_MODELS: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+          BENCH_ITERATIONS: '1'
+          REMOVED_MODELS_PATH: 'removed-mistral-models.txt'
+        run: node dist/src/bench-entry.js > benchmark-output.txt
+
+      - name: Show results
+        if: always()
+        run: cat benchmark-output.txt
+
+      - name: Reorder Mistral models
+        env:
+          ACTION_PATH: action.yml
+          ACTION_TARGET: mistral_models
+        run: |
+          grep '^|' benchmark-output.txt > table.txt || true
+          if [ -s table.txt ]; then
+            node dist/src/bench-reorder.js < table.txt
+          else
+            echo "No benchmark table found, skipping reorder"
+          fi
+
+      - name: Commit updated Mistral model order
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+          if [ -f removed-mistral-models.txt ]; then git add removed-mistral-models.txt; fi
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            LAST_MSG=$(git log -1 --format=%s)
+            if echo "$LAST_MSG" | grep -q "chore: update mistral model order from daily benchmark"; then
+              git commit --amend --no-edit --date="$(date -R)"
+              git checkout -- .
+              git clean -fd
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
+              git push --force-with-lease
+            else
+              git commit -m "chore: update mistral model order from daily benchmark [skip ci]"
+              git checkout -- .
+              git clean -fd
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
+              git push
+            fi
+            LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+            if [ -n "$LATEST_TAG" ]; then
+              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                echo "Moving tag $LATEST_TAG to current commit"
+                git tag -f "$LATEST_TAG"
+                git push origin "$LATEST_TAG" --force
+              else
+                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+              fi
+            fi
+          fi
