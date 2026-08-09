@@ -10,6 +10,7 @@ import { buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
 import { probeModels } from './model-chain.js';
+import { getSweBenchScore } from './bench-reorder.js';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
 import { safeParseJson, validateProviderUrl, escapeMarkdown } from './utils.js';
 import { parseRules, validateRules } from './rules.js';
@@ -153,7 +154,7 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             parsed = ReviewSchema.safeParse(safeParseJson(retryResult.content));
             if (!parsed.success) {
                 core.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0 };
+                return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0, latencyMs: retryResult.latency };
             }
         }
         const batchReview = parsed.data;
@@ -168,12 +169,28 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             usedModel: tagged.id,
             lastRawContent: '',
             dropped: validated.dropped,
+            latencyMs: result.latency,
         };
     }
     catch (err) {
         core.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
         return null;
     }
+}
+/** SWE-bench score for a chain entry, falling back to its score override. */
+function sweScore(tagged) {
+    return tagged.scoreOverride ?? getSweBenchScore(tagged.id);
+}
+/**
+ * Effective score used to pick the winning model in a parallel batch: raw
+ * SWE-bench score minus a latency penalty. This prefers the highest-SWE
+ * model but lets a much faster model win when the SWE gap is small — i.e.
+ * "highest SWE, but relatively fast". The penalty is intentionally small so
+ * SWE dominates; it only overrides for pathologically slow models.
+ */
+const LATENCY_PENALTY_PER_SEC = 0.1;
+function effectiveScore(tagged, latencyMs) {
+    return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
 }
 export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
@@ -207,21 +224,31 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                 if (controller.signal.aborted)
                     return null;
                 const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, controller.signal);
-                if (result && result.findings.length > 0)
-                    controller.abort();
+                // NOTE: intentionally do NOT abort on the first winner here — aborting
+                // would let a weaker/faster model preempt a stronger one still running
+                // in the same parallel window. We collect all results and pick the
+                // highest-SWE winner below.
                 return result;
             })());
         }
         const settled = await Promise.all(attemptPromises.map(p => p.catch(() => null)));
+        // Prefer the highest-SWE model among those that returned findings,
+        // instead of the first to settle (a weaker/faster model could otherwise
+        // win the batch even when a stronger model also produced findings).
         let winner = null;
+        let winnerScore = -Infinity;
         let fallbackContent = '';
         let fallbackModel = '';
-        for (const r of settled) {
+        for (let i = 0; i < settled.length; i++) {
+            const r = settled[i];
             if (r && r.findings.length > 0) {
-                winner = r;
-                break;
+                const s = effectiveScore(availableChain[i], r.latencyMs);
+                if (s > winnerScore) {
+                    winnerScore = s;
+                    winner = r;
+                }
             }
-            if (r && r.lastRawContent && !fallbackContent) {
+            else if (r && r.lastRawContent && !fallbackContent) {
                 fallbackContent = r.lastRawContent;
                 fallbackModel = r.usedModel;
             }
@@ -307,6 +334,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
         usedModel: batchUsedModel,
         lastRawContent: batchLastRawContent,
         dropped: batchDropped,
+        latencyMs: 0,
     };
 }
 function validateConfig(config) {
@@ -418,7 +446,7 @@ export async function executeReview(chain, clients, filesToReview, filesDiffMap,
         if (result === null) {
             core.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }
-        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
+        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0, latencyMs: 0 });
     }
     if (batches.length > 1) {
         const merged = mergeFindings(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
