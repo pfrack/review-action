@@ -4,7 +4,12 @@ import { listReviewThreads, resolveReviewThread, withGraphQLRetry, } from './git
 import { RetryableError } from './retry.js';
 /** Build a stub GraphQL client that returns the canned response. */
 function stubClient(handler) {
-    const fn = (async (query, params) => handler(query, params));
+    const fn = (async (query, params) => {
+        // Mimic @octokit/graphql: every key except `headers` is collected into a
+        // `variables` object, so callers can assert on `params.variables.*`.
+        const { headers, ...variables } = params ?? {};
+        return handler(query, { ...params, variables, headers });
+    });
     return fn;
 }
 test('listReviewThreads: returns parsed threads from a mocked client response', async () => {

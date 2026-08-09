@@ -94,7 +94,7 @@ describe('cleanupInlineReview', () => {
                     const parsed = JSON.parse(bodyStr);
                     // @octokit/graphql wraps the options object, so threadId nests
                     // under variables.variables.
-                    resolveCalls.push(parsed.variables.variables.threadId);
+                    resolveCalls.push(parsed.variables.threadId);
                     return new Response(JSON.stringify({ data: { resolveReviewThread: { thread: { id: parsed.variables.threadId, isResolved: true } } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
                 }
                 return new Response('{}', { status: 200 });
