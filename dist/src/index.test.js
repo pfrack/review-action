@@ -226,7 +226,10 @@ function makeMockClient(behaviorForModel, callCounts = {}) {
         if (shouldThrow) {
             throw new Error('mock failure');
         }
-        return response ?? VALID_CHAT_RESULT;
+        const base = response ?? VALID_CHAT_RESULT;
+        // Surface the simulated delay as latency so effective-score selection
+        // (which penalizes slow models) is exercised by latency-aware tests.
+        return { ...base, latency: delayMs > 0 ? delayMs : (base.latency ?? 0) };
     };
     return client;
 }
@@ -360,12 +363,12 @@ describe('runModelChainForBatch parallel fallback', () => {
         assert.strictEqual(result.findings.length, 1);
         assert.strictEqual(result.usedModel, 'model-a');
     });
-    it('returns result from fast model when slow model is tried first', async () => {
+    it('prefers highest-SWE but relatively fast model (effective score)', async () => {
         const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
         const callCounts = {};
         const chain = [
-            { id: 'slow-model', provider: 'nim' },
-            { id: 'fast-model', provider: 'nim' },
+            { id: 'slow-model', provider: 'nim', scoreOverride: 0.6 },
+            { id: 'fast-model', provider: 'nim', scoreOverride: 0.5 },
         ];
         const clients = {
             nim: makeMockClient((model) => {
@@ -521,8 +524,8 @@ describe('runModelChainForBatch parallel logging', () => {
     it('logs winner and cancelled model ids in parallel mode', async () => {
         const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
         const chain = [
-            { id: 'slow-model', provider: 'nim' },
-            { id: 'fast-model', provider: 'nim' },
+            { id: 'slow-model', provider: 'nim', scoreOverride: 0.6 },
+            { id: 'fast-model', provider: 'nim', scoreOverride: 0.5 },
         ];
         const clients = {
             nim: makeMockClient((model) => {

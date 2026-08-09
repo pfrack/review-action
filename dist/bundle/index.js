@@ -27644,13 +27644,15 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _prompts_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(6896);
 /* harmony import */ var _event_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(807);
 /* harmony import */ var _model_chain_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(3818);
-/* harmony import */ var _review_schema_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(2246);
-/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(1798);
-/* harmony import */ var _rules_js__WEBPACK_IMPORTED_MODULE_15__ = __nccwpck_require__(9244);
-/* harmony import */ var _metrics_js__WEBPACK_IMPORTED_MODULE_14__ = __nccwpck_require__(5670);
-/* harmony import */ var _batching_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(8811);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_model_chain_js__WEBPACK_IMPORTED_MODULE_10__]);
-_model_chain_js__WEBPACK_IMPORTED_MODULE_10__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
+/* harmony import */ var _bench_reorder_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(7911);
+/* harmony import */ var _review_schema_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(2246);
+/* harmony import */ var _utils_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(1798);
+/* harmony import */ var _rules_js__WEBPACK_IMPORTED_MODULE_16__ = __nccwpck_require__(9244);
+/* harmony import */ var _metrics_js__WEBPACK_IMPORTED_MODULE_15__ = __nccwpck_require__(5670);
+/* harmony import */ var _batching_js__WEBPACK_IMPORTED_MODULE_14__ = __nccwpck_require__(8811);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_model_chain_js__WEBPACK_IMPORTED_MODULE_10__, _bench_reorder_js__WEBPACK_IMPORTED_MODULE_11__]);
+([_model_chain_js__WEBPACK_IMPORTED_MODULE_10__, _bench_reorder_js__WEBPACK_IMPORTED_MODULE_11__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+
 
 
 
@@ -27754,7 +27756,7 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
         ], {
             temperature: 0.2,
             maxTokens: effectiveMaxTokens,
-            schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_11__/* .ReviewJsonSchema */ .uA,
+            schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_12__/* .ReviewJsonSchema */ .uA,
             format: providerToFormat(tagged.provider, responseFormat),
             signal: attemptSignal,
         });
@@ -27764,7 +27766,7 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             // the model's thinking stream hit the token cap. Don't throw
             // that away — validate it. For non-text-mode models the JSON is
             // definitely incomplete, so skip immediately.
-            if (!(0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .safeParseJson */ .NS)(result.content)) {
+            if (!(0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .safeParseJson */ .NS)(result.content)) {
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} response truncated, trying next...`);
                 return null;
             }
@@ -27774,7 +27776,7 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} returned empty, trying next...`);
             return null;
         }
-        let parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_11__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .safeParseJson */ .NS)(result.content));
+        let parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_12__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .safeParseJson */ .NS)(result.content));
         if (!parsed.success) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} schema validation failed, retrying...`);
             const truncatedContent = result.content.length > 500
@@ -27795,7 +27797,7 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             ], {
                 temperature: 0.2,
                 maxTokens: effectiveMaxTokens,
-                schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_11__/* .ReviewJsonSchema */ .uA,
+                schema: _review_schema_js__WEBPACK_IMPORTED_MODULE_12__/* .ReviewJsonSchema */ .uA,
                 format: providerToFormat(tagged.provider, responseFormat),
                 signal: retrySignal,
             });
@@ -27803,10 +27805,10 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} retry truncated, trying next...`);
                 return null;
             }
-            parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_11__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .safeParseJson */ .NS)(retryResult.content));
+            parsed = _review_schema_js__WEBPACK_IMPORTED_MODULE_12__/* .ReviewSchema */ .uZ.safeParse((0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .safeParseJson */ .NS)(retryResult.content));
             if (!parsed.success) {
                 _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} JSON validation failed after retry, trying next...`);
-                return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0 };
+                return { findings: [], summary: '', usedModel: tagged.id, lastRawContent: retryResult.content, dropped: 0, latencyMs: retryResult.latency };
             }
         }
         const batchReview = parsed.data;
@@ -27821,12 +27823,28 @@ async function attemptModel(tagged, client, batch, userMsg, systemMessage, respo
             usedModel: tagged.id,
             lastRawContent: '',
             dropped: validated.dropped,
+            latencyMs: result.latency,
         };
     }
     catch (err) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`${tagged.id} (${tagged.provider}) failed: ${err}`);
         return null;
     }
+}
+/** SWE-bench score for a chain entry, falling back to its score override. */
+function sweScore(tagged) {
+    return tagged.scoreOverride ?? (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_11__/* .getSweBenchScore */ .__)(tagged.id);
+}
+/**
+ * Effective score used to pick the winning model in a parallel batch: raw
+ * SWE-bench score minus a latency penalty. This prefers the highest-SWE
+ * model but lets a much faster model win when the SWE gap is small — i.e.
+ * "highest SWE, but relatively fast". The penalty is intentionally small so
+ * SWE dominates; it only overrides for pathologically slow models.
+ */
+const LATENCY_PENALTY_PER_SEC = 0.1;
+function effectiveScore(tagged, latencyMs) {
+    return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
 }
 async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
@@ -27860,21 +27878,31 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 if (controller.signal.aborted)
                     return null;
                 const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, controller.signal);
-                if (result && result.findings.length > 0)
-                    controller.abort();
+                // NOTE: intentionally do NOT abort on the first winner here — aborting
+                // would let a weaker/faster model preempt a stronger one still running
+                // in the same parallel window. We collect all results and pick the
+                // highest-SWE winner below.
                 return result;
             })());
         }
         const settled = await Promise.all(attemptPromises.map(p => p.catch(() => null)));
+        // Prefer the highest-SWE model among those that returned findings,
+        // instead of the first to settle (a weaker/faster model could otherwise
+        // win the batch even when a stronger model also produced findings).
         let winner = null;
+        let winnerScore = -Infinity;
         let fallbackContent = '';
         let fallbackModel = '';
-        for (const r of settled) {
+        for (let i = 0; i < settled.length; i++) {
+            const r = settled[i];
             if (r && r.findings.length > 0) {
-                winner = r;
-                break;
+                const s = effectiveScore(availableChain[i], r.latencyMs);
+                if (s > winnerScore) {
+                    winnerScore = s;
+                    winner = r;
+                }
             }
-            if (r && r.lastRawContent && !fallbackContent) {
+            else if (r && r.lastRawContent && !fallbackContent) {
                 fallbackContent = r.lastRawContent;
                 fallbackModel = r.usedModel;
             }
@@ -27960,6 +27988,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
         usedModel: batchUsedModel,
         lastRawContent: batchLastRawContent,
         dropped: batchDropped,
+        latencyMs: 0,
     };
 }
 function validateConfig(config) {
@@ -27986,21 +28015,21 @@ function validateConfig(config) {
         if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
             throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
         }
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.customApiUrl, 'custom_api_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.customApiUrl, 'custom_api_url');
     }
     if (config.customModelsBaseUrl && config.customModelsBaseUrl !== config.customApiUrl) {
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.customModelsBaseUrl, 'custom_models_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.customModelsBaseUrl, 'custom_models_base_url');
     }
     if (config.openRouterBaseUrl)
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.openRouterBaseUrl, 'openrouter_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.openRouterBaseUrl, 'openrouter_base_url');
     if (config.kiloBaseUrl)
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.kiloBaseUrl, 'kilocode_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.kiloBaseUrl, 'kilocode_base_url');
     if (config.baseURL)
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.baseURL, 'nim_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.baseURL, 'nim_base_url');
     if (config.mistralBaseUrl)
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.mistralBaseUrl, 'mistral_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.mistralBaseUrl, 'mistral_base_url');
     if (config.groqBaseUrl)
-        (0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .validateProviderUrl */ .ph)(config.groqBaseUrl, 'groq_base_url');
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.groqBaseUrl, 'groq_base_url');
     if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
         throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
     }
@@ -28012,7 +28041,7 @@ function validateConfig(config) {
     }
 }
 function buildRawOutputBody(summaryBody, lastRawContent) {
-    return `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${(0,_utils_js__WEBPACK_IMPORTED_MODULE_12__/* .escapeMarkdown */ .FV)(lastRawContent)}\n\`\`\`\`\``;
+    return `${summaryBody}\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\`\`\`\`\`\n${(0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .escapeMarkdown */ .FV)(lastRawContent)}\n\`\`\`\`\``;
 }
 function buildClients(config) {
     const hasCustom = !!(config.customApiUrl && (config.customModel || config.customModels.length > 0));
@@ -28071,10 +28100,10 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
         if (result === null) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Batch ${batchResults.length + 1}/${batches.length} timed out — ${batch.files.length} file(s) dropped`);
         }
-        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0 });
+        batchResults.push(result ?? { findings: [], summary: '', usedModel: '', lastRawContent: '', dropped: 0, latencyMs: 0 });
     }
     if (batches.length > 1) {
-        const merged = (0,_batching_js__WEBPACK_IMPORTED_MODULE_13__/* .mergeFindings */ .D)(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
+        const merged = (0,_batching_js__WEBPACK_IMPORTED_MODULE_14__/* .mergeFindings */ .D)(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
         return {
             review: { findings: merged.findings, summary: merged.summary },
             usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
@@ -28182,7 +28211,7 @@ async function writeMetrics(metrics) {
         return;
     try {
         const fs = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 3024, 23));
-        fs.appendFileSync(stepSummary, `\n${(0,_metrics_js__WEBPACK_IMPORTED_MODULE_14__/* .formatMetrics */ .N)(metrics)}\n`);
+        fs.appendFileSync(stepSummary, `\n${(0,_metrics_js__WEBPACK_IMPORTED_MODULE_15__/* .formatMetrics */ .N)(metrics)}\n`);
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Metrics written to step summary');
     }
     catch (err) {
@@ -28222,8 +28251,8 @@ async function run() {
         throw new Error('GITHUB_TOKEN not set');
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing PR #${prNumber} in ${repo}`);
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Combined chain: ${chain.map(m => `${m.id}(${m.provider})`).join(', ')}`);
-    const rules = (0,_rules_js__WEBPACK_IMPORTED_MODULE_15__/* .parseRules */ .NR)(config.customRules);
-    const rulesValidation = (0,_rules_js__WEBPACK_IMPORTED_MODULE_15__/* .validateRules */ .WH)(rules);
+    const rules = (0,_rules_js__WEBPACK_IMPORTED_MODULE_16__/* .parseRules */ .NR)(config.customRules);
+    const rulesValidation = (0,_rules_js__WEBPACK_IMPORTED_MODULE_16__/* .validateRules */ .WH)(rules);
     if (!rulesValidation.valid)
         for (const err of rulesValidation.errors)
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(err);
@@ -28267,7 +28296,7 @@ async function run() {
     const filesDiffMap = {};
     for (const file of filesToReview)
         filesDiffMap[file] = filesDiff[file] || '';
-    const batches = filesToReview.length > 50 ? (0,_batching_js__WEBPACK_IMPORTED_MODULE_13__/* .batchFiles */ .u)(filesDiffMap, 50) : [];
+    const batches = filesToReview.length > 50 ? (0,_batching_js__WEBPACK_IMPORTED_MODULE_14__/* .batchFiles */ .u)(filesDiffMap, 50) : [];
     const useBatching = batches.length > 1;
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Reviewing ${filesToReview.length} files${useBatching ? ` in ${batches.length} batches` : ''}...`);
     // Load previous review threads to feed into the model as context.
