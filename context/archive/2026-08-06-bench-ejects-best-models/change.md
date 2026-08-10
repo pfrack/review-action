@@ -1,10 +1,10 @@
 ---
 change_id: bench-ejects-best-models
 title: "Frame: why only mistral-medium-3.5 reviews — bench ejected high-SWE NIM models"
-status: impl_reviewed
+status: archived
 created: 2026-08-06
-updated: 2026-08-06
-archived_at: null
+updated: 2026-08-10
+archived_at: 2026-08-10T18:34:47Z
 ---
 
 # Bench Ejects Best Models

@@ -20,6 +20,12 @@ jobs:
         with:
           fetch-tags: true
 
+      - name: Sync with origin/main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -74,8 +80,6 @@ jobs:
       - name: Commit updated model order
         if: github.ref == 'refs/heads/main'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add action.yml src/bench-reorder.ts
           if [ -f removed-kilocode-models.txt ]; then git add removed-kilocode-models.txt; fi
           if [ -f kilocode-model-history.json ]; then git add kilocode-model-history.json; fi
@@ -83,21 +87,27 @@ jobs:
             echo "No changes to commit"
           else
             LAST_MSG=$(git log -1 --format=%s)
-            if echo "$LAST_MSG" | grep -q "chore: update kilocode model order from daily benchmark"; then
+            AMEND_MSG="chore: update kilocode model order from daily benchmark"
+            if echo "$LAST_MSG" | grep -q "$AMEND_MSG"; then
               git commit --amend --no-edit --date="$(date -R)"
+              FORCE=1
             else
-              git commit -m "chore: update kilocode model order from daily benchmark [skip ci]"
+              git commit -m "$AMEND_MSG [skip ci]"
+              FORCE=0
             fi
             git checkout -- .
             git clean -fd
-            if ! git pull --rebase origin main; then
-              echo "Rebase conflict — aborting. Next run will pick up changes."
-              git rebase --abort
-              exit 1
-            fi
-            if echo "$LAST_MSG" | grep -q "chore: update kilocode model order from daily benchmark"; then
-              git push --force-with-lease
-            else
-              git push
-            fi
+            for i in 1 2 3; do
+              if [ "$FORCE" = "1" ]; then
+                git push --force-with-lease && break
+              else
+                git push && break
+              fi
+              echo "Push failed, syncing and retrying ($i)..."
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
+            done
           fi

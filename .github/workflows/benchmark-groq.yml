@@ -20,6 +20,12 @@ jobs:
         with:
           fetch-tags: true
 
+      - name: Sync with origin/main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -57,35 +63,35 @@ jobs:
       - name: Commit updated Groq model order
         if: github.ref == 'refs/heads/main'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add action.yml
           if [ -f removed-groq-models.txt ]; then git add removed-groq-models.txt; fi
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
             LAST_MSG=$(git log -1 --format=%s)
-            if echo "$LAST_MSG" | grep -q "chore: update groq model order from daily benchmark"; then
+            AMEND_MSG="chore: update groq model order from daily benchmark"
+            if echo "$LAST_MSG" | grep -q "$AMEND_MSG"; then
               git commit --amend --no-edit --date="$(date -R)"
-              git checkout -- .
-              git clean -fd
-              if ! git pull --rebase origin main; then
-                echo "Rebase conflict — aborting. Next run will pick up changes."
-                git rebase --abort
-                exit 1
-              fi
-              git push --force-with-lease
+              FORCE=1
             else
-              git commit -m "chore: update groq model order from daily benchmark [skip ci]"
-              git checkout -- .
-              git clean -fd
+              git commit -m "$AMEND_MSG [skip ci]"
+              FORCE=0
+            fi
+            git checkout -- .
+            git clean -fd
+            for i in 1 2 3; do
+              if [ "$FORCE" = "1" ]; then
+                git push --force-with-lease && break
+              else
+                git push && break
+              fi
+              echo "Push failed, syncing and retrying ($i)..."
               if ! git pull --rebase origin main; then
                 echo "Rebase conflict — aborting. Next run will pick up changes."
                 git rebase --abort
                 exit 1
               fi
-              git push
-            fi
+            done
             LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
             if [ -n "$LATEST_TAG" ]; then
               TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
