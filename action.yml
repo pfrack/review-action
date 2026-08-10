@@ -13,7 +13,7 @@ inputs:
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
-    default: 'minimaxai/minimax-m3,z-ai/glm-5.2,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron,nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,nvidia/llama-3.3-nemotron-super-49b-v1.5,openai/gpt-oss-20b,thinkingmachines/inkling,nvidia/llama-3.3-nemotron-super-49b-v1,meta/llama-3.3-70b-instruct,poolside/laguna-xs-2.1,meta/llama-3.1-70b-instruct'
+    default: 'z-ai/glm-5.2,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron,openai/gpt-oss-120b,openai/gpt-oss-120b,nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b,thinkingmachines/inkling,nvidia/llama-3.3-nemotron-super-49b-v1,nvidia/llama-3.3-nemotron-super-49b-v1.5,meta/llama-3.1-70b-instruct,minimaxai/minimax-m3,meta/llama-3.3-70b-instruct'
   mistral_api_key:
     description: 'Mistral API key (enables Mistral models in fallback chain)'
     default: ''
