@@ -453,9 +453,9 @@ notes; no source edits required.
 
 #### Automated
 
-- [ ] 3.1 `actionlint` passes on all workflows
-- [ ] 3.2 `build:tsc` + `npm test` pass
-- [ ] 3.3 Each caller ≤ ~25 lines, no duplicated step logic
+- [x] 3.1 `actionlint` passes on all workflows — 37c2fdb
+- [x] 3.2 `build:tsc` + `npm test` pass — 37c2fdb
+- [x] 3.3 Each caller ≤ ~25 lines, no duplicated step logic — 37c2fdb
 
 #### Manual
 
