@@ -429,10 +429,10 @@ notes; no source edits required.
 
 #### Automated
 
-- [ ] 1.1 `npm run build:tsc` produces `dist/src/bench-entry.js`
-- [ ] 1.2 `npm run build` (publish path) still succeeds
-- [ ] 1.3 `npm test` passes
-- [ ] 1.4 All 5 workflows changed `npm run build` → `npm run build:tsc`
+- [x] 1.1 `npm run build:tsc` produces `dist/src/bench-entry.js` — 2a05aae
+- [x] 1.2 `npm run build` (publish path) still succeeds — 2a05aae
+- [x] 1.3 `npm test` passes — 2a05aae
+- [x] 1.4 All 5 workflows changed `npm run build` → `npm run build:tsc` — 2a05aae
 
 #### Manual
 
