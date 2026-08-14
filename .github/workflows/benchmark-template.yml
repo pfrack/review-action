@@ -1,0 +1,176 @@
+name: Benchmark Template (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      provider:
+        required: true
+        type: string
+        description: Provider name used in the commit message
+      action_target:
+        required: true
+        type: string
+        description: ACTION_TARGET value
+      base_url:
+        required: false
+        type: string
+        default: ''
+      models:
+        required: false
+        type: string
+        default: ''
+      concurrency:
+        required: false
+        type: string
+        default: ''
+      removed_path:
+        required: false
+        type: string
+        default: ''
+      history_path:
+        required: false
+        type: string
+        default: ''
+      scores_file:
+        required: false
+        type: string
+        default: ''
+      auto_free:
+        required: false
+        type: boolean
+        default: false
+      two_tier:
+        required: false
+        type: boolean
+        default: false
+      discover_new:
+        required: false
+        type: boolean
+        default: false
+      move_tag:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      BENCH_API_KEY:
+        required: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Sync with origin/main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build:tsc
+
+      - name: Run benchmark
+        env:
+          BENCH_API_KEY: ${{ secrets.BENCH_API_KEY }}
+          BENCH_ITERATIONS: '1'
+          ACTION_TARGET: ${{ inputs.action_target }}
+          BENCH_BASE_URL: ${{ inputs.base_url }}
+          BENCH_MODELS: ${{ inputs.models }}
+          BENCH_CONCURRENCY: ${{ inputs.concurrency }}
+          BENCH_AUTO_FREE: ${{ inputs.auto_free }}
+          REMOVED_MODELS_PATH: ${{ inputs.removed_path }}
+          MODEL_HISTORY_PATH: ${{ inputs.history_path }}
+          BENCH_SCORES_FILE: ${{ inputs.scores_file }}
+        run: node dist/src/bench-entry.js > benchmark-output.txt
+
+      - name: Show results
+        if: always()
+        run: cat benchmark-output.txt
+
+      - name: Discover new models
+        if: ${{ inputs.discover_new }}
+        run: |
+          grep '^|' benchmark-output.txt | node dist/src/bench-reorder.js --discover-new > new-models.json || true
+          cat new-models.json
+
+      - name: Add new models to SWE-bench table
+        if: ${{ inputs.discover_new }}
+        run: |
+          if [ -s new-models.json ] && [ "$(cat new-models.json)" != "[]" ]; then
+            cat new-models.json | node dist/src/bench-reorder.js --patch-scores src/bench-reorder.ts
+          else
+            echo "No new models to add"
+          fi
+
+      - name: Reorder models
+        env:
+          ACTION_PATH: action.yml
+          ACTION_TARGET: ${{ inputs.action_target }}
+          BENCH_SCORES_FILE: ${{ inputs.scores_file }}
+        run: |
+          grep '^|' benchmark-output.txt > table.txt || true
+          if [ -s table.txt ]; then
+            node dist/src/bench-reorder.js${{ inputs.two_tier && ' --two-tier' || '' }} < table.txt
+          else
+            echo "No benchmark table found, skipping reorder"
+          fi
+
+      - name: Commit updated model order
+        if: github.ref == 'refs/heads/main'
+        env:
+          MOVE_TAG: ${{ inputs.move_tag }}
+        run: |
+          git add action.yml
+          if [ "${{ inputs.discover_new }}" = "true" ]; then git add src/bench-reorder.ts; fi
+          if [ -n "${{ inputs.removed_path }}" ] && [ -f "${{ inputs.removed_path }}" ]; then git add "${{ inputs.removed_path }}"; fi
+          if [ -n "${{ inputs.history_path }}" ] && [ -f "${{ inputs.history_path }}" ]; then git add "${{ inputs.history_path }}"; fi
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            LAST_MSG=$(git log -1 --format=%s)
+            AMEND_MSG="chore: update ${{ inputs.provider }} model order from daily benchmark"
+            if echo "$LAST_MSG" | grep -q "$AMEND_MSG"; then
+              git commit --amend --no-edit --date="$(date -R)"
+              FORCE=1
+            else
+              git commit -m "$AMEND_MSG [skip ci]"
+              FORCE=0
+            fi
+            git checkout -- .
+            git clean -fd
+            for i in 1 2 3; do
+              if [ "$FORCE" = "1" ]; then
+                git push --force-with-lease && break
+              else
+                git push && break
+              fi
+              echo "Push failed, syncing and retrying ($i)..."
+              if ! git pull --rebase origin main; then
+                echo "Rebase conflict — aborting. Next run will pick up changes."
+                git rebase --abort
+                exit 1
+              fi
+            done
+            if [ "$MOVE_TAG" = "true" ]; then
+              LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+              if [ -n "$LATEST_TAG" ]; then
+                TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
+                if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
+                  echo "Moving tag $LATEST_TAG to current commit"
+                  git tag -f "$LATEST_TAG"
+                  git push origin "$LATEST_TAG" --force
+                else
+                  echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
+                fi
+              fi
+            fi
+          fi

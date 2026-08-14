@@ -8,96 +8,16 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: benchmark-nim
-  cancel-in-progress: false
-
 jobs:
-  benchmark-nim:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-tags: true
-
-      - name: Sync with origin/main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - run: npm ci
-
-      - run: npm run build:tsc
-
-      - name: Run NIM benchmark
-        env:
-          BENCH_API_KEY: ${{ secrets.NIM_API_KEY }}
-          BENCH_ITERATIONS: '1'
-          BENCH_CONCURRENCY: '3'
-        run: node dist/src/bench-entry.js > benchmark-output.txt
-
-      - name: Show results
-        if: always()
-        run: cat benchmark-output.txt
-
-      - name: Reorder models
-        env:
-          ACTION_PATH: action.yml
-          ACTION_TARGET: nim_models
-        run: |
-          grep '^|' benchmark-output.txt > table.txt || true
-          if [ -s table.txt ]; then
-            node dist/src/bench-reorder.js < table.txt
-          else
-            echo "No benchmark table found, skipping reorder"
-          fi
-
-      - name: Commit updated model order
-        if: github.ref == 'refs/heads/main'
-        run: |
-          git add action.yml
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            LAST_MSG=$(git log -1 --format=%s)
-            AMEND_MSG="chore: update nim model order from daily benchmark"
-            if echo "$LAST_MSG" | grep -q "$AMEND_MSG"; then
-              git commit --amend --no-edit --date="$(date -R)"
-              FORCE=1
-            else
-              git commit -m "$AMEND_MSG [skip ci]"
-              FORCE=0
-            fi
-            git checkout -- .
-            git clean -fd
-            for i in 1 2 3; do
-              if [ "$FORCE" = "1" ]; then
-                git push --force-with-lease && break
-              else
-                git push && break
-              fi
-              echo "Push failed, syncing and retrying ($i)..."
-              if ! git pull --rebase origin main; then
-                echo "Rebase conflict — aborting. Next run will pick up changes."
-                git rebase --abort
-                exit 1
-              fi
-            done
-            LATEST_TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
-            if [ -n "$LATEST_TAG" ]; then
-              TAG_COMMIT=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
-              if git log -1 --format=%s "$TAG_COMMIT" | grep -q "benchmark"; then
-                echo "Moving tag $LATEST_TAG to current commit"
-                git tag -f "$LATEST_TAG"
-                git push origin "$LATEST_TAG" --force
-              else
-                echo "Tag $LATEST_TAG points to non-benchmark commit — not moving"
-              fi
-            fi
-          fi
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-nim
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.NIM_API_KEY }}
+    with:
+      provider: nim
+      action_target: nim_models
+      concurrency: '3'
+      move_tag: true

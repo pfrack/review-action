@@ -442,8 +442,8 @@ notes; no source edits required.
 
 #### Automated
 
-- [ ] 2.1 `actionlint` passes on the 5 benchmark workflows after group change
-- [ ] 2.2 YAML valid / parses
+- [x] 2.1 `actionlint` passes on the 5 benchmark workflows after group change — 7e6ca5a
+- [x] 2.2 YAML valid / parses — 7e6ca5a
 
 #### Manual
 
