@@ -466,8 +466,8 @@ notes; no source edits required.
 
 #### Automated
 
-- [ ] 4.1 `actionlint` runs and passes in CI on a workflow-touching PR
-- [ ] 4.2 `npm test` passes
+- [x] 4.1 `actionlint` runs and passes in CI on a workflow-touching PR — 8466a4e
+- [x] 4.2 `npm test` passes — 8466a4e
 
 #### Manual
 
