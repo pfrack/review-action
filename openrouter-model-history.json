@@ -21,6 +21,7 @@
   },
   "openrouter": {
     "models": [
+      "dots-studio/dots-3-note-preview:free",
       "liquid/lfm-2.5-2.6b:free",
       "nvidia/nemotron-3.5-lightning:free",
       "poolside/laguna-s-2.1:free",
