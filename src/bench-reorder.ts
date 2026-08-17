@@ -183,6 +183,7 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'codestral-2508': 0.650,
   'codestral-latest': 0.650,
   // OpenRouter free-tier models (estimated scores)
+  'z-ai/glm-5.2:free': 0.5,
   'dots-studio/dots-3-note-preview:free': 0.5,
   'google/gemma-4-31b-it:free': 0.5,
   'liquid/lfm-2.5-2.6b:free': 0.5,
