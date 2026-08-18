@@ -431,8 +431,8 @@ inputs:
   });
 
   it('returns NousResearch free-tier measured scores from SWE_BENCH_SCORES', () => {
-    assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.5);      // not in leaderboard
-    assert.strictEqual(getSweBenchScore('poolside/laguna-xs-2.1:free'), 0.709);   // rank 59
+    assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.75);            // estimated — not on leaderboard
+    assert.strictEqual(getSweBenchScore('poolside/laguna-xs-2.1:free'), 0.709);    // rank 59
     assert.strictEqual(getSweBenchScore('upstage/solar-pro4:free'), 0.706);       // rank 62
     assert.strictEqual(getSweBenchScore('meituan/longcat-2.0:free'), 0.70);       // matches rank 64
     assert.strictEqual(getSweBenchScore('tencent/hy3:free'), 0.78);              // rank 21

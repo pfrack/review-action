@@ -157,6 +157,8 @@ export const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'z-ai/glm-5.2:free': 0.5,
+    'dots-studio/dots-3-note-preview:free': 0.5,
     'google/gemma-4-31b-it:free': 0.5,
     'liquid/lfm-2.5-2.6b:free': 0.5,
     'nvidia/nemotron-3.5-lightning:free': 0.5,
@@ -171,8 +173,8 @@ export const SWE_BENCH_SCORES = {
     'kilo-auto/free': 0.5,
     'stepfun/step-3.7-flash:free': 0.744,
     'inclusionai/ling-3.0-flash:free': 0.5,
-    'poolside/laguna-s-2.1:free': 0.5,
-    'poolside/laguna-xs-2.1:free': 0.709,
+    'poolside/laguna-s-2.1:free': 0.75, // estimated — not on SWE-bench Verified leaderboard; S (118B) benchmarks 78.5% Multilingual
+    'poolside/laguna-xs-2.1:free': 0.709, // measured — SWE-bench Verified rank 59
     'nvidia/nemotron-3.5-content-safety:free': 0.5,
     'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,

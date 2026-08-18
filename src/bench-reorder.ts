@@ -199,8 +199,8 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'kilo-auto/free': 0.5,
   'stepfun/step-3.7-flash:free': 0.744,
   'inclusionai/ling-3.0-flash:free': 0.5,
-  'poolside/laguna-s-2.1:free': 0.5,
-  'poolside/laguna-xs-2.1:free': 0.709,
+  'poolside/laguna-s-2.1:free': 0.75,    // estimated — not on SWE-bench Verified leaderboard; S (118B) benchmarks 78.5% Multilingual
+  'poolside/laguna-xs-2.1:free': 0.709,  // measured — SWE-bench Verified rank 59
   'nvidia/nemotron-3.5-content-safety:free': 0.5,
   'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
   'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
