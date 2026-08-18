@@ -171,8 +171,8 @@ describe('getSweBenchScore — OpenRouter and Kilo free-tier estimated scores', 
     it('returns 0.65 for deepseek/deepseek-r1:free', () => {
         assert.strictEqual(getSweBenchScore('deepseek/deepseek-r1:free'), 0.65);
     });
-    it('returns 0.50 for meta-llama/llama-4-maverick:free', () => {
-        assert.strictEqual(getSweBenchScore('meta-llama/llama-4-maverick:free'), 0.50);
+    it('returns 0.55 for meta-llama/llama-4-maverick:free', () => {
+        assert.strictEqual(getSweBenchScore('meta-llama/llama-4-maverick:free'), 0.55);
     });
     it('returns 0.60 for google/gemini-2.0-flash-exp:free', () => {
         assert.strictEqual(getSweBenchScore('google/gemini-2.0-flash-exp:free'), 0.60);
@@ -360,13 +360,26 @@ inputs:
             rmSync(tmpDir, { recursive: true, force: true });
         }
     });
-    it('returns NousResearch free-tier measured scores from SWE_BENCH_SCORES', () => {
-        assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.75); // estimated — not on leaderboard
+    it('returns NousResearch free-tier measured/estimated scores from SWE_BENCH_SCORES', () => {
+        assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.75); // estimated — 118B
         assert.strictEqual(getSweBenchScore('poolside/laguna-xs-2.1:free'), 0.709); // rank 59
         assert.strictEqual(getSweBenchScore('upstage/solar-pro4:free'), 0.706); // rank 62
         assert.strictEqual(getSweBenchScore('meituan/longcat-2.0:free'), 0.70); // matches rank 64
         assert.strictEqual(getSweBenchScore('tencent/hy3:free'), 0.78); // rank 21
         assert.strictEqual(getSweBenchScore('stepfun/step-3.7-flash:free'), 0.744); // matches rank 40
+    });
+    it('returns updated FreeTier scores (measured from leaderboard)', () => {
+        assert.strictEqual(getSweBenchScore('z-ai/glm-5.2:free'), 0.778); // matches glm-5, rank 24
+        assert.strictEqual(getSweBenchScore('cohere/north-mini-code:free'), 0.676); // matches rank 74
+        assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-ultra-550b-a55b:free'), 0.707); // rank 61
+        assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-super-120b-a12b:free'), 0.5373); // rank 92
+        assert.strictEqual(getSweBenchScore('nvidia/nemotron-3.5-lightning:free'), 0.516); // rank 94
+        assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-nano-30b-a3b:free'), 0.388); // rank 103
+    });
+    it('keeps 0.5 for routing/specialized models', () => {
+        assert.strictEqual(getSweBenchScore('kilo-auto/free'), 0.5); // routing model
+        assert.strictEqual(getSweBenchScore('openrouter/free'), 0.5); // routing model
+        assert.strictEqual(getSweBenchScore('nvidia/nemotron-3.5-content-safety:free'), 0.5); // specialized
     });
 });
 describe('getSweBenchScore with fetched scores', () => {

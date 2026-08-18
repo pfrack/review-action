@@ -156,33 +156,33 @@ export const SWE_BENCH_SCORES = {
     'mistral-small-latest': 0.680,
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
-    // OpenRouter free-tier models (estimated scores)
-    'z-ai/glm-5.2:free': 0.5,
-    'dots-studio/dots-3-note-preview:free': 0.5,
-    'google/gemma-4-31b-it:free': 0.5,
-    'liquid/lfm-2.5-2.6b:free': 0.5,
-    'nvidia/nemotron-3.5-lightning:free': 0.5,
-    'inclusionai/ling-3.0-tiny:free': 0.5,
-    'tencent/hy3:free': 0.78,
-    'google/gemma-4-26b-a4b-it:free': 0.5,
-    'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
-    'nvidia/nemotron-nano-12b-v2-vl:free': 0.5,
-    'nvidia/nemotron-nano-9b-v2:free': 0.5,
-    'openai/gpt-oss-20b:free': 0.5,
-    'cohere/north-mini-code:free': 0.5,
-    'kilo-auto/free': 0.5,
-    'stepfun/step-3.7-flash:free': 0.744,
-    'inclusionai/ling-3.0-flash:free': 0.5,
-    'poolside/laguna-s-2.1:free': 0.75, // estimated — not on SWE-bench Verified leaderboard; S (118B) benchmarks 78.5% Multilingual
-    'poolside/laguna-xs-2.1:free': 0.709, // measured — SWE-bench Verified rank 59
-    'nvidia/nemotron-3.5-content-safety:free': 0.5,
-    'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
-    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
-    'poolside/laguna-m.1:free': 0.5,
-    'nvidia/nemotron-3-super-120b-a12b:free': 0.5,
-    'openrouter/free': 0.5,
+    // OpenRouter free-tier models (measured/estimated scores)
+    'z-ai/glm-5.2:free': 0.778, // measured — matches glm-5, rank 24
+    'dots-studio/dots-3-note-preview:free': 0.45, // estimated — small free tier
+    'google/gemma-4-31b-it:free': 0.45, // estimated — 31B class, no Verified entry
+    'liquid/lfm-2.5-2.6b:free': 0.25, // estimated — 2.6B params
+    'nvidia/nemotron-3.5-lightning:free': 0.516, // measured — matches nemotron-3.5-lightning-30b-a3b, rank 94
+    'inclusionai/ling-3.0-tiny:free': 0.30, // estimated — tiny model
+    'tencent/hy3:free': 0.78, // measured — rank 21
+    'google/gemma-4-26b-a4b-it:free': 0.40, // estimated — 26B MoE
+    'nvidia/nemotron-3-nano-30b-a3b:free': 0.388, // measured — rank 103
+    'nvidia/nemotron-nano-12b-v2-vl:free': 0.35, // estimated — 12B nano
+    'nvidia/nemotron-nano-9b-v2:free': 0.30, // estimated — 9B nano
+    'openai/gpt-oss-20b:free': 0.30, // estimated — 20B open source
+    'cohere/north-mini-code:free': 0.676, // measured — matches north-mini-code-1.0, rank 74
+    'kilo-auto/free': 0.5, // routing model — neutral default
+    'stepfun/step-3.7-flash:free': 0.744, // measured — matches step-3.5-flash, rank 40
+    'inclusionai/ling-3.0-flash:free': 0.50, // estimated — flash variant, unbenchmarked
+    'poolside/laguna-s-2.1:free': 0.75, // estimated — 118B; S benchmarks 78.5% Multilingual
+    'poolside/laguna-xs-2.1:free': 0.709, // measured — rank 59
+    'nvidia/nemotron-3.5-content-safety:free': 0.5, // specialized model, not on coding leaderboard
+    'nvidia/nemotron-3-ultra-550b-a55b:free': 0.707, // measured — rank 61
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.40, // estimated — nano reasoning variant
+    'poolside/laguna-m.1:free': 0.72, // estimated — 225B-A23B, largest in Laguna family
+    'nvidia/nemotron-3-super-120b-a12b:free': 0.5373, // measured — rank 92
+    'openrouter/free': 0.5, // routing model — neutral default
     'deepseek/deepseek-r1:free': 0.65, // estimated — free tier, quantized
-    'meta-llama/llama-4-maverick:free': 0.50, // estimated — free tier, truncated
+    'meta-llama/llama-4-maverick:free': 0.55, // estimated — Llama 4, free tier
     'google/gemini-2.0-flash-exp:free': 0.60, // estimated — experimental free tier
     // Kilo free-tier models (estimated scores)
     'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
