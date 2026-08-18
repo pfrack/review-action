@@ -17,20 +17,28 @@ import { parseRules, validateRules, type Rule } from './rules.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
 
-export async function withAggregateTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T | null> {
-  let timer: NodeJS.Timeout | undefined;
+export async function withAggregateTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    core.warning(`Model chain timed out after ${timeoutMs}ms`);
+    controller.abort();
+  }, timeoutMs);
+  // Keep a reference so a slow operation that outlives the race cannot become
+  // an unhandled rejection (which would crash the process and drop the review).
+  const op = operation(controller.signal);
+  op.catch(() => {});
   try {
     return await Promise.race([
-      operation(),
-      new Promise<null>(resolve => {
-        timer = setTimeout(() => {
-          core.warning(`Model chain timed out after ${timeoutMs}ms`);
-          resolve(null);
-        }, timeoutMs);
+      op,
+      new Promise<null>((_, reject) => {
+        controller.signal.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError')), { once: true });
       }),
     ]);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return null;
+    throw err;
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
@@ -241,6 +249,7 @@ export async function runModelChainForBatch(
   responseFormat: ResponseFormat,
   config: Config,
   modelTimeoutMs = 60_000,
+  signal?: AbortSignal,
 ): Promise<BatchResult> {
   const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
@@ -274,7 +283,8 @@ export async function runModelChainForBatch(
         if (controller.signal.aborted) return null;
         const result = await attemptModel(
           tagged, client, batch, userMsg, systemMessage,
-          responseFormat, config, modelTimeoutMs, maxTokens, controller.signal,
+          responseFormat, config, modelTimeoutMs, maxTokens,
+          signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
         );
         // NOTE: intentionally do NOT abort on the first winner here — aborting
         // would let a weaker/faster model preempt a stronger one still running
@@ -327,7 +337,7 @@ export async function runModelChainForBatch(
         const client = clients[tagged.provider]!;
         const result = await attemptModel(
           tagged, client, batch, userMsg, systemMessage,
-          responseFormat, config, modelTimeoutMs, maxTokens, undefined,
+          responseFormat, config, modelTimeoutMs, maxTokens, signal,
         );
         if (result) {
           if (result.findings.length > 0) {
@@ -348,7 +358,7 @@ export async function runModelChainForBatch(
         const client = clients[tagged.provider]!;
         const result = await attemptModel(
           tagged, client, batch, userMsg, systemMessage,
-          responseFormat, config, modelTimeoutMs, maxTokens, undefined,
+          responseFormat, config, modelTimeoutMs, maxTokens, signal,
         );
         if (result) {
           if (result.findings.length > 0) {
@@ -366,10 +376,10 @@ export async function runModelChainForBatch(
     // Sequential fallback (original behavior)
     for (const tagged of availableChain) {
       const client = clients[tagged.provider]!;
-      const result = await attemptModel(
-        tagged, client, batch, userMsg, systemMessage,
-        responseFormat, config, modelTimeoutMs, maxTokens, undefined,
-      );
+        const result = await attemptModel(
+          tagged, client, batch, userMsg, systemMessage,
+          responseFormat, config, modelTimeoutMs, maxTokens, signal,
+        );
       if (result) {
         if (result.findings.length > 0) {
           batchReview = { findings: result.findings, summary: result.summary };
@@ -403,6 +413,7 @@ function validateConfig(config: Config): void {
   if (config.groqApiKey) core.setSecret(config.groqApiKey);
   if (config.openRouterApiKey) core.setSecret(config.openRouterApiKey);
   if (config.kiloApiKey) core.setSecret(config.kiloApiKey);
+  if (config.nousApiKey) core.setSecret(config.nousApiKey);
   if (config.customApiKey) core.setSecret(config.customApiKey);
 
   if (config.customApiUrl) {
@@ -421,17 +432,18 @@ function validateConfig(config: Config): void {
   }
   if (config.openRouterBaseUrl) validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
   if (config.kiloBaseUrl) validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
+  if (config.nousBaseUrl) validateProviderUrl(config.nousBaseUrl, 'nousresearch_base_url');
   if (config.baseURL) validateProviderUrl(config.baseURL, 'nim_base_url');
   if (config.mistralBaseUrl) validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
   if (config.groqBaseUrl) validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
 
-  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
-    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
+  if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey && !hasCustom && !hasCustomModels) {
+    throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, nousresearch_api_key, or custom_api_url + custom_model/custom_models is required');
   }
-  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+  if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
-  if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+  if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
     core.info('Running with only custom API configured — no fallback chain available if custom model fails');
   }
 }
@@ -448,6 +460,7 @@ export function buildClients(config: Config): Record<Provider, OpenAIClient | nu
     groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
     openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
     kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
+    nousresearch: config.nousApiKey ? new OpenAIClient(config.nousBaseUrl, config.nousApiKey, 'NousResearch') : null,
     custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
   };
 }
@@ -492,8 +505,8 @@ export async function executeReview(
     if (batches.length > 1) {
       core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
     }
-    const runBatch = () => runModelChainForBatch(
-      chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs,
+    const runBatch = (signal?: AbortSignal) => runModelChainForBatch(
+      chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal,
     );
     let result: BatchResult | null;
     try {
@@ -659,6 +672,8 @@ export async function run(): Promise<void> {
     hasOpenRouterKey: !!config.openRouterApiKey,
     kiloModels: config.kiloModels,
     hasKiloKey: !!config.kiloApiKey,
+    nousModels: config.nousModels,
+    hasNousKey: !!config.nousApiKey,
     customModel: config.customModel,
     hasCustomConfig: hasCustom,
     customModels: config.customModels,

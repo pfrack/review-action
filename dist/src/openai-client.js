@@ -174,14 +174,16 @@ export class OpenAIClient {
                     baseURL.includes('groq') ? 'Groq' :
                         baseURL.includes('openrouter') ? 'OpenRouter' :
                             baseURL.includes('kilo.ai') ? 'Kilo' :
-                                baseURL.split('/')[2] || 'API');
+                                baseURL.includes('nousresearch') ? 'NousResearch' :
+                                    baseURL.split('/')[2] || 'API');
         this.providerKey =
             baseURL.includes('nvidia.com') ? 'nim' :
                 baseURL.includes('mistral') ? 'mistral' :
                     baseURL.includes('groq') ? 'groq' :
                         baseURL.includes('openrouter') ? 'openrouter' :
                             baseURL.includes('kilo.ai') ? 'kilocode' :
-                                'custom';
+                                baseURL.includes('nousresearch') ? 'nousresearch' :
+                                    'custom';
     }
     async chat(model, messages, opts = {}) {
         const outerSignal = opts.signal;

@@ -39,7 +39,7 @@ The shipped implementation must be fully represented in context, its public inpu
 - Re-documenting daily benchmark output, generated bundle-only commits, or existing timeout behavior.
 - Replacing the existing probe-cap change record.
 - Changing provider SDKs or introducing provider-specific client classes.
-- Changing the default from sequential fallback to parallel execution.
+- Making parallel execution the *only* mode. The shipped default is `parallel_attempts: 3` (light staggered parallel); fully sequential behavior is preserved by setting `parallel_attempts: 1`.
 - Adding streaming support to the review execution path.
 - Redesigning retry policy, batching, finding validation, or review rendering.
 - Expanding the known model override tables beyond models confirmed by provider behavior.
@@ -56,7 +56,7 @@ Custom models continue to share one custom client and one chain prefix. Singular
 
 ### Timing & lifecycle
 
-Parallel attempts share an `AbortController`, but each HTTP attempt also retains its independent per-model timeout through `AbortSignal.any()`. Only a result containing validated findings wins and aborts siblings; schema-invalid raw content is preserved for fallback behavior but must not cancel potentially successful attempts.
+Parallel attempts share an `AbortController` (present for future signal wiring) but in the shipped implementation each HTTP attempt retains its independent per-model timeout through `AbortSignal.any()` and all launched attempts run to completion; the result with the highest adjusted-SWE score wins. Schema-invalid raw content is preserved for fallback behavior but a partial failure does not cancel potentially successful siblings.
 
 ### State sequencing
 
@@ -64,7 +64,7 @@ The parallel prefix must settle before the runner decides whether to return a wi
 
 ### Performance constraints
 
-Sequential execution remains the default with `parallel_attempts: 1`. Adaptive output limits remain between 4,096 and 16,384 tokens, while known StepFun text-mode models receive at least 8,192 tokens because natural-language responses are more verbose than strict structured output.
+Sequential-by-default is preserved as opt-in: the shipped default is `parallel_attempts: 3` (light staggered parallel), and setting `parallel_attempts: 1` restores fully sequential fallback. Adaptive output limits remain between 4,096 and 16,384 tokens, while known StepFun text-mode models receive at least 8,192 tokens because natural-language responses are more verbose than strict structured output.
 
 ## Phase 1: Provider Output Compatibility
 
@@ -194,7 +194,7 @@ Reduce truncation on large reviews and optionally reduce fallback latency by lau
 
 **Intent**: Allow slow chain heads to retain first opportunity while starting fallback models after configurable delays instead of waiting for full failure or timeout.
 
-**Contract**: `parallel_attempts` accepts 1 through 5 and defaults to 1. `parallel_threshold` accepts 5 through 120 seconds and defaults to 40. Parallel mode uses at most the available chain length, starts model `i` after `i * threshold`, aborts siblings after the first validated non-empty result, and continues only the unlaunched chain tail sequentially when needed.
+**Contract**: `parallel_attempts` accepts 1 through 5 and defaults to 3 (light staggered parallel; set to 1 for fully sequential). `parallel_threshold` accepts 5 through 120 seconds and defaults to 40. Parallel mode uses at most the available chain length, starts model `i` after `i * threshold`, and continues only the unlaunched chain tail sequentially when needed. (Siblings are not aborted on a winner; all launched attempts run to completion and the highest adjusted-SWE result wins — see Implementation Approach.)
 
 ### Success Criteria:
 
@@ -300,9 +300,9 @@ Close the known verification and discoverability gaps left by the rapid implemen
 ## Performance Considerations
 
 - Adaptive output budgets can increase completion-token cost on large diffs; the 16,384 cap bounds the maximum.
-- Parallel attempts can increase provider usage and cost when the head is slow. Keeping `parallel_attempts: 1` as the default preserves previous cost and concurrency behavior.
+- Parallel attempts increase provider usage and cost because all launched attempts run to completion; setting `parallel_attempts: 1` restores the previous sequential cost and concurrency behavior.
 - Staggering delays fallback cost until the head has had a fair response window.
-- Winner cancellation is best-effort at the HTTP signal layer; a provider may still account for work already accepted before cancellation.
+- Sibling cancellation is not implemented: all launched attempts complete and the highest adjusted-SWE result is selected; a provider may still account for work already accepted.
 - Known model-format overrides avoid guaranteed failed requests and reduce latency.
 
 ## Migration Notes

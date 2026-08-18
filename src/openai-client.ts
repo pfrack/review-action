@@ -226,20 +226,22 @@ export class OpenAIClient {
   constructor(baseURL: string, apiKey: string, providerLabel?: string) {
     this.baseURL = baseURL.replace(/\/+$/, '');
     this.apiKey = apiKey;
-    this.providerLabel = providerLabel ||
-      (baseURL.includes('nvidia.com') ? 'NIM' :
-       baseURL.includes('mistral') ? 'Mistral' :
-       baseURL.includes('groq') ? 'Groq' :
-       baseURL.includes('openrouter') ? 'OpenRouter' :
-       baseURL.includes('kilo.ai') ? 'Kilo' :
-       baseURL.split('/')[2] || 'API');
-    this.providerKey =
-      baseURL.includes('nvidia.com') ? 'nim' :
-      baseURL.includes('mistral') ? 'mistral' :
-      baseURL.includes('groq') ? 'groq' :
-      baseURL.includes('openrouter') ? 'openrouter' :
-      baseURL.includes('kilo.ai') ? 'kilocode' :
-      'custom';
+     this.providerLabel = providerLabel ||
+       (baseURL.includes('nvidia.com') ? 'NIM' :
+        baseURL.includes('mistral') ? 'Mistral' :
+        baseURL.includes('groq') ? 'Groq' :
+        baseURL.includes('openrouter') ? 'OpenRouter' :
+        baseURL.includes('kilo.ai') ? 'Kilo' :
+        baseURL.includes('nousresearch') ? 'NousResearch' :
+        baseURL.split('/')[2] || 'API');
+     this.providerKey =
+       baseURL.includes('nvidia.com') ? 'nim' :
+       baseURL.includes('mistral') ? 'mistral' :
+       baseURL.includes('groq') ? 'groq' :
+       baseURL.includes('openrouter') ? 'openrouter' :
+       baseURL.includes('kilo.ai') ? 'kilocode' :
+       baseURL.includes('nousresearch') ? 'nousresearch' :
+       'custom';
   }
 
   async chat(model: string, messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {

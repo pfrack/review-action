@@ -208,6 +208,10 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     kiloModels: [],
     kiloBaseUrl: '',
     kiloFreeOnly: false,
+    nousApiKey: '',
+    nousModels: [],
+    nousBaseUrl: '',
+    nousFreeOnly: false,
     customApiUrl: '',
     customModel: '',
     customApiKey: '',
@@ -323,7 +327,7 @@ describe('runModelChainForBatch sequential fallback', () => {
     const callCounts: Record<string, number> = {};
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({}), callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -341,7 +345,7 @@ describe('runModelChainForBatch sequential fallback', () => {
         if (model === 'model-a') return { shouldThrow: true };
         return {};
       }, callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -356,7 +360,7 @@ describe('runModelChainForBatch sequential fallback', () => {
     const config = makeConfig();
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({ shouldThrow: true })),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -374,7 +378,7 @@ describe('runModelChainForBatch sequential fallback', () => {
         if (model === 'model-a') return { response: TRUNCATED_CHAT_RESULT };
         return {};
       }, callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -402,7 +406,7 @@ describe('runModelChainForBatch sequential fallback', () => {
         }
         return {};
       }, callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -420,7 +424,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     const callCounts: Record<string, number> = {};
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({}), callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
@@ -442,7 +446,7 @@ describe('runModelChainForBatch parallel fallback', () => {
         if (model === 'slow-model') return { delayMs: 2000 };
         return {};
       }, callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
     const result = await runModelChainForBatch(
@@ -464,7 +468,7 @@ describe('runModelChainForBatch parallel fallback', () => {
         if (model === 'fail-a' || model === 'fail-b') return { shouldThrow: true };
         return {};
       }),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const result = await runModelChainForBatch(
       chain, clients, TEST_BATCH, 'system', 'json_schema', config, 500,
@@ -521,7 +525,7 @@ describe('prioritizeChain', () => {
       nim: { probeModel: async () => true } as unknown as OpenAIClient,
       mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } } as unknown as OpenAIClient,
       groq: { probeModel: async () => true } as unknown as OpenAIClient,
-      openrouter: null, kilocode: null, custom: null,
+      openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
     await prioritizeChain(chain, clients);
@@ -538,7 +542,7 @@ describe('prioritizeChain', () => {
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: { probeModel: async () => true } as unknown as OpenAIClient,
       mistral: { probeModel: async () => true } as unknown as OpenAIClient,
-      groq: null, openrouter: null, kilocode: null, custom: null,
+      groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
     await prioritizeChain(chain, clients);
@@ -575,7 +579,7 @@ describe('executeReview — batch loop resilience', () => {
     };
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({ response: batch2Result }), callCounts),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const chain: TaggedModel[] = [{ id: 'model-a', provider: 'nim' }];
 
@@ -602,7 +606,7 @@ describe('executeReview — batch loop resilience', () => {
     const config = makeConfig({ chainTimeout: 300 });
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({ response: VALID_CHAT_RESULT })),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     const chain: TaggedModel[] = [{ id: 'model-a', provider: 'nim' }];
 
@@ -627,7 +631,7 @@ describe('runModelChainForBatch parallel logging', () => {
         if (model === 'slow-model') return { delayMs: 2000 };
         return {};
       }),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
     const messages: string[] = [];
@@ -651,7 +655,7 @@ describe('runModelChainForBatch parallel logging', () => {
     const chain: TaggedModel[] = [{ id: 'single-model', provider: 'nim' }];
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient(() => ({})),
-      mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
     const messages: string[] = [];

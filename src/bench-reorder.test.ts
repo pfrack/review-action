@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable, type ParsedRow } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, updateActionYmlNousResearch, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable, type ParsedRow } from './bench-reorder.js';
 import { startMockServer } from './test-utils.js';
 
 describe('updateActionYml groq target', () => {
@@ -376,6 +376,67 @@ inputs:
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('updateActionYmlNousResearch', () => {
+  it('correctly replaces nousresearch_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nousresearch_models:
+    description: 'Comma-separated NousResearch model fallback chain'
+    default: 'poolside/laguna-s-2.1:free,tencent/hy3:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlNousResearch(actionPath, ['tencent/hy3:free', 'poolside/laguna-s-2.1:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'tencent/hy3:free,poolside/laguna-s-2.1:free'"));
+      assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not modify file when nousresearch_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlNousResearch(actionPath, ['tencent/hy3:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.strictEqual(result, content); // unchanged
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns NousResearch free-tier measured scores from SWE_BENCH_SCORES', () => {
+    assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.5);      // not in leaderboard
+    assert.strictEqual(getSweBenchScore('poolside/laguna-xs-2.1:free'), 0.709);   // rank 59
+    assert.strictEqual(getSweBenchScore('upstage/solar-pro4:free'), 0.706);       // rank 62
+    assert.strictEqual(getSweBenchScore('meituan/longcat-2.0:free'), 0.70);       // matches rank 64
+    assert.strictEqual(getSweBenchScore('tencent/hy3:free'), 0.78);              // rank 21
+    assert.strictEqual(getSweBenchScore('stepfun/step-3.7-flash:free'), 0.744);   // matches rank 40
   });
 });
 

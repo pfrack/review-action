@@ -177,6 +177,10 @@ function makeConfig(overrides = {}) {
         kiloModels: [],
         kiloBaseUrl: '',
         kiloFreeOnly: false,
+        nousApiKey: '',
+        nousModels: [],
+        nousBaseUrl: '',
+        nousFreeOnly: false,
         customApiUrl: '',
         customModel: '',
         customApiKey: '',
@@ -273,7 +277,7 @@ describe('runModelChainForBatch sequential fallback', () => {
         const callCounts = {};
         const clients = {
             nim: makeMockClient(() => ({}), callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         assert.strictEqual(result.usedModel, 'model-a');
@@ -289,7 +293,7 @@ describe('runModelChainForBatch sequential fallback', () => {
                     return { shouldThrow: true };
                 return {};
             }, callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         assert.strictEqual(result.usedModel, 'model-b');
@@ -301,7 +305,7 @@ describe('runModelChainForBatch sequential fallback', () => {
         const config = makeConfig();
         const clients = {
             nim: makeMockClient(() => ({ shouldThrow: true })),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         assert.strictEqual(result.findings.length, 0);
@@ -317,7 +321,7 @@ describe('runModelChainForBatch sequential fallback', () => {
                     return { response: TRUNCATED_CHAT_RESULT };
                 return {};
             }, callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         // model-a: truncated → safeParseJson fails → returns null, no retry
@@ -342,7 +346,7 @@ describe('runModelChainForBatch sequential fallback', () => {
                 }
                 return {};
             }, callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         // model-a: invalid schema → retry → still invalid → fall through
@@ -357,7 +361,7 @@ describe('runModelChainForBatch parallel fallback', () => {
         const callCounts = {};
         const clients = {
             nim: makeMockClient(() => ({}), callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(TEST_CHAIN, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         assert.strictEqual(result.findings.length, 1);
@@ -376,7 +380,7 @@ describe('runModelChainForBatch parallel fallback', () => {
                     return { delayMs: 2000 };
                 return {};
             }, callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000);
         assert.strictEqual(result.usedModel, 'fast-model');
@@ -395,7 +399,7 @@ describe('runModelChainForBatch parallel fallback', () => {
                     return { shouldThrow: true };
                 return {};
             }),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await runModelChainForBatch(chain, clients, TEST_BATCH, 'system', 'json_schema', config, 500);
         assert.strictEqual(result.usedModel, 'success-c');
@@ -445,7 +449,7 @@ describe('prioritizeChain', () => {
             nim: { probeModel: async () => true },
             mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } },
             groq: { probeModel: async () => true },
-            openrouter: null, kilocode: null, custom: null,
+            openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         await prioritizeChain(chain, clients);
         assert.deepStrictEqual(chain.map(m => m.id), originalOrder, 'chain order must not change after prioritizeChain');
@@ -459,7 +463,7 @@ describe('prioritizeChain', () => {
         const clients = {
             nim: { probeModel: async () => true },
             mistral: { probeModel: async () => true },
-            groq: null, openrouter: null, kilocode: null, custom: null,
+            groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         await prioritizeChain(chain, clients);
         assert.deepStrictEqual(chain.map(m => m.id), originalOrder);
@@ -492,7 +496,7 @@ describe('executeReview — batch loop resilience', () => {
         };
         const clients = {
             nim: makeMockClient(() => ({ response: batch2Result }), callCounts),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const chain = [{ id: 'model-a', provider: 'nim' }];
         const result = await executeReview(chain, clients, ['throw.ts', 'b.ts', 'c.ts'], throwingDiffs, [batch1, batch2], 'system', config);
@@ -512,7 +516,7 @@ describe('executeReview — batch loop resilience', () => {
         const config = makeConfig({ chainTimeout: 300 });
         const clients = {
             nim: makeMockClient(() => ({ response: VALID_CHAT_RESULT })),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const chain = [{ id: 'model-a', provider: 'nim' }];
         const result = await executeReview(chain, clients, ['throw.ts'], throwingDiffs, [batch1], 'system', config);
@@ -533,7 +537,7 @@ describe('runModelChainForBatch parallel logging', () => {
                     return { delayMs: 2000 };
                 return {};
             }),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const messages = [];
         const originalWrite = process.stdout.write.bind(process.stdout);
@@ -556,7 +560,7 @@ describe('runModelChainForBatch parallel logging', () => {
         const chain = [{ id: 'single-model', provider: 'nim' }];
         const clients = {
             nim: makeMockClient(() => ({})),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const messages = [];
         const originalWrite = process.stdout.write.bind(process.stdout);

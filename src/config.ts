@@ -23,6 +23,10 @@ export interface Config {
   kiloBaseUrl: string;
   kiloModels: string[];
   kiloFreeOnly: boolean;
+  nousApiKey: string;
+  nousBaseUrl: string;
+  nousModels: string[];
+  nousFreeOnly: boolean;
   customApiUrl: string;
   customModel: string;
   customApiKey: string;
@@ -76,6 +80,10 @@ export async function loadConfig(): Promise<Config> {
     kiloBaseUrl: core.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
     kiloModels: [],
     kiloFreeOnly: core.getInput('kilocode_free_only') === 'true',
+    nousApiKey: core.getInput('nousresearch_api_key') || '',
+    nousBaseUrl: core.getInput('nousresearch_base_url') || 'https://inference-api.nousresearch.com/v1',
+    nousModels: [],
+    nousFreeOnly: core.getInput('nousresearch_free_only') === 'true',
     customApiUrl: core.getInput('custom_api_url') || '',
     customModel: core.getInput('custom_model') || '',
     customApiKey: core.getInput('custom_api_key') || '',
@@ -172,6 +180,13 @@ export async function loadConfig(): Promise<Config> {
     config.kiloModels = filterFreeOnly(kiloInput, config.kiloFreeOnly, 'Kilo');
   } else if (config.kiloApiKey) {
     config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
+  }
+
+  const nousInput = splitCSV(core.getInput('nousresearch_models'));
+  if (nousInput.length > 0) {
+    config.nousModels = filterFreeOnly(nousInput, config.nousFreeOnly, 'NousResearch');
+  } else if (config.nousApiKey) {
+    config.nousModels = await fetchFreeModels(config.nousBaseUrl, config.nousApiKey, 'NousResearch');
   }
 
   return config;

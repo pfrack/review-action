@@ -35,6 +35,20 @@ export function validateProviderUrl(url: string, label: string): void {
   const parsed = new URL(url);
   const hostname = parsed.hostname.toLowerCase();
 
+  const isLoopback =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname === '0.0.0.0';
+
+  // Loopback is permitted for local development and tests (incl. http).
+  // Every other endpoint must be https so the provider API key is not sent
+  // in plaintext.
+  if (!isLoopback && parsed.protocol !== 'https:') {
+    throw new Error(`${label} blocked: only https URLs are allowed (received ${parsed.protocol || 'unknown'})`);
+  }
+
   // Block known metadata hostnames
   if (hostname === 'metadata.google.internal') {
     throw new Error(`${label} blocked: metadata.google.internal is a cloud metadata endpoint`);
@@ -42,8 +56,22 @@ export function validateProviderUrl(url: string, label: string): void {
 
   // Block IPv4 link-local (169.254.0.0/16 — covers AWS/Azure metadata at 169.254.169.254)
   const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-  if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
-    throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+  if (ipv4Match) {
+    const [octet1, octet2] = ipv4Match.slice(1, 3).map(Number);
+    if (octet1 === 169 && octet2 === 254) {
+      throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+    }
+    // Block private RFC1918 ranges (10/8, 172.16/12, 192.168/16) — the key
+    // exfiltration vector if a workflow input points at an internal endpoint.
+    if (octet1 === 10) {
+      throw new Error(`${label} blocked: ${hostname} is a private network address`);
+    }
+    if (octet1 === 172 && octet2 >= 16 && octet2 <= 31) {
+      throw new Error(`${label} blocked: ${hostname} is a private network address`);
+    }
+    if (octet1 === 192 && octet2 === 168) {
+      throw new Error(`${label} blocked: ${hostname} is a private network address`);
+    }
   }
 
   // Block IPv6 link-local (fe80::/10 — covers fe80:: through febf::)
@@ -54,8 +82,8 @@ export function validateProviderUrl(url: string, label: string): void {
   // Block IPv4-mapped IPv6 link-local (::ffff:169.254.x.x)
   if (hostname.startsWith('::ffff:')) {
     const mappedIpv4 = hostname.slice(7);
-    const ipv4Match = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-    if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+    const mappedMatch = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (mappedMatch && mappedMatch[1] === '169' && mappedMatch[2] === '254') {
       throw new Error(`${label} blocked: ${hostname} is an IPv4-mapped link-local address (cloud metadata endpoint)`);
     }
   }

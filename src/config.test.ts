@@ -83,6 +83,104 @@ describe('loadConfig — Kilo fields', () => {
   });
 });
 
+describe('loadConfig — NousResearch fields', () => {
+  it('reads NousResearch API key and models', async () => {
+    await withEnv({
+      INPUT_NOUSRESEARCH_API_KEY: 'nous-key',
+      INPUT_NOUSRESEARCH_MODELS: 'poolside/laguna-s-2.1:free',
+      INPUT_NOUSRESEARCH_BASE_URL: 'https://inference-api.nousresearch.com/v1',
+      INPUT_NIM_API_KEY: 'nim-key',
+      INPUT_NIM_BASE_URL: '',
+      INPUT_NIM_MODELS: '',
+      INPUT_MAX_FILES: '',
+      INPUT_EXCLUDE_PATTERNS: '',
+      INPUT_NIM_SYSTEM_PROMPT: '',
+      INPUT_NIM_PROMPT_MODE: '',
+    }, async () => {
+      const config = await loadConfig();
+      assert.strictEqual(config.nousApiKey, 'nous-key');
+      assert.strictEqual(config.nousBaseUrl, 'https://inference-api.nousresearch.com/v1');
+      assert.deepStrictEqual(config.nousModels, ['poolside/laguna-s-2.1:free']);
+    });
+  });
+
+  it('defaults NousResearch models to empty when no key and no models provided', async () => {
+    await withEnv({
+      INPUT_NOUSRESEARCH_API_KEY: '',
+      INPUT_NOUSRESEARCH_MODELS: '',
+      INPUT_NIM_API_KEY: 'nim-key',
+      INPUT_NIM_BASE_URL: '',
+      INPUT_NIM_MODELS: '',
+      INPUT_MAX_FILES: '',
+      INPUT_EXCLUDE_PATTERNS: '',
+      INPUT_NIM_SYSTEM_PROMPT: '',
+      INPUT_NIM_PROMPT_MODE: '',
+    }, async () => {
+      const config = await loadConfig();
+      assert.strictEqual(config.nousApiKey, '');
+      assert.deepStrictEqual(config.nousModels, []);
+    });
+  });
+
+  it('defaults nousBaseUrl to inference-api.nousresearch.com', async () => {
+    await withEnv({
+      INPUT_NOUSRESEARCH_API_KEY: 'nous-key',
+      INPUT_NOUSRESEARCH_BASE_URL: '',
+      INPUT_NUSRESEARCH_MODELS: '',
+      INPUT_NIM_API_KEY: '',
+      INPUT_NIM_BASE_URL: '',
+      INPUT_NIM_MODELS: '',
+      INPUT_MAX_FILES: '',
+      INPUT_EXCLUDE_PATTERNS: '',
+      INPUT_NIM_SYSTEM_PROMPT: '',
+      INPUT_NIM_PROMPT_MODE: '',
+    }, async () => {
+      const config = await loadConfig();
+      assert.strictEqual(config.nousBaseUrl, 'https://inference-api.nousresearch.com/v1');
+    });
+  });
+});
+
+describe('loadConfig — NousResearch free-only filter', () => {
+  it('filters NousResearch models to free-only when nousresearch_free_only is true', async () => {
+    await withEnv({
+      INPUT_NOUSRESEARCH_API_KEY: 'nous-key',
+      INPUT_NOUSRESEARCH_MODELS: 'poolside/laguna-s-2.1:free,nousresearch/hermes-4-70b',
+      INPUT_NOUSRESEARCH_FREE_ONLY: 'true',
+      INPUT_NIM_API_KEY: 'nim-key',
+      INPUT_NIM_BASE_URL: '',
+      INPUT_NIM_MODELS: '',
+      INPUT_MAX_FILES: '',
+      INPUT_EXCLUDE_PATTERNS: '',
+      INPUT_NIM_SYSTEM_PROMPT: '',
+      INPUT_NIM_PROMPT_MODE: '',
+    }, async () => {
+      const config = await loadConfig();
+      assert.strictEqual(config.nousFreeOnly, true);
+      assert.deepStrictEqual(config.nousModels, ['poolside/laguna-s-2.1:free']);
+    });
+  });
+
+  it('does not filter NousResearch models when nousresearch_free_only is false', async () => {
+    await withEnv({
+      INPUT_NOUSRESEARCH_API_KEY: 'nous-key',
+      INPUT_NOUSRESEARCH_MODELS: 'poolside/laguna-s-2.1:free,nousresearch/hermes-4-70b',
+      INPUT_NOUSRESEARCH_FREE_ONLY: 'false',
+      INPUT_NIM_API_KEY: 'nim-key',
+      INPUT_NIM_BASE_URL: '',
+      INPUT_NIM_MODELS: '',
+      INPUT_MAX_FILES: '',
+      INPUT_EXCLUDE_PATTERNS: '',
+      INPUT_NIM_SYSTEM_PROMPT: '',
+      INPUT_NIM_PROMPT_MODE: '',
+    }, async () => {
+      const config = await loadConfig();
+      assert.strictEqual(config.nousFreeOnly, false);
+      assert.deepStrictEqual(config.nousModels, ['poolside/laguna-s-2.1:free', 'nousresearch/hermes-4-70b']);
+    });
+  });
+});
+
 describe('loadConfig — custom_models CSV', () => {
   it('parses custom_models CSV and defaults base URL to custom_api_url', async () => {
     await withEnv({

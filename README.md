@@ -1,6 +1,6 @@
 # NIM Code Review
 
-AI-powered code review for GitHub PRs using NVIDIA NIM, Mistral, Groq, OpenRouter, Kilo, and custom OpenAI-compatible models with automatic fallback.
+AI-powered code review for GitHub PRs using NVIDIA NIM, Mistral, Groq, OpenRouter, Kilo, NousResearch, and custom OpenAI-compatible models with automatic fallback.
 
 Reviews are schema-validated: model responses are parsed into a typed `Review`/`Finding` structure via Zod, validated against the actual PR diff (file existence, hunk line ranges), and rendered deterministically from the validated object. Parse failures and hallucinated findings are caught before reaching the PR comment.
 
@@ -49,6 +49,10 @@ jobs:
 | `kilocode_base_url` | `https://api.kilo.ai/api/gateway` | Kilo Gateway endpoint |
 | `kilocode_models` | see below | Comma-separated Kilo fallback chain. When empty, fetches all free-tier models from Kilo. |
 | `kilocode_free_only` | `false` | Filter Kilo models to only use free-tier models |
+| `nousresearch_api_key` | `''` | NousResearch inference API key |
+| `nousresearch_base_url` | `https://inference-api.nousresearch.com/v1` | NousResearch inference endpoint |
+| `nousresearch_models` | see below | Comma-separated NousResearch model fallback chain (defaults to all free-tier models from provider when empty) |
+| `nousresearch_free_only` | `false` | Filter NousResearch models to only use free-tier models |
 | `custom_api_url` | `''` | Custom OpenAI-compatible endpoint (tried before provider models) |
 | `custom_model` | `''` | Model name for the custom endpoint |
 | `custom_api_key` | `''` | API key for the custom endpoint (empty for local/keyless) |
@@ -67,7 +71,7 @@ jobs:
 | `parallel_threshold` | `40` | Seconds to wait before starting the next parallel model (when `parallel_attempts` > 1). Range 5-120. |
 | `comment_mode` | `summary` | Output mode: `summary` (one PR comment, default) or `inline` (line-anchored review comments via the GitHub Reviews API). Inline mode requires `pull-requests: write` and auto-resolves `isOutdated` review threads on re-review. |
 
-At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_api_key`, `kilocode_api_key`, or `custom_api_url` + `custom_model`/`custom_models` is required. When multiple providers are configured, models are merged into a single fallback chain sorted by SWE-bench Verified score. Free-tier models (`:free` suffix) rank last in the chain.
+At least one of `nim_api_key`, `mistral_api_key`, `groq_api_key`, `openrouter_api_key`, `kilocode_api_key`, `nousresearch_api_key`, or `custom_api_url` + `custom_model`/`custom_models` is required. When multiple providers are configured, models are merged into a single fallback chain sorted by SWE-bench Verified score. Free-tier models (`:free` suffix) rank last in the chain.
 
 ## How It Works
 
@@ -260,6 +264,39 @@ cohere/north-mini-code:free
 ### Privacy Warning
 
 Kilo Gateway free-tier models may route to providers that log prompts for training purposes. Since this action ingests PR diffs — which may contain sensitive logic, credentials, or architectural details — consider the privacy implications before enabling Kilo as a provider. Only use Kilo free-tier on PRs from open-source/public repositories unless you explicitly trust the downstream providers.
+
+## NousResearch Support
+
+Use NousResearch inference API — free-tier models are auto-configured by default:
+
+```yaml
+- uses: pfrack/review-action@v1
+  with:
+    nousresearch_api_key: ${{ secrets.NOUSRESEARCH_API_KEY }}
+```
+
+### Default NousResearch Free Models
+
+```
+poolside/laguna-s-2.1:free, poolside/laguna-xs-2.1:free, tencent/hy3:free,
+stepfun/step-3.7-flash:free, upstage/solar-pro4:free, meituan/longcat-2.0:free
+```
+
+### Free-Only Filter
+
+```yaml
+- uses: pfrack/review-action@v1
+  with:
+    nousresearch_api_key: ${{ secrets.NOUSRESEARCH_API_KEY }}
+    nousresearch_models: 'nousresearch/hermes-4-70b,upstage/solar-pro4:free'
+    nousresearch_free_only: 'true'
+```
+
+When enabled, any model without `free` in its name is dropped from the chain. Note that the default model list already contains only free-tier models — the `--free` mode is useful when you explicitly list paid models alongside free ones and want to filter to free only.
+
+### Privacy Note
+
+The NousResearch gateway aggregates models from multiple providers. If you use specific model IDs (rather than relying on the free-tier defaults), verify the model's origin and privacy terms before sending PR diffs that may contain sensitive code.
 
 ## Multiple Custom Models
 

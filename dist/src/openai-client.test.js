@@ -12,6 +12,11 @@ describe('OpenAIClient provider label detection', () => {
         const client = new OpenAIClient('https://api.kilo.ai/api/gateway', 'key');
         assert.strictEqual(client.providerLabel, 'Kilo');
     });
+    it('auto-detects NousResearch label from base URL', () => {
+        const client = new OpenAIClient('https://inference-api.nousresearch.com/v1', 'key');
+        assert.strictEqual(client.providerLabel, 'NousResearch');
+        assert.strictEqual(client.providerKey, 'nousresearch');
+    });
     it('uses explicit label when provided', () => {
         const client = new OpenAIClient('https://openrouter.ai/api/v1', 'key', 'MyLabel');
         assert.strictEqual(client.providerLabel, 'MyLabel');

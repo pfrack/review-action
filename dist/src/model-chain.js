@@ -12,7 +12,7 @@ export const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo, NousResearch) are combined
  * and sorted by SWE-bench score descending as the fallback chain.
  *
  * Free-tier models (IDs ending with :free) are forced to rank last within
@@ -22,7 +22,7 @@ export const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
  */
 export function buildCombinedChain(opts) {
     const providerModels = [];
-    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
+    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false, nousModels = [], hasNousKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             providerModels.push({ id, provider: 'nim' });
@@ -46,6 +46,11 @@ export function buildCombinedChain(opts) {
     if (hasKiloKey) {
         for (const id of kiloModels) {
             providerModels.push({ id, provider: 'kilocode' });
+        }
+    }
+    if (hasNousKey) {
+        for (const id of nousModels) {
+            providerModels.push({ id, provider: 'nousresearch' });
         }
     }
     providerModels.sort((a, b) => {

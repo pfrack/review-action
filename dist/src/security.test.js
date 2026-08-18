@@ -45,10 +45,16 @@ describe('validateProviderUrl — SSRF blocklist', () => {
     it('blocks other 169.254.x.x link-local addresses', () => {
         assert.throws(() => validateProviderUrl('https://169.254.0.1/path', 'test'), /blocked.*link-local/);
     });
-    it('allows RFC1918 addresses (self-hosted runners)', () => {
-        assert.doesNotThrow(() => validateProviderUrl('https://10.0.0.1/v1', 'test'));
-        assert.doesNotThrow(() => validateProviderUrl('https://192.168.1.1/v1', 'test'));
-        assert.doesNotThrow(() => validateProviderUrl('https://172.16.0.1/v1', 'test'));
+    it('blocks RFC1918 private addresses', () => {
+        assert.throws(() => validateProviderUrl('https://10.0.0.1/v1', 'test'), /blocked.*private/);
+        assert.throws(() => validateProviderUrl('https://192.168.1.1/v1', 'test'), /blocked.*private/);
+        assert.throws(() => validateProviderUrl('https://172.16.0.1/v1', 'test'), /blocked.*private/);
+    });
+    it('allows loopback (local dev/tests) and blocks plaintext non-loopback', () => {
+        assert.doesNotThrow(() => validateProviderUrl('https://127.0.0.1/v1', 'test'));
+        assert.doesNotThrow(() => validateProviderUrl('http://localhost:8080/v1', 'test'));
+        assert.throws(() => validateProviderUrl('http://api.example.com/v1', 'test'), /only https/);
+        assert.throws(() => validateProviderUrl('http://169.254.169.254/', 'test'), /only https|blocked/);
     });
 });
 describe('loadConfig — max_files validation', () => {

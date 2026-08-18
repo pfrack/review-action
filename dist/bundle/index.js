@@ -25609,7 +25609,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   __: () => (/* binding */ getSweBenchScore)
 /* harmony export */ });
-/* unused harmony exports parseSweBenchResponse, fetchSweBenchScores, parseMarkdownTable, SWE_BENCH_SCORES, DEFAULT_MAX_LATENCY_MS, getEffectiveScore, rankModels, rankModelsTwoTier, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable */
+/* unused harmony exports parseSweBenchResponse, fetchSweBenchScores, parseMarkdownTable, SWE_BENCH_SCORES, DEFAULT_MAX_LATENCY_MS, getEffectiveScore, rankModels, rankModelsTwoTier, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, updateActionYmlNousResearch, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable */
 /* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3024);
 /* harmony import */ var node_fs__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__nccwpck_require__.n(node_fs__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9809);
@@ -25773,8 +25773,11 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'google/gemma-4-31b-it:free': 0.5,
+    'liquid/lfm-2.5-2.6b:free': 0.5,
+    'nvidia/nemotron-3.5-lightning:free': 0.5,
     'inclusionai/ling-3.0-tiny:free': 0.5,
-    'tencent/hy3:free': 0.5,
+    'tencent/hy3:free': 0.78,
     'google/gemma-4-26b-a4b-it:free': 0.5,
     'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
     'nvidia/nemotron-nano-12b-v2-vl:free': 0.5,
@@ -25782,10 +25785,10 @@ const SWE_BENCH_SCORES = {
     'openai/gpt-oss-20b:free': 0.5,
     'cohere/north-mini-code:free': 0.5,
     'kilo-auto/free': 0.5,
-    'stepfun/step-3.7-flash:free': 0.5,
+    'stepfun/step-3.7-flash:free': 0.744,
     'inclusionai/ling-3.0-flash:free': 0.5,
     'poolside/laguna-s-2.1:free': 0.5,
-    'poolside/laguna-xs-2.1:free': 0.5,
+    'poolside/laguna-xs-2.1:free': 0.709,
     'nvidia/nemotron-3.5-content-safety:free': 0.5,
     'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
@@ -25798,6 +25801,11 @@ const SWE_BENCH_SCORES = {
     // Kilo free-tier models (estimated scores)
     'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
     'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
+    // NousResearch free-tier models (measured — SWE-bench Verified leaderboard)
+    // hy3: rank 21, laguna-xs-2.1: rank 59, solar-pro4: rank 62
+    // step-3.7-flash: matches step-3.5-flash rank 40, longcat: matches longcat-flash-thinking-2601 rank 64
+    'upstage/solar-pro4:free': 0.706, // measured — SWE-bench Verified rank 62
+    'meituan/longcat-2.0:free': 0.70, // measured — matches longcat-flash-thinking-2601, rank 64
 };
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
@@ -25882,6 +25890,7 @@ const TARGET_CONFIG = {
     groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
     openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
     kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
+    nousresearch_models: { pattern: buildTargetPattern('nousresearch_models'), label: 'nousresearch_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -25920,6 +25929,9 @@ function updateActionYmlOpenRouter(actionPath, orderedModels) {
 }
 function updateActionYmlKilocode(actionPath, orderedModels) {
     updateActionYml(actionPath, orderedModels, 'kilocode_models');
+}
+function updateActionYmlNousResearch(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'nousresearch_models');
 }
 /**
  * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
@@ -25986,7 +25998,7 @@ async function main() {
     const target = (process.env.ACTION_TARGET || 'nim_models');
     const twoTier = process.argv.includes('--two-tier');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', 'kilocode_models', or 'nousresearch_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin
@@ -26179,6 +26191,10 @@ async function loadConfig() {
         kiloBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_base_url') || 'https://api.kilo.ai/api/gateway',
         kiloModels: [],
         kiloFreeOnly: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kilocode_free_only') === 'true',
+        nousApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nousresearch_api_key') || '',
+        nousBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nousresearch_base_url') || 'https://inference-api.nousresearch.com/v1',
+        nousModels: [],
+        nousFreeOnly: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nousresearch_free_only') === 'true',
         customApiUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_url') || '',
         customModel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_model') || '',
         customApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('custom_api_key') || '',
@@ -26277,6 +26293,13 @@ async function loadConfig() {
     }
     else if (config.kiloApiKey) {
         config.kiloModels = await fetchFreeModels(config.kiloBaseUrl, config.kiloApiKey, 'Kilo');
+    }
+    const nousInput = splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nousresearch_models'));
+    if (nousInput.length > 0) {
+        config.nousModels = filterFreeOnly(nousInput, config.nousFreeOnly, 'NousResearch');
+    }
+    else if (config.nousApiKey) {
+        config.nousModels = await fetchFreeModels(config.nousBaseUrl, config.nousApiKey, 'NousResearch');
     }
     return config;
 }
@@ -27671,21 +27694,30 @@ var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_mod
 
 
 async function withAggregateTimeout(operation, timeoutMs) {
-    let timer;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Model chain timed out after ${timeoutMs}ms`);
+        controller.abort();
+    }, timeoutMs);
+    // Keep a reference so a slow operation that outlives the race cannot become
+    // an unhandled rejection (which would crash the process and drop the review).
+    const op = operation(controller.signal);
+    op.catch(() => { });
     try {
         return await Promise.race([
-            operation(),
-            new Promise(resolve => {
-                timer = setTimeout(() => {
-                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Model chain timed out after ${timeoutMs}ms`);
-                    resolve(null);
-                }, timeoutMs);
+            op,
+            new Promise((_, reject) => {
+                controller.signal.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError')), { once: true });
             }),
         ]);
     }
+    catch (err) {
+        if (err instanceof Error && err.name === 'AbortError')
+            return null;
+        throw err;
+    }
     finally {
-        if (timer)
-            clearTimeout(timer);
+        clearTimeout(timer);
     }
 }
 async function cleanupPreviousOutput(repo, prNumber, token) {
@@ -27846,7 +27878,7 @@ const LATENCY_PENALTY_PER_SEC = 0.1;
 function effectiveScore(tagged, latencyMs) {
     return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
 }
-async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
+async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
@@ -27877,7 +27909,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                 }
                 if (controller.signal.aborted)
                     return null;
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, controller.signal);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
                 // NOTE: intentionally do NOT abort on the first winner here — aborting
                 // would let a weaker/faster model preempt a stronger one still running
                 // in the same parallel window. We collect all results and pick the
@@ -27925,7 +27957,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
             for (let i = parallelCount; i < availableChain.length; i++) {
                 const tagged = availableChain[i];
                 const client = clients[tagged.provider];
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
                 if (result) {
                     if (result.findings.length > 0) {
                         batchReview = { findings: result.findings, summary: result.summary };
@@ -27946,7 +27978,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
             for (let i = parallelCount; i < availableChain.length; i++) {
                 const tagged = availableChain[i];
                 const client = clients[tagged.provider];
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
                 if (result) {
                     if (result.findings.length > 0) {
                         batchReview = { findings: result.findings, summary: result.summary };
@@ -27966,7 +27998,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
         // Sequential fallback (original behavior)
         for (const tagged of availableChain) {
             const client = clients[tagged.provider];
-            const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+            const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
             if (result) {
                 if (result.findings.length > 0) {
                     batchReview = { findings: result.findings, summary: result.summary };
@@ -28004,6 +28036,8 @@ function validateConfig(config) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.openRouterApiKey);
     if (config.kiloApiKey)
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.kiloApiKey);
+    if (config.nousApiKey)
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.nousApiKey);
     if (config.customApiKey)
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setSecret(config.customApiKey);
     if (config.customApiUrl) {
@@ -28024,19 +28058,21 @@ function validateConfig(config) {
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.openRouterBaseUrl, 'openrouter_base_url');
     if (config.kiloBaseUrl)
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.kiloBaseUrl, 'kilocode_base_url');
+    if (config.nousBaseUrl)
+        (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.nousBaseUrl, 'nousresearch_base_url');
     if (config.baseURL)
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.baseURL, 'nim_base_url');
     if (config.mistralBaseUrl)
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.mistralBaseUrl, 'mistral_base_url');
     if (config.groqBaseUrl)
         (0,_utils_js__WEBPACK_IMPORTED_MODULE_13__/* .validateProviderUrl */ .ph)(config.groqBaseUrl, 'groq_base_url');
-    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey && !hasCustom && !hasCustomModels) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, nousresearch_api_key, or custom_api_url + custom_model/custom_models is required');
     }
-    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
 }
@@ -28051,6 +28087,7 @@ function buildClients(config) {
         groq: config.groqApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
         openrouter: config.openRouterApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
         kilocode: config.kiloApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
+        nousresearch: config.nousApiKey ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.nousBaseUrl, config.nousApiKey, 'NousResearch') : null,
         custom: hasCustom ? new _openai_client_js__WEBPACK_IMPORTED_MODULE_1__/* .OpenAIClient */ .gP(config.customApiUrl, config.customApiKey, 'Custom') : null,
     };
 }
@@ -28086,7 +28123,7 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
         if (batches.length > 1) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
+        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal);
         let result;
         try {
             result = config.chainTimeout > 0
@@ -28234,6 +28271,8 @@ async function run() {
         hasOpenRouterKey: !!config.openRouterApiKey,
         kiloModels: config.kiloModels,
         hasKiloKey: !!config.kiloApiKey,
+        nousModels: config.nousModels,
+        hasNousKey: !!config.nousApiKey,
         customModel: config.customModel,
         hasCustomConfig: hasCustom,
         customModels: config.customModels,
@@ -28401,7 +28440,7 @@ const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo, NousResearch) are combined
  * and sorted by SWE-bench score descending as the fallback chain.
  *
  * Free-tier models (IDs ending with :free) are forced to rank last within
@@ -28411,7 +28450,7 @@ const PROBE_PROMOTE_MAX_HEAD_GAP = 0.02;
  */
 function buildCombinedChain(opts) {
     const providerModels = [];
-    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
+    const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false, nousModels = [], hasNousKey = false } = opts;
     if (opts.hasNimKey) {
         for (const id of opts.nimModels) {
             providerModels.push({ id, provider: 'nim' });
@@ -28435,6 +28474,11 @@ function buildCombinedChain(opts) {
     if (hasKiloKey) {
         for (const id of kiloModels) {
             providerModels.push({ id, provider: 'kilocode' });
+        }
+    }
+    if (hasNousKey) {
+        for (const id of nousModels) {
+            providerModels.push({ id, provider: 'nousresearch' });
         }
     }
     providerModels.sort((a, b) => {
@@ -28726,14 +28770,16 @@ class OpenAIClient {
                     baseURL.includes('groq') ? 'Groq' :
                         baseURL.includes('openrouter') ? 'OpenRouter' :
                             baseURL.includes('kilo.ai') ? 'Kilo' :
-                                baseURL.split('/')[2] || 'API');
+                                baseURL.includes('nousresearch') ? 'NousResearch' :
+                                    baseURL.split('/')[2] || 'API');
         this.providerKey =
             baseURL.includes('nvidia.com') ? 'nim' :
                 baseURL.includes('mistral') ? 'mistral' :
                     baseURL.includes('groq') ? 'groq' :
                         baseURL.includes('openrouter') ? 'openrouter' :
                             baseURL.includes('kilo.ai') ? 'kilocode' :
-                                'custom';
+                                baseURL.includes('nousresearch') ? 'nousresearch' :
+                                    'custom';
     }
     async chat(model, messages, opts = {}) {
         const outerSignal = opts.signal;
@@ -37651,14 +37697,39 @@ function escapeMarkdown(text) {
 function validateProviderUrl(url, label) {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
+    const isLoopback = hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname === '[::1]' ||
+        hostname === '0.0.0.0';
+    // Loopback is permitted for local development and tests (incl. http).
+    // Every other endpoint must be https so the provider API key is not sent
+    // in plaintext.
+    if (!isLoopback && parsed.protocol !== 'https:') {
+        throw new Error(`${label} blocked: only https URLs are allowed (received ${parsed.protocol || 'unknown'})`);
+    }
     // Block known metadata hostnames
     if (hostname === 'metadata.google.internal') {
         throw new Error(`${label} blocked: metadata.google.internal is a cloud metadata endpoint`);
     }
     // Block IPv4 link-local (169.254.0.0/16 — covers AWS/Azure metadata at 169.254.169.254)
     const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-    if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
-        throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+    if (ipv4Match) {
+        const [octet1, octet2] = ipv4Match.slice(1, 3).map(Number);
+        if (octet1 === 169 && octet2 === 254) {
+            throw new Error(`${label} blocked: ${hostname} is a link-local address (cloud metadata endpoint)`);
+        }
+        // Block private RFC1918 ranges (10/8, 172.16/12, 192.168/16) — the key
+        // exfiltration vector if a workflow input points at an internal endpoint.
+        if (octet1 === 10) {
+            throw new Error(`${label} blocked: ${hostname} is a private network address`);
+        }
+        if (octet1 === 172 && octet2 >= 16 && octet2 <= 31) {
+            throw new Error(`${label} blocked: ${hostname} is a private network address`);
+        }
+        if (octet1 === 192 && octet2 === 168) {
+            throw new Error(`${label} blocked: ${hostname} is a private network address`);
+        }
     }
     // Block IPv6 link-local (fe80::/10 — covers fe80:: through febf::)
     if (/^fe[89ab][0-9a-f]*:/i.test(hostname)) {
@@ -37667,8 +37738,8 @@ function validateProviderUrl(url, label) {
     // Block IPv4-mapped IPv6 link-local (::ffff:169.254.x.x)
     if (hostname.startsWith('::ffff:')) {
         const mappedIpv4 = hostname.slice(7);
-        const ipv4Match = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-        if (ipv4Match && ipv4Match[1] === '169' && ipv4Match[2] === '254') {
+        const mappedMatch = mappedIpv4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+        if (mappedMatch && mappedMatch[1] === '169' && mappedMatch[2] === '254') {
             throw new Error(`${label} blocked: ${hostname} is an IPv4-mapped link-local address (cloud metadata endpoint)`);
         }
     }

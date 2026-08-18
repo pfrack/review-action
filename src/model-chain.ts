@@ -1,7 +1,7 @@
 import { getSweBenchScore } from './bench-reorder.js';
 import type { OpenAIClient } from './openai-client.js';
 
-export type Provider = 'nim' | 'mistral' | 'groq' | 'openrouter' | 'kilocode' | 'custom';
+export type Provider = 'nim' | 'mistral' | 'groq' | 'openrouter' | 'kilocode' | 'nousresearch' | 'custom';
 
 // Maximum SWE-bench score gap (head - fastest) for which a probed-fast
 // model is allowed to take over the head. With head=0.806 (deepseek-v4-pro)
@@ -35,6 +35,8 @@ export interface ChainOptions {
   hasOpenRouterKey?: boolean;
   kiloModels?: string[];
   hasKiloKey?: boolean;
+  nousModels?: string[];
+  hasNousKey?: boolean;
   customModel?: string;
   hasCustomConfig?: boolean;
   customModels?: string[];
@@ -55,7 +57,7 @@ export interface ChainOptions {
  * Custom models (no SWE-bench score) are always first — never sorted
  * alongside provider models.
  *
- * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo) are combined
+ * Provider models (NIM, Mistral, Groq, OpenRouter, Kilo, NousResearch) are combined
  * and sorted by SWE-bench score descending as the fallback chain.
  *
  * Free-tier models (IDs ending with :free) are forced to rank last within
@@ -65,7 +67,7 @@ export interface ChainOptions {
  */
 export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   const providerModels: TaggedModel[] = [];
-  const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false } = opts;
+  const { groqModels = [], hasGroqKey = false, openrouterModels = [], hasOpenRouterKey = false, kiloModels = [], hasKiloKey = false, nousModels = [], hasNousKey = false } = opts;
 
   if (opts.hasNimKey) {
     for (const id of opts.nimModels) {
@@ -94,6 +96,12 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
   if (hasKiloKey) {
     for (const id of kiloModels) {
       providerModels.push({ id, provider: 'kilocode' });
+    }
+  }
+
+  if (hasNousKey) {
+    for (const id of nousModels) {
+      providerModels.push({ id, provider: 'nousresearch' });
     }
   }
 

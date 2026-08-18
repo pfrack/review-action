@@ -17,21 +17,30 @@ import { parseRules, validateRules } from './rules.js';
 import { formatMetrics } from './metrics.js';
 import { batchFiles, mergeFindings } from './batching.js';
 export async function withAggregateTimeout(operation, timeoutMs) {
-    let timer;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+        core.warning(`Model chain timed out after ${timeoutMs}ms`);
+        controller.abort();
+    }, timeoutMs);
+    // Keep a reference so a slow operation that outlives the race cannot become
+    // an unhandled rejection (which would crash the process and drop the review).
+    const op = operation(controller.signal);
+    op.catch(() => { });
     try {
         return await Promise.race([
-            operation(),
-            new Promise(resolve => {
-                timer = setTimeout(() => {
-                    core.warning(`Model chain timed out after ${timeoutMs}ms`);
-                    resolve(null);
-                }, timeoutMs);
+            op,
+            new Promise((_, reject) => {
+                controller.signal.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError')), { once: true });
             }),
         ]);
     }
+    catch (err) {
+        if (err instanceof Error && err.name === 'AbortError')
+            return null;
+        throw err;
+    }
     finally {
-        if (timer)
-            clearTimeout(timer);
+        clearTimeout(timer);
     }
 }
 async function cleanupPreviousOutput(repo, prNumber, token) {
@@ -192,7 +201,7 @@ const LATENCY_PENALTY_PER_SEC = 0.1;
 function effectiveScore(tagged, latencyMs) {
     return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
 }
-export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000) {
+export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
@@ -223,7 +232,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                 }
                 if (controller.signal.aborted)
                     return null;
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, controller.signal);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
                 // NOTE: intentionally do NOT abort on the first winner here — aborting
                 // would let a weaker/faster model preempt a stronger one still running
                 // in the same parallel window. We collect all results and pick the
@@ -271,7 +280,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
             for (let i = parallelCount; i < availableChain.length; i++) {
                 const tagged = availableChain[i];
                 const client = clients[tagged.provider];
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
                 if (result) {
                     if (result.findings.length > 0) {
                         batchReview = { findings: result.findings, summary: result.summary };
@@ -292,7 +301,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
             for (let i = parallelCount; i < availableChain.length; i++) {
                 const tagged = availableChain[i];
                 const client = clients[tagged.provider];
-                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+                const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
                 if (result) {
                     if (result.findings.length > 0) {
                         batchReview = { findings: result.findings, summary: result.summary };
@@ -312,7 +321,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
         // Sequential fallback (original behavior)
         for (const tagged of availableChain) {
             const client = clients[tagged.provider];
-            const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, undefined);
+            const result = await attemptModel(tagged, client, batch, userMsg, systemMessage, responseFormat, config, modelTimeoutMs, maxTokens, signal);
             if (result) {
                 if (result.findings.length > 0) {
                     batchReview = { findings: result.findings, summary: result.summary };
@@ -350,6 +359,8 @@ function validateConfig(config) {
         core.setSecret(config.openRouterApiKey);
     if (config.kiloApiKey)
         core.setSecret(config.kiloApiKey);
+    if (config.nousApiKey)
+        core.setSecret(config.nousApiKey);
     if (config.customApiKey)
         core.setSecret(config.customApiKey);
     if (config.customApiUrl) {
@@ -370,19 +381,21 @@ function validateConfig(config) {
         validateProviderUrl(config.openRouterBaseUrl, 'openrouter_base_url');
     if (config.kiloBaseUrl)
         validateProviderUrl(config.kiloBaseUrl, 'kilocode_base_url');
+    if (config.nousBaseUrl)
+        validateProviderUrl(config.nousBaseUrl, 'nousresearch_base_url');
     if (config.baseURL)
         validateProviderUrl(config.baseURL, 'nim_base_url');
     if (config.mistralBaseUrl)
         validateProviderUrl(config.mistralBaseUrl, 'mistral_base_url');
     if (config.groqBaseUrl)
         validateProviderUrl(config.groqBaseUrl, 'groq_base_url');
-    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !hasCustom && !hasCustomModels) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, or custom_api_url + custom_model/custom_models is required');
+    if (!config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey && !hasCustom && !hasCustomModels) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, groq_api_key, openrouter_api_key, kilocode_api_key, nousresearch_api_key, or custom_api_url + custom_model/custom_models is required');
     }
-    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    if (hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
         core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
-    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey) {
+    if (hasCustomModels && !hasCustom && !config.apiKey && !config.mistralApiKey && !config.groqApiKey && !config.openRouterApiKey && !config.kiloApiKey && !config.nousApiKey) {
         core.info('Running with only custom API configured — no fallback chain available if custom model fails');
     }
 }
@@ -397,6 +410,7 @@ export function buildClients(config) {
         groq: config.groqApiKey ? new OpenAIClient(config.groqBaseUrl, config.groqApiKey, 'Groq') : null,
         openrouter: config.openRouterApiKey ? new OpenAIClient(config.openRouterBaseUrl, config.openRouterApiKey, 'OpenRouter') : null,
         kilocode: config.kiloApiKey ? new OpenAIClient(config.kiloBaseUrl, config.kiloApiKey, 'Kilo') : null,
+        nousresearch: config.nousApiKey ? new OpenAIClient(config.nousBaseUrl, config.nousApiKey, 'NousResearch') : null,
         custom: hasCustom ? new OpenAIClient(config.customApiUrl, config.customApiKey, 'Custom') : null,
     };
 }
@@ -432,7 +446,7 @@ export async function executeReview(chain, clients, filesToReview, filesDiffMap,
         if (batches.length > 1) {
             core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const runBatch = () => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs);
+        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal);
         let result;
         try {
             result = config.chainTimeout > 0
@@ -580,6 +594,8 @@ export async function run() {
         hasOpenRouterKey: !!config.openRouterApiKey,
         kiloModels: config.kiloModels,
         hasKiloKey: !!config.kiloApiKey,
+        nousModels: config.nousModels,
+        hasNousKey: !!config.nousApiKey,
         customModel: config.customModel,
         hasCustomConfig: hasCustom,
         customModels: config.customModels,

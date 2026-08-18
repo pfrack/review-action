@@ -157,8 +157,11 @@ export const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (estimated scores)
+    'google/gemma-4-31b-it:free': 0.5,
+    'liquid/lfm-2.5-2.6b:free': 0.5,
+    'nvidia/nemotron-3.5-lightning:free': 0.5,
     'inclusionai/ling-3.0-tiny:free': 0.5,
-    'tencent/hy3:free': 0.5,
+    'tencent/hy3:free': 0.78,
     'google/gemma-4-26b-a4b-it:free': 0.5,
     'nvidia/nemotron-3-nano-30b-a3b:free': 0.5,
     'nvidia/nemotron-nano-12b-v2-vl:free': 0.5,
@@ -166,10 +169,10 @@ export const SWE_BENCH_SCORES = {
     'openai/gpt-oss-20b:free': 0.5,
     'cohere/north-mini-code:free': 0.5,
     'kilo-auto/free': 0.5,
-    'stepfun/step-3.7-flash:free': 0.5,
+    'stepfun/step-3.7-flash:free': 0.744,
     'inclusionai/ling-3.0-flash:free': 0.5,
     'poolside/laguna-s-2.1:free': 0.5,
-    'poolside/laguna-xs-2.1:free': 0.5,
+    'poolside/laguna-xs-2.1:free': 0.709,
     'nvidia/nemotron-3.5-content-safety:free': 0.5,
     'nvidia/nemotron-3-ultra-550b-a55b:free': 0.5,
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 0.5,
@@ -182,6 +185,11 @@ export const SWE_BENCH_SCORES = {
     // Kilo free-tier models (estimated scores)
     'kilo-auto/balanced:free': 0.55, // estimated — free auto tier
     'kilo-auto/frontier:free': 0.60, // estimated — free tier, frontier routing
+    // NousResearch free-tier models (measured — SWE-bench Verified leaderboard)
+    // hy3: rank 21, laguna-xs-2.1: rank 59, solar-pro4: rank 62
+    // step-3.7-flash: matches step-3.5-flash rank 40, longcat: matches longcat-flash-thinking-2601 rank 64
+    'upstage/solar-pro4:free': 0.706, // measured — SWE-bench Verified rank 62
+    'meituan/longcat-2.0:free': 0.70, // measured — matches longcat-flash-thinking-2601, rank 64
 };
 /**
  * Get SWE-bench score for a model. Returns 0.5 (neutral) if unknown.
@@ -266,6 +274,7 @@ const TARGET_CONFIG = {
     groq_models: { pattern: buildTargetPattern('groq_models'), label: 'groq_models' },
     openrouter_models: { pattern: buildTargetPattern('openrouter_models'), label: 'openrouter_models' },
     kilocode_models: { pattern: buildTargetPattern('kilocode_models'), label: 'kilocode_models' },
+    nousresearch_models: { pattern: buildTargetPattern('nousresearch_models'), label: 'nousresearch_models' },
 };
 /**
  * Update action.yml with new model order for the given target.
@@ -304,6 +313,9 @@ export function updateActionYmlOpenRouter(actionPath, orderedModels) {
 }
 export function updateActionYmlKilocode(actionPath, orderedModels) {
     updateActionYml(actionPath, orderedModels, 'kilocode_models');
+}
+export function updateActionYmlNousResearch(actionPath, orderedModels) {
+    updateActionYml(actionPath, orderedModels, 'nousresearch_models');
 }
 /**
  * Read fetched scores from BENCH_SCORES_FILE (preferred) or stdin HTML comment.
@@ -370,7 +382,7 @@ async function main() {
     const target = (process.env.ACTION_TARGET || 'nim_models');
     const twoTier = process.argv.includes('--two-tier');
     if (!(target in TARGET_CONFIG)) {
-        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', or 'kilocode_models'.`);
+        console.error(`Unknown ACTION_TARGET: '${target}'. Expected 'nim_models', 'mistral_models', 'groq_models', 'openrouter_models', 'kilocode_models', or 'nousresearch_models'.`);
         process.exit(1);
     }
     // Read benchmark table from stdin

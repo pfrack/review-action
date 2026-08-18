@@ -261,6 +261,37 @@ describe('Kilo provider', () => {
         assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
     });
 });
+describe('NousResearch provider', () => {
+    it('includes NousResearch models when key is available, sorted by SWE-bench score', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['meta/llama-3.3-70b-instruct'],
+            mistralModels: [],
+            hasMistralKey: false,
+            nousModels: ['poolside/laguna-s-2.1:free', 'tencent/hy3:free'],
+            hasNousKey: true,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 3);
+        // Non-free first
+        assert.strictEqual(chain[0].id, 'meta/llama-3.3-70b-instruct');
+        assert.strictEqual(chain[0].provider, 'nim');
+        // Free models sorted by SWE-bench within free group
+        assert.strictEqual(chain[1].provider, 'nousresearch');
+        assert.strictEqual(chain[2].provider, 'nousresearch');
+    });
+    it('NousResearch absent when key is not available', () => {
+        const chain = buildCombinedChain({
+            nimModels: ['deepseek-ai/deepseek-v4-pro'],
+            mistralModels: [],
+            hasMistralKey: false,
+            nousModels: ['poolside/laguna-s-2.1:free'],
+            hasNousKey: false,
+            hasNimKey: true,
+        });
+        assert.strictEqual(chain.length, 1);
+        assert.strictEqual(chain[0].id, 'deepseek-ai/deepseek-v4-pro');
+    });
+});
 describe('custom_models CSV', () => {
     it('multiple custom models are prepended, always-first', () => {
         const chain = buildCombinedChain({
@@ -417,7 +448,7 @@ function makeVariableLatencyClient(latencies, probeResult = true) {
 }
 function makeClients(model, client) {
     const clients = {
-        nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+        nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
     clients[model.provider] = client;
     return clients;
@@ -456,7 +487,7 @@ describe('probeModels', () => {
     });
     it('returns null when chain is empty', async () => {
         const clients = {
-            nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels([], clients);
         assert.strictEqual(result, null);
@@ -471,7 +502,7 @@ describe('probeModels', () => {
         const clients = {
             nim: makeVariableLatencyClient({ 'deepseek-ai/deepseek-v4-pro': 100 }),
             mistral: makeVariableLatencyClient({ 'mistral-medium-3.5': 10 }),
-            groq: null, openrouter: null, kilocode: null, custom: null,
+            groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
         assert.strictEqual(result, null);
@@ -488,7 +519,7 @@ describe('probeModels', () => {
                 'deepseek-ai/deepseek-v4-pro': 100,
                 'deepseek-ai/deepseek-v4-flash': 10,
             }),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
         assert.ok(result);
@@ -510,7 +541,7 @@ describe('probeModels', () => {
                 'unknown-head-model': 100,
                 'deepseek-ai/deepseek-v4-pro': 10,
             }),
-            mistral: null, groq: null, openrouter: null, kilocode: null, custom: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
         assert.ok(result);
@@ -526,7 +557,7 @@ describe('probeModels', () => {
         const clients = {
             nim: makeVariableLatencyClient({ 'deepseek-ai/deepseek-v4-pro': 10 }),
             mistral: makeVariableLatencyClient({ 'mistral-medium-3.5': 100 }),
-            groq: null, openrouter: null, kilocode: null, custom: null,
+            groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
         assert.ok(result);
@@ -541,7 +572,7 @@ describe('probeModels', () => {
             { id: 'llama-3.3-70b-versatile', provider: 'groq' },
         ];
         const clients = {
-            nim: null, mistral: null, openrouter: null, kilocode: null, custom: null,
+            nim: null, mistral: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
             groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
         };
         const result = await probeModels(chain, clients);
@@ -558,7 +589,7 @@ describe('probeModels', () => {
             { id: 'llama-3.3-70b-versatile', provider: 'groq' },
         ];
         const clients = {
-            nim: null, mistral: null, openrouter: null, kilocode: null, custom: null,
+            nim: null, mistral: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
             groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
         };
         const result = await probeModels(chain, clients);
@@ -577,7 +608,7 @@ describe('probeModels', () => {
         const clients = {
             nim: makeVariableLatencyClient({ 'unknown-head-nim': 100 }),
             custom: makeVariableLatencyClient({ 'my-custom-model': 10 }),
-            mistral: null, groq: null, openrouter: null, kilocode: null,
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null,
         };
         const result = await probeModels(chain, clients);
         assert.ok(result);
