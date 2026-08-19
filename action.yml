@@ -31,7 +31,7 @@ inputs:
     default: 'https://api.groq.com/openai/v1'
   groq_models:
     description: 'Comma-separated Groq model fallback chain'
-    default: 'openai/gpt-oss-120b,llama-3.3-70b-versatile'
+    default: 'openai/gpt-oss-120b'
   openrouter_api_key:
     description: 'OpenRouter API key'
     required: false
