@@ -1,1 +1,3 @@
+google/gemma-4-31b-it:free
+google/gemma-4-26b-a4b-it:free
 z-ai/glm-5.2:free
