@@ -67,7 +67,7 @@ inputs:
     default: 'https://inference-api.nousresearch.com/v1'
   nousresearch_models:
     description: 'Comma-separated NousResearch model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'tencent/hy3:free,poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,upstage/solar-pro4:free,meituan/longcat-2.0:free,poolside/laguna-xs-2.1:free'
+    default: 'tencent/hy3:free,poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,poolside/laguna-xs-2.1:free,upstage/solar-pro4:free,meituan/longcat-2.0:free'
   nousresearch_free_only:
     description: 'Filter NousResearch models to only use free-tier (:free suffix) models'
     default: 'false'
