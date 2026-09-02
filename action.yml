@@ -13,7 +13,7 @@ inputs:
     default: 'https://integrate.api.nvidia.com/v1'
   nim_models:
     description: 'Comma-separated fallback model chain'
-    default: 'stepfun-ai/step-3.7-flash,nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b,thinkingmachines/inkling,nvidia/llama-3.3-nemotron-super-49b-v1,nvidia/llama-3.3-nemotron-super-49b-v1.5,poolside/laguna-xs-2.1,meta/llama-3.1-70b-instruct'
+    default: 'minimaxai/minimax-m3,stepfun-ai/step-3.7-flash,mistralai/mistral-nemotron,nvidia/nemotron-3-super-120b-a12b,nvidia/llama-3.3-nemotron-super-49b-v1.5,openai/gpt-oss-20b,nvidia/llama-3.3-nemotron-super-49b-v1,nvidia/nemotron-3-ultra-550b-a55b,poolside/laguna-xs-2.1,meta/llama-3.1-70b-instruct,openai/gpt-oss-120b'
   mistral_api_key:
     description: 'Mistral API key (enables Mistral models in fallback chain)'
     default: ''
@@ -31,7 +31,7 @@ inputs:
     default: 'https://api.groq.com/openai/v1'
   groq_models:
     description: 'Comma-separated Groq model fallback chain'
-    default: 'openai/gpt-oss-120b,llama-3.3-70b-versatile'
+    default: 'openai/gpt-oss-120b'
   openrouter_api_key:
     description: 'OpenRouter API key'
     required: false
@@ -41,7 +41,7 @@ inputs:
     default: 'https://openrouter.ai/api/v1'
   openrouter_models:
     description: 'Comma-separated OpenRouter model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'nvidia/nemotron-3.5-content-safety:free,nvidia/nemotron-3-nano-30b-a3b:free,poolside/laguna-s-2.1:free,nvidia/nemotron-nano-9b-v2:free,cohere/north-mini-code:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-ultra-550b-a55b:free,openrouter/free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-26b-a4b-it:free,dots-studio/dots-3-note-preview:free,openai/gpt-oss-20b:free,nvidia/nemotron-nano-12b-v2-vl:free,liquid/lfm-2.5-2.6b:free,z-ai/glm-5.2:free'
+    default: 'poolside/laguna-s-2.1:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-content-safety:free,openrouter/free,dots-studio/dots-3-note-preview:free,google/gemma-4-31b-it:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,liquid/lfm-2.5-2.6b:free,minimax/minimax-m3:free,minimax/minimax-m2.7:free'
   openrouter_free_only:
     description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
     default: 'false'
@@ -67,7 +67,7 @@ inputs:
     default: 'https://inference-api.nousresearch.com/v1'
   nousresearch_models:
     description: 'Comma-separated NousResearch model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'poolside/laguna-s-2.1:free,poolside/laguna-xs-2.1:free,tencent/hy3:free,stepfun/step-3.7-flash:free,upstage/solar-pro4:free,meituan/longcat-2.0:free'
+    default: 'tencent/hy3:free,poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,upstage/solar-pro4:free,meituan/longcat-2.0:free,poolside/laguna-xs-2.1:free'
   nousresearch_free_only:
     description: 'Filter NousResearch models to only use free-tier (:free suffix) models'
     default: 'false'
