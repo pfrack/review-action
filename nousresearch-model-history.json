@@ -1,9 +1,9 @@
 {
   "nousresearch": {
     "models": [
+      "inclusionai/ling-3.0-flash-fin:free",
       "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1:free",
-      "tencent/hy3:free",
       "stepfun/step-3.7-flash:free",
       "upstage/solar-pro4:free",
       "meituan/longcat-2.0:free"
