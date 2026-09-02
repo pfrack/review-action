@@ -551,8 +551,6 @@ export function patchScoresTable(sourcePath: string, entries: { model: string; s
   const idx = content.indexOf(marker);
   if (idx === -1) return 0;
 
-  'minimax/minimax-m3:free': 0.5,
-  'minimax/minimax-m2.7:free': 0.5,
   // Find the end of this comment block (next non-comment line)
   const before = content.substring(0, idx);
   const after = content.substring(idx);
