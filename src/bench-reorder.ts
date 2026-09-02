@@ -557,7 +557,7 @@ export function patchScoresTable(sourcePath: string, entries: { model: string; s
   const lines = after.split('\n');
   let insertLine = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+    if (lines[i].startsWith('  //') || lines[i].startsWith("  '")) {
       insertLine = i;
       break;
     }
