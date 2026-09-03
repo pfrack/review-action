@@ -56,7 +56,7 @@ Concretely: a `minimax-m3`-class model (0.805) now wins the parallel batch again
 4. ✅ Add `it('demotes very slow model past 120s even when SWE is highest')` test.
 5. ✅ Run `npm run build:tsc` — passes.
 6. ✅ Run full test suite (`npm test`) — 609 pass, 0 fail. Mock gained a `latencyMs` override (see note below) so latency-boundary tests run in milliseconds instead of minutes.
-7. 🔄 Commit landed (`f1ce096` on `feat/parallel-winner-swe-dominates`); push pending after the related `batchWithFindings` commit.
+7. ✅ Committed (`f1ce096` + `34001a8`), pushed to `feat/parallel-winner-swe-dominates`, PR opened: https://github.com/pfrack/review-action/pull/32
 8. ⏳ Trigger `benchmark-nim.yml`, `benchmark-kilocode.yml`, `benchmark-nousresearch.yml` to refresh the 3 stale chains now that `bench-reorder.ts` compiles.
 
 > **Adaptation (test scope):** The two new latency-boundary tests originally used real `setTimeout` delays (`delayMs: 150_000` would have stalled the suite for 150 s). `makeMockClient` now accepts a `latencyMs` override that reports an arbitrary latency to `effectiveScore` without actually waiting. All three parallel-winner tests assert `result.usedModel` directly (not stdout logs) and run in ~1 ms. Full suite: 609 pass / 0 fail in ~14 s.
