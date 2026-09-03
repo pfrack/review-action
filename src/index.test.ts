@@ -187,7 +187,15 @@ const TRUNCATED_CHAT_RESULT: ChatResult = {
   finishReason: 'length',
 };
 
-type MockBehavior = { response?: ChatResult; delayMs?: number; shouldThrow?: boolean };
+type MockBehavior = {
+  response?: ChatResult;
+  delayMs?: number;
+  // Reported latency to feed effective-score selection without having to
+  // actually wait `delayMs` real time. Used to exercise the past-120s
+  // penalty quickly instead of stalling the suite for minutes.
+  latencyMs?: number;
+  shouldThrow?: boolean;
+};
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -251,7 +259,12 @@ function makeMockClient(
       throw err;
     }
 
-    const { response, delayMs = 0, shouldThrow = false } = behaviorForModel(model);
+    const {
+      response,
+      delayMs = 0,
+      latencyMs,
+      shouldThrow = false,
+    } = behaviorForModel(model);
 
     if (delayMs > 0) {
       await new Promise<void>((resolve, reject) => {
@@ -274,7 +287,10 @@ function makeMockClient(
     const base = response ?? VALID_CHAT_RESULT;
     // Surface the simulated delay as latency so effective-score selection
     // (which penalizes slow models) is exercised by latency-aware tests.
-    return { ...base, latency: delayMs > 0 ? delayMs : (base.latency ?? 0) };
+    // An explicit latencyMs overrides the timer delay so latency-boundary
+    // tests don't have to stall for real time.
+    const latency = latencyMs ?? (delayMs > 0 ? delayMs : (base.latency ?? 0));
+    return { ...base, latency };
   };
 
   return client;
@@ -433,7 +449,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     assert.strictEqual(result.usedModel, 'model-a');
   });
 
-  it('prefers highest-SWE but relatively fast model (effective score)', async () => {
+  it('prefers highest-SWE model over faster one when both finish under 60s', async () => {
     const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
     const callCounts: Record<string, number> = {};
 
@@ -443,7 +459,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     ];
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient((model) => {
-        if (model === 'slow-model') return { delayMs: 2000 };
+        if (model === 'slow-model') return { latencyMs: 2000 };
         return {};
       }, callCounts),
       mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
@@ -452,7 +468,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     const result = await runModelChainForBatch(
       chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
     );
-    assert.strictEqual(result.usedModel, 'fast-model');
+    assert.strictEqual(result.usedModel, 'slow-model');
     assert.strictEqual(result.findings.length, 1);
   });
 
@@ -623,12 +639,12 @@ describe('runModelChainForBatch parallel logging', () => {
   it('logs winner and cancelled model ids in parallel mode', async () => {
     const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
     const chain: TaggedModel[] = [
-      { id: 'slow-model', provider: 'nim', scoreOverride: 0.6 },
-      { id: 'fast-model', provider: 'nim', scoreOverride: 0.5 },
+      { id: 'fast-model', provider: 'nim', scoreOverride: 0.6 },
+      { id: 'slow-model', provider: 'nim', scoreOverride: 0.5 },
     ];
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient((model) => {
-        if (model === 'slow-model') return { delayMs: 2000 };
+        if (model === 'slow-model') return { latencyMs: 2000 };
         return {};
       }),
       mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
@@ -672,6 +688,46 @@ describe('runModelChainForBatch parallel logging', () => {
 
     const parallelLog = messages.find(m => m.includes('Parallel:'));
     assert.strictEqual(parallelLog, undefined, 'no parallel log when only one model in chain');
+  });
+
+  it('prefers higher-SWE model over faster one when both finish under 60s', async () => {
+    const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [
+      { id: 'high-swe-slow', provider: 'nim', scoreOverride: 0.8 },
+      { id: 'low-swe-fast', provider: 'nim', scoreOverride: 0.5 },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        if (model === 'high-swe-slow') return { latencyMs: 5000 };
+        return {};
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    const result = await runModelChainForBatch(
+      chain, clients, TEST_BATCH, 'system', 'json_schema', config, 30_000,
+    );
+    assert.strictEqual(result.usedModel, 'high-swe-slow', 'higher-SWE slower model should win under 60s');
+  });
+
+  it('demotes very slow model past 120s even when SWE is highest', async () => {
+    const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [
+      { id: 'high-swe-slow', provider: 'nim', scoreOverride: 0.8 },
+      { id: 'low-swe-fast', provider: 'nim', scoreOverride: 0.5 },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        if (model === 'high-swe-slow') return { latencyMs: 150_000 };
+        return {};
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    const result = await runModelChainForBatch(
+      chain, clients, TEST_BATCH, 'system', 'json_schema', config, 200_000,
+    );
+    assert.strictEqual(result.usedModel, 'low-swe-fast', 'faster model should win once slow model is penalized past 120s');
   });
 });
 
