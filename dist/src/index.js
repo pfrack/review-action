@@ -191,15 +191,23 @@ function sweScore(tagged) {
     return tagged.scoreOverride ?? getSweBenchScore(tagged.id);
 }
 /**
- * Effective score used to pick the winning model in a parallel batch: raw
- * SWE-bench score minus a latency penalty. This prefers the highest-SWE
- * model but lets a much faster model win when the SWE gap is small — i.e.
- * "highest SWE, but relatively fast". The penalty is intentionally small so
- * SWE dominates; it only overrides for pathologically slow models.
+ * Effective score used to pick the winning model in a parallel batch.
+ * Below 60s the SWE-bench score is the only signal — SWE dominates so a
+ * stronger model is never preempted by a faster but lower-scoring one in
+ * the same parallel window. Past 60s a multiplicative penalty kicks in
+ * (linear down to 0.7× at 120s, then 0.5× above). Mirrors the latency
+ * penalty in bench-reorder so the runtime winner-selection stays
+ * consistent with the chain ordering the benchmark produces.
  */
-const LATENCY_PENALTY_PER_SEC = 0.1;
 function effectiveScore(tagged, latencyMs) {
-    return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
+    const swe = sweScore(tagged);
+    if (latencyMs <= 60_000)
+        return swe;
+    if (latencyMs <= 120_000) {
+        const ratio = (latencyMs - 60_000) / 60_000;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
 }
 export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');

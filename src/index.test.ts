@@ -187,7 +187,15 @@ const TRUNCATED_CHAT_RESULT: ChatResult = {
   finishReason: 'length',
 };
 
-type MockBehavior = { response?: ChatResult; delayMs?: number; shouldThrow?: boolean };
+type MockBehavior = {
+  response?: ChatResult;
+  delayMs?: number;
+  // Reported latency to feed effective-score selection without having to
+  // actually wait `delayMs` real time. Used to exercise the past-120s
+  // penalty quickly instead of stalling the suite for minutes.
+  latencyMs?: number;
+  shouldThrow?: boolean;
+};
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -251,7 +259,12 @@ function makeMockClient(
       throw err;
     }
 
-    const { response, delayMs = 0, shouldThrow = false } = behaviorForModel(model);
+    const {
+      response,
+      delayMs = 0,
+      latencyMs,
+      shouldThrow = false,
+    } = behaviorForModel(model);
 
     if (delayMs > 0) {
       await new Promise<void>((resolve, reject) => {
@@ -274,7 +287,10 @@ function makeMockClient(
     const base = response ?? VALID_CHAT_RESULT;
     // Surface the simulated delay as latency so effective-score selection
     // (which penalizes slow models) is exercised by latency-aware tests.
-    return { ...base, latency: delayMs > 0 ? delayMs : (base.latency ?? 0) };
+    // An explicit latencyMs overrides the timer delay so latency-boundary
+    // tests don't have to stall for real time.
+    const latency = latencyMs ?? (delayMs > 0 ? delayMs : (base.latency ?? 0));
+    return { ...base, latency };
   };
 
   return client;
@@ -433,7 +449,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     assert.strictEqual(result.usedModel, 'model-a');
   });
 
-  it('prefers highest-SWE but relatively fast model (effective score)', async () => {
+  it('prefers highest-SWE model over faster one when both finish under 60s', async () => {
     const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
     const callCounts: Record<string, number> = {};
 
@@ -443,7 +459,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     ];
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient((model) => {
-        if (model === 'slow-model') return { delayMs: 2000 };
+        if (model === 'slow-model') return { latencyMs: 2000 };
         return {};
       }, callCounts),
       mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
@@ -452,7 +468,7 @@ describe('runModelChainForBatch parallel fallback', () => {
     const result = await runModelChainForBatch(
       chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
     );
-    assert.strictEqual(result.usedModel, 'fast-model');
+    assert.strictEqual(result.usedModel, 'slow-model');
     assert.strictEqual(result.findings.length, 1);
   });
 
@@ -617,18 +633,74 @@ describe('executeReview — batch loop resilience', () => {
     assert.strictEqual(result.review.findings.length, 0);
     assert.strictEqual(result.batchCount, 1);
   });
+
+  it('reports usedModel from the batch that contributed findings, not the first batch with a model name', async () => {
+    // Reproduces the bug where batch 1 completes successfully (with a model
+    // name) but returns 0 findings — e.g. the head model said "LGTM", so the
+    // sequential tail walked down to the last model — while batch 2 produces
+    // actual findings from a different model. The merged result must be
+    // labelled with batch 2's model, not batch 1's last-tried model.
+    const batch1Diffs = { 'src/a.ts': 'diff --git a/src/a.ts b/src/a.ts\n+added line\n' };
+    const batch2Diffs = { 'src/b.ts': 'diff --git a/src/b.ts b/src/b.ts\n+other line\n' };
+
+    const batch1: FileBatch = { files: ['src/a.ts'], diffs: batch1Diffs };
+    const batch2: FileBatch = { files: ['src/b.ts'], diffs: batch2Diffs };
+
+    const emptyResult: ChatResult = {
+      content: JSON.stringify({ findings: [], summary: 'LGTM — no issues found' }),
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      latency: 100,
+      finishReason: 'stop',
+    };
+    const findingsResult: ChatResult = {
+      content: JSON.stringify({
+        findings: [{ file: 'src/b.ts', severity: 'Suggestion', issue: 'test finding', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'fix it' }],
+        summary: 'batch 2 summary',
+      }),
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      latency: 200,
+      finishReason: 'stop',
+    };
+
+    const config = makeConfig({ parallelAttempts: 1 });
+    // model-a is tried first in each batch. In batch 1 it returns no findings
+    // (so the sequential tail moves on). In batch 2 it returns findings.
+    // model-b always returns no findings (so it only sets usedModel when it
+    // is the last model tried, i.e. in batch 1).
+    const modelCallCounts: Record<string, number> = {};
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        modelCallCounts[model] = (modelCallCounts[model] || 0) + 1;
+        if (model === 'model-a' && modelCallCounts[model] === 2) return { response: findingsResult };
+        return { response: emptyResult };
+      }, {}),
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+    const chain: TaggedModel[] = [
+      { id: 'model-a', provider: 'nim' },
+      { id: 'model-b', provider: 'nim' },
+    ];
+
+    const result = await executeReview(
+      chain, clients, ['src/a.ts', 'src/b.ts'], { ...batch1Diffs, ...batch2Diffs }, [batch1, batch2], 'system', config,
+    );
+
+    assert.strictEqual(result.review.findings.length, 1, 'batch 2 findings should be present');
+    assert.strictEqual(result.usedModel, 'model-a', 'usedModel should come from the findings-bearing batch, not batch 1');
+    assert.strictEqual(result.batchCount, 2);
+  });
 });
 
 describe('runModelChainForBatch parallel logging', () => {
   it('logs winner and cancelled model ids in parallel mode', async () => {
     const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
     const chain: TaggedModel[] = [
-      { id: 'slow-model', provider: 'nim', scoreOverride: 0.6 },
-      { id: 'fast-model', provider: 'nim', scoreOverride: 0.5 },
+      { id: 'fast-model', provider: 'nim', scoreOverride: 0.6 },
+      { id: 'slow-model', provider: 'nim', scoreOverride: 0.5 },
     ];
     const clients: Record<Provider, OpenAIClient | null> = {
       nim: makeMockClient((model) => {
-        if (model === 'slow-model') return { delayMs: 2000 };
+        if (model === 'slow-model') return { latencyMs: 2000 };
         return {};
       }),
       mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
@@ -672,6 +744,46 @@ describe('runModelChainForBatch parallel logging', () => {
 
     const parallelLog = messages.find(m => m.includes('Parallel:'));
     assert.strictEqual(parallelLog, undefined, 'no parallel log when only one model in chain');
+  });
+
+  it('prefers higher-SWE model over faster one when both finish under 60s', async () => {
+    const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [
+      { id: 'high-swe-slow', provider: 'nim', scoreOverride: 0.8 },
+      { id: 'low-swe-fast', provider: 'nim', scoreOverride: 0.5 },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        if (model === 'high-swe-slow') return { latencyMs: 5000 };
+        return {};
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    const result = await runModelChainForBatch(
+      chain, clients, TEST_BATCH, 'system', 'json_schema', config, 30_000,
+    );
+    assert.strictEqual(result.usedModel, 'high-swe-slow', 'higher-SWE slower model should win under 60s');
+  });
+
+  it('demotes very slow model past 120s even when SWE is highest', async () => {
+    const config = makeConfig({ parallelAttempts: 2, parallelThreshold: 0 });
+    const chain: TaggedModel[] = [
+      { id: 'high-swe-slow', provider: 'nim', scoreOverride: 0.8 },
+      { id: 'low-swe-fast', provider: 'nim', scoreOverride: 0.5 },
+    ];
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: makeMockClient((model) => {
+        if (model === 'high-swe-slow') return { latencyMs: 150_000 };
+        return {};
+      }),
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    const result = await runModelChainForBatch(
+      chain, clients, TEST_BATCH, 'system', 'json_schema', config, 200_000,
+    );
+    assert.strictEqual(result.usedModel, 'low-swe-fast', 'faster model should win once slow model is penalized past 120s');
   });
 });
 

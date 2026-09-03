@@ -229,16 +229,22 @@ function sweScore(tagged: TaggedModel): number {
 }
 
 /**
- * Effective score used to pick the winning model in a parallel batch: raw
- * SWE-bench score minus a latency penalty. This prefers the highest-SWE
- * model but lets a much faster model win when the SWE gap is small — i.e.
- * "highest SWE, but relatively fast". The penalty is intentionally small so
- * SWE dominates; it only overrides for pathologically slow models.
+ * Effective score used to pick the winning model in a parallel batch.
+ * Below 60s the SWE-bench score is the only signal — SWE dominates so a
+ * stronger model is never preempted by a faster but lower-scoring one in
+ * the same parallel window. Past 60s a multiplicative penalty kicks in
+ * (linear down to 0.7× at 120s, then 0.5× above). Mirrors the latency
+ * penalty in bench-reorder so the runtime winner-selection stays
+ * consistent with the chain ordering the benchmark produces.
  */
-const LATENCY_PENALTY_PER_SEC = 0.1;
-
 function effectiveScore(tagged: TaggedModel, latencyMs: number): number {
-  return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
+  const swe = sweScore(tagged);
+  if (latencyMs <= 60_000) return swe;
+  if (latencyMs <= 120_000) {
+    const ratio = (latencyMs - 60_000) / 60_000;
+    return swe * (1.0 - 0.3 * ratio);
+  }
+  return swe * 0.5;
 }
 
 export async function runModelChainForBatch(
@@ -525,10 +531,19 @@ export async function executeReview(
 
   if (batches.length > 1) {
     const merged = mergeFindings(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
+    // Pick the model that actually contributed findings. A batch can finish
+    // successfully with a non-empty usedModel but zero findings (e.g. the head
+    // model said "LGTM"); if we blindly took the first batch with a usedModel,
+    // the posted review would be mislabeled with a model whose findings were
+    // never produced (or were all dropped). Prefer a findings-bearing batch,
+    // then fall back to any batch with a usedModel.
+    const batchWithFindings = batchResults.find(result => result.findings.length > 0);
     return {
       review: { findings: merged.findings, summary: merged.summary },
-      usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
-      lastRawContent: batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
+      usedModel: batchWithFindings?.usedModel
+        || batchResults.find(result => result.usedModel)?.usedModel || '',
+      lastRawContent: batchWithFindings?.lastRawContent
+        || batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
       validationDropped: batchResults.reduce((sum, result) => sum + result.dropped, 0),
       batchCount: batches.length,
     };
