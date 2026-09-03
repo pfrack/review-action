@@ -1,4 +1,2 @@
-poolside/laguna-s-2.1:free
-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
