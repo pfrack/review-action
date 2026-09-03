@@ -548,6 +548,9 @@ export function patchScoresTable(sourcePath: string, entries: { model: string; s
       : entries.some(e => e.model.startsWith('kilo-auto/'))
         ? '// Kilo free-tier models (estimated scores)'
         : '// OpenRouter free-tier models (estimated scores)';
+  'minimax/minimax-m3:free': 0.5,
+  'inclusionai/ling-3.0-flash-fin:free': 0.5,
+  'minimax/minimax-m2.7:free': 0.5,
   // Use lastIndexOf: the marker string also appears as a string literal
   // inside this function's body (the `marker` ternary above). The real
   // table comment is always after the function, so the LAST occurrence
