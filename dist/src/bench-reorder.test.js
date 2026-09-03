@@ -647,6 +647,59 @@ describe('patchScoresTable', () => {
             rmSync(tmpDir, { recursive: true, force: true });
         }
     });
+    it('does not splice new entries into function body when the marker string also appears as a literal in source', () => {
+        // Regression: content.indexOf(marker) used to match the marker string
+        // inside patchScoresTable's own ternary (the `marker = section === ...`
+        // block), which spliced the new score line into the function body and
+        // produced `TS1005: ';' expected` on the next tsc run. The real table
+        // is always after the function, so lastIndexOf must be used.
+        const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+        try {
+            const srcPath = join(tmpDir, 'test.ts');
+            // Fixture mirrors the real bench-reorder.ts layout: patchScoresTable
+            // is defined FIRST, the SWE_BENCH_SCORES table (with the marker
+            // comments) comes AFTER. So the marker string appears twice: once
+            // as a literal inside the function, once as a real comment in the
+            // table. lastIndexOf must skip the function-body literal.
+            const content = `export function patchScoresTable(sourcePath: string, entries: { model: string; score: number }[], section?: 'openrouter' | 'kilo'): number {
+  const content = readFileSync(sourcePath, 'utf-8');
+  const marker = section === 'kilo'
+    ? '// Kilo free-tier models (estimated scores)'
+    : section === 'openrouter'
+      ? '// OpenRouter free-tier models (estimated scores)'
+      : entries.some(e => e.model.startsWith('kilo-auto/'))
+        ? '// Kilo free-tier models (estimated scores)'
+        : '// OpenRouter free-tier models (estimated scores)';
+  const idx = content.indexOf(marker);
+  if (idx === -1) return 0;
+  return 0;
+}
+
+export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  // OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+  // Kilo free-tier models (estimated scores)
+  'kilo-auto/balanced:free': 0.55,
+};
+`;
+            writeFileSync(srcPath, content, 'utf-8');
+            const count = patchScoresTable(srcPath, [{ model: 'brand-new/model-free', score: 0.5 }]);
+            assert.strictEqual(count, 1);
+            const updated = readFileSync(srcPath, 'utf-8');
+            assert.ok(updated.includes("'brand-new/model-free': 0.5,"), 'new entry should be present in file');
+            const fnBodyMatch = updated.match(/export function patchScoresTable[\s\S]*?\n}/);
+            assert.ok(fnBodyMatch, 'function body should still be present');
+            const fnBody = fnBodyMatch[0];
+            assert.ok(!/^\s*'brand-new\/model-free':\s*0\.5,\s*$/m.test(fnBody), 'new entry must not be spliced into the function body (root cause of bench-reorder.ts:554 stray)');
+            const fnEndIdx = (fnBodyMatch.index ?? 0) + fnBodyMatch[0].length;
+            const newEntryIdx = updated.indexOf("'brand-new/model-free': 0.5,");
+            assert.ok(newEntryIdx >= fnEndIdx, 'new entry should be in the table, after the function body');
+        }
+        finally {
+            rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
     it('returns 0 when marker not found', () => {
         const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
         try {

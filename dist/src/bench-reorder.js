@@ -469,30 +469,53 @@ export function discoverNewModels(models) {
  */
 export function patchScoresTable(sourcePath, entries, section) {
     const content = readFileSync(sourcePath, 'utf-8');
-    const marker = section === 'kilo'
-        ? '// Kilo free-tier models (estimated scores)'
+    // Section label used to pick the right comment. We match by a STABLE
+    // prefix of the table comment (the function-level text uses "(estimated)"
+    // while the real table uses "(measured/estimated scores)", so an exact
+    // marker equals no table match).
+    const sectionPrefix = section === 'kilo'
+        ? '// Kilo free-tier models'
         : section === 'openrouter'
-            ? '// OpenRouter free-tier models (estimated scores)'
+            ? '// OpenRouter free-tier models'
             : entries.some(e => e.model.startsWith('kilo-auto/'))
-                ? '// Kilo free-tier models (estimated scores)'
-                : '// OpenRouter free-tier models (estimated scores)';
-    const idx = content.indexOf(marker);
-    if (idx === -1)
+                ? '// Kilo free-tier models'
+                : '// OpenRouter free-tier models';
+    // Confine the search to the SWE_BENCH_SCORES table so we never match the
+    // quoted string literal of the `sectionPrefix` ternary INSIDE this
+    // function (that is exactly how stray bare-statement lines used to get
+    // spliced into the function body, producing TS1005 on the next build).
+    // A leading `//` (after trimming whitespace) identifies a real comment
+    // line; the in-function literal `? '// Kilo ...'` trims to `? '//`, i.e.
+    // it starts with `?` not `//`, so it is excluded.
+    const tableOpenMarker = 'SWE_BENCH_SCORES: Record<string, number> = {';
+    const tableStart = content.indexOf(tableOpenMarker);
+    if (tableStart === -1)
         return 0;
-    // Find the end of this comment block (next non-comment line)
-    const before = content.substring(0, idx);
-    const after = content.substring(idx);
-    const lines = after.split('\n');
-    let insertLine = 0;
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+    // tableEnd: find the closing `};` that terminates the table object. The
+    // table is a flat literal, so the first `\n};` at column 0 after the
+    // opening is its close.
+    const tableEnd = content.indexOf('\n};', tableStart + tableOpenMarker.length);
+    if (tableEnd === -1)
+        return 0;
+    const tableSlice = content.substring(tableStart, tableEnd);
+    const tableLines = tableSlice.split('\n');
+    let insertLine = -1;
+    for (let i = 0; i < tableLines.length; i++) {
+        const line = tableLines[i];
+        if (line.trimStart().startsWith('//') && line.trimStart().startsWith(sectionPrefix)) {
             insertLine = i;
             break;
         }
     }
+    if (insertLine === -1)
+        return 0;
+    // Insert the new entries right after the section marker comment, before
+    // the existing entries of that section.
     const newLines = entries.map(e => `  '${e.model}': ${e.score},`);
-    lines.splice(insertLine, 0, ...newLines);
-    const updated = before + lines.join('\n');
+    tableLines.splice(insertLine + 1, 0, ...newLines);
+    const before = content.substring(0, tableStart);
+    const after = content.substring(tableEnd);
+    const updated = before + tableLines.join('\n') + after;
     writeFileSync(sourcePath, updated, 'utf-8');
     return newLines.length;
 }
