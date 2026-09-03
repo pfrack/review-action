@@ -476,7 +476,13 @@ export function patchScoresTable(sourcePath, entries, section) {
             : entries.some(e => e.model.startsWith('kilo-auto/'))
                 ? '// Kilo free-tier models (estimated scores)'
                 : '// OpenRouter free-tier models (estimated scores)';
-    const idx = content.indexOf(marker);
+    // Use lastIndexOf: the marker string also appears as a string literal
+    // inside this function's body (the `marker` ternary above). The real
+    // table comment is always after the function, so the LAST occurrence
+    // is the table. indexOf would match the function-body literal and
+    // splice the new score lines into the function body, producing a
+    // `TS1005: ';' expected` on the next build.
+    const idx = content.lastIndexOf(marker);
     if (idx === -1)
         return 0;
     // Find the end of this comment block (next non-comment line)
@@ -485,7 +491,7 @@ export function patchScoresTable(sourcePath, entries, section) {
     const lines = after.split('\n');
     let insertLine = 0;
     for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+        if (lines[i].startsWith('  //') || lines[i].startsWith("  '")) {
             insertLine = i;
             break;
         }
