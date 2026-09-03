@@ -531,10 +531,19 @@ export async function executeReview(
 
   if (batches.length > 1) {
     const merged = mergeFindings(batchResults.map(result => ({ findings: result.findings, summary: result.summary })));
+    // Pick the model that actually contributed findings. A batch can finish
+    // successfully with a non-empty usedModel but zero findings (e.g. the head
+    // model said "LGTM"); if we blindly took the first batch with a usedModel,
+    // the posted review would be mislabeled with a model whose findings were
+    // never produced (or were all dropped). Prefer a findings-bearing batch,
+    // then fall back to any batch with a usedModel.
+    const batchWithFindings = batchResults.find(result => result.findings.length > 0);
     return {
       review: { findings: merged.findings, summary: merged.summary },
-      usedModel: batchResults.find(result => result.usedModel)?.usedModel || '',
-      lastRawContent: batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
+      usedModel: batchWithFindings?.usedModel
+        || batchResults.find(result => result.usedModel)?.usedModel || '',
+      lastRawContent: batchWithFindings?.lastRawContent
+        || batchResults.find(result => result.lastRawContent)?.lastRawContent || '',
       validationDropped: batchResults.reduce((sum, result) => sum + result.dropped, 0),
       batchCount: batches.length,
     };

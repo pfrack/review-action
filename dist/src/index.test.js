@@ -526,6 +526,55 @@ describe('executeReview — batch loop resilience', () => {
         assert.strictEqual(result.review.findings.length, 0);
         assert.strictEqual(result.batchCount, 1);
     });
+    it('reports usedModel from the batch that contributed findings, not the first batch with a model name', async () => {
+        // Reproduces the bug where batch 1 completes successfully (with a model
+        // name) but returns 0 findings — e.g. the head model said "LGTM", so the
+        // sequential tail walked down to the last model — while batch 2 produces
+        // actual findings from a different model. The merged result must be
+        // labelled with batch 2's model, not batch 1's last-tried model.
+        const batch1Diffs = { 'src/a.ts': 'diff --git a/src/a.ts b/src/a.ts\n+added line\n' };
+        const batch2Diffs = { 'src/b.ts': 'diff --git a/src/b.ts b/src/b.ts\n+other line\n' };
+        const batch1 = { files: ['src/a.ts'], diffs: batch1Diffs };
+        const batch2 = { files: ['src/b.ts'], diffs: batch2Diffs };
+        const emptyResult = {
+            content: JSON.stringify({ findings: [], summary: 'LGTM — no issues found' }),
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            latency: 100,
+            finishReason: 'stop',
+        };
+        const findingsResult = {
+            content: JSON.stringify({
+                findings: [{ file: 'src/b.ts', severity: 'Suggestion', issue: 'test finding', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'fix it' }],
+                summary: 'batch 2 summary',
+            }),
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            latency: 200,
+            finishReason: 'stop',
+        };
+        const config = makeConfig({ parallelAttempts: 1 });
+        // model-a is tried first in each batch. In batch 1 it returns no findings
+        // (so the sequential tail moves on). In batch 2 it returns findings.
+        // model-b always returns no findings (so it only sets usedModel when it
+        // is the last model tried, i.e. in batch 1).
+        const modelCallCounts = {};
+        const clients = {
+            nim: makeMockClient((model) => {
+                modelCallCounts[model] = (modelCallCounts[model] || 0) + 1;
+                if (model === 'model-a' && modelCallCounts[model] === 2)
+                    return { response: findingsResult };
+                return { response: emptyResult };
+            }, {}),
+            mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+        };
+        const chain = [
+            { id: 'model-a', provider: 'nim' },
+            { id: 'model-b', provider: 'nim' },
+        ];
+        const result = await executeReview(chain, clients, ['src/a.ts', 'src/b.ts'], { ...batch1Diffs, ...batch2Diffs }, [batch1, batch2], 'system', config);
+        assert.strictEqual(result.review.findings.length, 1, 'batch 2 findings should be present');
+        assert.strictEqual(result.usedModel, 'model-a', 'usedModel should come from the findings-bearing batch, not batch 1');
+        assert.strictEqual(result.batchCount, 2);
+    });
 });
 describe('runModelChainForBatch parallel logging', () => {
     it('logs winner and cancelled model ids in parallel mode', async () => {
