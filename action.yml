@@ -22,7 +22,7 @@ inputs:
     default: 'https://api.mistral.ai/v1'
   mistral_models:
     description: 'Comma-separated Mistral model fallback chain'
-    default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+    default: 'codestral-2508'
   groq_api_key:
     description: 'Groq API key (enables Groq models in fallback chain)'
     default: ''
