@@ -21,6 +21,7 @@
   },
   "openrouter": {
     "models": [
+      "inclusionai/ling-3.0-flash-fin:free",
       "dots-studio/dots-3-note-preview:free",
       "liquid/lfm-2.5-2.6b:free",
       "nvidia/nemotron-3.5-lightning:free",
