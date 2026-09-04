@@ -54,7 +54,7 @@ inputs:
     default: 'https://api.kilo.ai/api/gateway'
   kilocode_models:
     description: 'Comma-separated Kilo model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-content-safety:free,kilo-auto/free,openrouter/free,minimax/minimax-m3:free,inclusionai/ling-3.0-flash-fin:free,minimax/minimax-m2.7:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,liquid/lfm-2.5-2.6b:free'
+    default: 'poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-content-safety:free,kilo-auto/free,openrouter/free,minimax/minimax-m3:free,inclusionai/ling-3.0-flash-fin:free,minimax/minimax-m2.7:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,liquid/lfm-2.5-2.6b:free'
   kilocode_free_only:
     description: 'Filter Kilo models to only use free-tier (:free suffix) models'
     default: 'false'
