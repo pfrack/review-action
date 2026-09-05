@@ -1,6 +1,7 @@
 {
   "nousresearch": {
     "models": [
+      "inclusionai/ling-3.0-flash-sante:free",
       "inclusionai/ling-3.0-flash-fin:free",
       "poolside/laguna-s-2.1:free",
       "poolside/laguna-xs-2.1:free",
