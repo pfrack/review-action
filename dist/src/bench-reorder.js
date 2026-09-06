@@ -157,6 +157,9 @@ export const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (measured/estimated scores)
+    'minimax/minimax-m3:free': 0.5,
+    'inclusionai/ling-3.0-flash-fin:free': 0.5,
+    'minimax/minimax-m2.7:free': 0.5,
     'z-ai/glm-5.2:free': 0.778, // measured — matches glm-5, rank 24
     'dots-studio/dots-3-note-preview:free': 0.45, // estimated — small free tier
     'google/gemma-4-31b-it:free': 0.45, // estimated — 31B class, no Verified entry
