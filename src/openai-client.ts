@@ -181,6 +181,12 @@ export interface StreamChunk {
   firstTokenAt: number | null;
 }
 
+export interface ProbeResult {
+  ok: boolean;
+  permanent: boolean;
+  status?: number;
+}
+
 interface ChatRequest {
   model: string;
   messages: ChatMessage[];
@@ -443,15 +449,17 @@ export class OpenAIClient {
     }
   }
 
-  async probeModel(model: string): Promise<boolean> {
+  async probeModel(model: string): Promise<ProbeResult> {
     try {
       await this.chat(model, [{ role: 'user', content: 'Say hi' }], {
         temperature: 0,
         maxTokens: 8,
       });
-      return true;
-    } catch {
-      return false;
+      return { ok: true, permanent: false };
+    } catch (err) {
+      const status = err instanceof RetryableError ? err.status : undefined;
+      const permanent = status === 410 || status === 403 || status === 413;
+      return { ok: false, permanent, status };
     }
   }
 

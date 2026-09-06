@@ -521,7 +521,7 @@ async function main(): Promise<void> {
   //   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
   const { demoted, transient } = await classifyFailedModels(
     failed,
-    model => client.probeModel(model),
+     model => client.probeModel(model).then(r => r.ok),
     availableModels ?? undefined,
   );
   for (const { model, probeLatency } of demoted) {
