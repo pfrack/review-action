@@ -209,11 +209,11 @@ function effectiveScore(tagged, latencyMs) {
     }
     return swe * 0.5;
 }
-export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal) {
+export async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal, skipModels) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
-    const availableChain = chain.filter(tagged => clients[tagged.provider]);
+    const availableChain = chain.filter(tagged => clients[tagged.provider] && (!skipModels || !skipModels.has(tagged.id)));
     let batchReview = null;
     let batchUsedModel = '';
     let batchLastRawContent = '';
@@ -434,19 +434,21 @@ export function detectLanguage(files) {
 }
 export async function prioritizeChain(chain, clients) {
     try {
-        const probed = await probeModels(chain, clients);
-        if (probed) {
-            core.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+        const outcome = await probeModels(chain, clients);
+        if (outcome.head) {
+            core.info(`Probe: ${outcome.head.id} (${outcome.head.provider}) — fastest available`);
         }
         else {
             core.info(`Probe: no model available, using SWE-bench chain order`);
         }
+        return outcome;
     }
     catch (probeErr) {
         core.warning(`Model probing failed, using original chain order: ${probeErr}`);
+        return { head: null, skip: new Map() };
     }
 }
-export async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
+export async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config, skipModels) {
     const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
     const batchResults = [];
     const modelTimeoutMs = config.modelTimeout * 1000;
@@ -454,7 +456,7 @@ export async function executeReview(chain, clients, filesToReview, filesDiffMap,
         if (batches.length > 1) {
             core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal);
+        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal, skipModels);
         let result;
         try {
             result = config.chainTimeout > 0
@@ -671,7 +673,11 @@ export async function run() {
     const detectedLanguage = detectLanguage(filesToReview);
     if (detectedLanguage)
         core.info(`Detected language: ${detectedLanguage}`);
-    await prioritizeChain(chain, clients);
+    const probeOutcome = await prioritizeChain(chain, clients);
+    if (probeOutcome.skip.size > 0) {
+        const skipList = [...probeOutcome.skip.entries()].map(([id, status]) => `${id} (${status})`).join(', ');
+        core.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
+    }
     const filesDiffMap = {};
     for (const file of filesToReview)
         filesDiffMap[file] = filesDiff[file] || '';
@@ -693,7 +699,7 @@ export async function run() {
         core.warning(`Could not load previous findings; continuing without carry-over context: ${err instanceof Error ? err.message : String(err)}`);
     }
     const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules, previousFindingsBlock);
-    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
+    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config, probeOutcome.skip.size > 0 ? new Set(probeOutcome.skip.keys()) : undefined);
     const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent, commitSha });
     await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }

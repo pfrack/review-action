@@ -267,14 +267,14 @@ Add the observability layer: surface the winner's tier in logs, summarize dead m
 
 #### Automated
 
-- [x] 1.1 `probeModel` returns `{ ok, permanent, status }` instead of `boolean`
-- [x] 1.2 `probeModels` returns skip set of permanently-failed model IDs
-- [x] 1.3 `runModelChainForBatch` / `buildCombinedChain` accepts and applies `skipModels`
-- [x] 1.4 Log skipped models with status code after chain construction
-- [x] 1.5 Existing chain-order test passes unchanged (`src/index.test.ts:548`)
-- [x] 1.6 Type check passes: `npm run typecheck` (adapted to `npx tsc --noEmit`)
-- [x] 1.7 Lint passes: `npm run lint` (no eslint configured; skip gate)
-- [x] 1.8 Full test suite passes: `npm test`
+- [x] 1.1 `probeModel` returns `{ ok, permanent, status }` instead of `boolean` — 067b12b
+- [x] 1.2 `probeModels` returns skip set of permanently-failed model IDs — 067b12b
+- [x] 1.3 `runModelChainForBatch` / `buildCombinedChain` accepts and applies `skipModels` — 067b12b
+- [x] 1.4 Log skipped models with status code after chain construction — 067b12b
+- [x] 1.5 Existing chain-order test passes unchanged (`src/index.test.ts:548`) — 067b12b
+- [x] 1.6 Type check passes: `npm run typecheck` (adapted to `npx tsc --noEmit`) — 067b12b
+- [x] 1.7 Lint passes: `npm run lint` (no eslint configured; skip gate) — 067b12b
+- [x] 1.8 Full test suite passes: `npm test` — 067b12b
 
 #### Manual
 
@@ -285,11 +285,11 @@ Add the observability layer: surface the winner's tier in logs, summarize dead m
 
 #### Automated
 
-- [ ] 2.1 Hardcoded fallback constants removed from `src/config.ts`
-- [ ] 2.2 Empty provider input handled gracefully (zero models, no crash)
-- [ ] 2.3 No references to removed constants in `src/` or `dist/`
-- [ ] 2.4 Type check passes: `npm run typecheck`
-- [ ] 2.5 Full test suite passes: `npm test`
+- [x] 2.1 Hardcoded fallback constants removed from `src/config.ts`
+- [x] 2.2 Empty provider input handled gracefully (zero models, no crash)
+- [x] 2.3 No references to removed constants in `src/` or `dist/`
+- [x] 2.4 Type check passes: `npm run typecheck`
+- [x] 2.5 Full test suite passes: `npm test`
 
 #### Manual
 

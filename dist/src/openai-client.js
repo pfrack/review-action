@@ -381,10 +381,12 @@ export class OpenAIClient {
                 temperature: 0,
                 maxTokens: 8,
             });
-            return true;
+            return { ok: true, permanent: false };
         }
-        catch {
-            return false;
+        catch (err) {
+            const status = err instanceof RetryableError ? err.status : undefined;
+            const permanent = status === 410 || status === 403 || status === 413;
+            return { ok: false, permanent, status };
         }
     }
     async listModels() {

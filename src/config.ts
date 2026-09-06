@@ -66,11 +66,9 @@ export async function loadConfig(): Promise<Config> {
     models: splitCSV(core.getInput('nim_models')),
     mistralApiKey: core.getInput('mistral_api_key') || '',
     mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-    mistralModels: splitCSV(core.getInput('mistral_models') ||
-      'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+    mistralModels: splitCSV(core.getInput('mistral_models') || ''),
     groqApiKey: core.getInput('groq_api_key') || '',
-    groqModels: splitCSV(core.getInput('groq_models') ||
-      'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
+    groqModels: splitCSV(core.getInput('groq_models') || ''),
     groqBaseUrl: core.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
     openRouterApiKey: core.getInput('openrouter_api_key') || '',
     openRouterBaseUrl: core.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',

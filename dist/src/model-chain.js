@@ -89,6 +89,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 const PROBE_CONCURRENCY = 3;
 export async function probeModels(chain, clients) {
     const available = [];
+    const skip = new Map();
     for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
         const batch = chain.slice(i, i + PROBE_CONCURRENCY);
         const probes = batch.map(async (tagged) => {
@@ -98,14 +99,17 @@ export async function probeModels(chain, clients) {
             let timer;
             try {
                 const start = Date.now();
-                const ok = await Promise.race([
+                const result = await Promise.race([
                     client.probeModel(tagged.id),
                     new Promise((_, reject) => {
                         timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
                     }),
                 ]);
-                if (ok)
+                if (result.ok)
                     return { model: tagged, latency: Date.now() - start };
+                if (result.permanent) {
+                    skip.set(tagged.id, result.status ?? 0);
+                }
                 return null;
             }
             catch {
@@ -123,7 +127,7 @@ export async function probeModels(chain, clients) {
         }
     }
     if (available.length === 0)
-        return null;
+        return { head: null, skip };
     available.sort((a, b) => a.latency - b.latency);
     // Cap the promotion: a lower-SWE model that happens to answer the probe
     // faster must not be allowed to leapfrog a higher-SWE chain head. The
@@ -144,8 +148,8 @@ export async function probeModels(chain, clients) {
         const fastest = available[0];
         const fastestScore = fastest.model.scoreOverride ?? getSweBenchScore(fastest.model.id);
         if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
-            return null;
+            return { head: null, skip };
         }
     }
-    return available[0].model;
+    return { head: available[0].model, skip };
 }

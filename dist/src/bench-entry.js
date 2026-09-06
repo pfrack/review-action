@@ -450,7 +450,7 @@ async function main() {
     //   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
     //   probe-fail  + catalog-listed  → transient (re-probed next run)
     //   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
-    const { demoted, transient } = await classifyFailedModels(failed, model => client.probeModel(model), availableModels ?? undefined);
+    const { demoted, transient } = await classifyFailedModels(failed, model => client.probeModel(model).then(r => r.ok), availableModels ?? undefined);
     for (const { model, probeLatency } of demoted) {
         process.stderr.write(`  ${model}: demoted — slow but healthy (probe ok, ${Math.round(probeLatency / 1000)}s)\n`);
         // Replace the all-failed result with a synthetic result using probe

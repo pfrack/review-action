@@ -25773,6 +25773,10 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (measured/estimated scores)
+    'inclusionai/ling-3.0-flash-sante:free': 0.5,
+    'minimax/minimax-m3:free': 0.5,
+    'inclusionai/ling-3.0-flash-fin:free': 0.5,
+    'minimax/minimax-m2.7:free': 0.5,
     'z-ai/glm-5.2:free': 0.778, // measured — matches glm-5, rank 24
     'dots-studio/dots-3-note-preview:free': 0.45, // estimated — small free tier
     'google/gemma-4-31b-it:free': 0.45, // estimated — 31B class, no Verified entry
@@ -26085,30 +26089,53 @@ function discoverNewModels(models) {
  */
 function patchScoresTable(sourcePath, entries, section) {
     const content = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(sourcePath, 'utf-8');
-    const marker = section === 'kilo'
-        ? '// Kilo free-tier models (estimated scores)'
+    // Section label used to pick the right comment. We match by a STABLE
+    // prefix of the table comment (the function-level text uses "(estimated)"
+    // while the real table uses "(measured/estimated scores)", so an exact
+    // marker equals no table match).
+    const sectionPrefix = section === 'kilo'
+        ? '// Kilo free-tier models'
         : section === 'openrouter'
-            ? '// OpenRouter free-tier models (estimated scores)'
+            ? '// OpenRouter free-tier models'
             : entries.some(e => e.model.startsWith('kilo-auto/'))
-                ? '// Kilo free-tier models (estimated scores)'
-                : '// OpenRouter free-tier models (estimated scores)';
-    const idx = content.indexOf(marker);
-    if (idx === -1)
+                ? '// Kilo free-tier models'
+                : '// OpenRouter free-tier models';
+    // Confine the search to the SWE_BENCH_SCORES table so we never match the
+    // quoted string literal of the `sectionPrefix` ternary INSIDE this
+    // function (that is exactly how stray bare-statement lines used to get
+    // spliced into the function body, producing TS1005 on the next build).
+    // A leading `//` (after trimming whitespace) identifies a real comment
+    // line; the in-function literal `? '// Kilo ...'` trims to `? '//`, i.e.
+    // it starts with `?` not `//`, so it is excluded.
+    const tableOpenMarker = 'SWE_BENCH_SCORES: Record<string, number> = {';
+    const tableStart = content.indexOf(tableOpenMarker);
+    if (tableStart === -1)
         return 0;
-    // Find the end of this comment block (next non-comment line)
-    const before = content.substring(0, idx);
-    const after = content.substring(idx);
-    const lines = after.split('\n');
-    let insertLine = 0;
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('  //') || lines[i].startsWith('  \'')) {
+    // tableEnd: find the closing `};` that terminates the table object. The
+    // table is a flat literal, so the first `\n};` at column 0 after the
+    // opening is its close.
+    const tableEnd = content.indexOf('\n};', tableStart + tableOpenMarker.length);
+    if (tableEnd === -1)
+        return 0;
+    const tableSlice = content.substring(tableStart, tableEnd);
+    const tableLines = tableSlice.split('\n');
+    let insertLine = -1;
+    for (let i = 0; i < tableLines.length; i++) {
+        const line = tableLines[i];
+        if (line.trimStart().startsWith('//') && line.trimStart().startsWith(sectionPrefix)) {
             insertLine = i;
             break;
         }
     }
+    if (insertLine === -1)
+        return 0;
+    // Insert the new entries right after the section marker comment, before
+    // the existing entries of that section.
     const newLines = entries.map(e => `  '${e.model}': ${e.score},`);
-    lines.splice(insertLine, 0, ...newLines);
-    const updated = before + lines.join('\n');
+    tableLines.splice(insertLine + 1, 0, ...newLines);
+    const before = content.substring(0, tableStart);
+    const after = content.substring(tableEnd);
+    const updated = before + tableLines.join('\n') + after;
     (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.writeFileSync)(sourcePath, updated, 'utf-8');
     return newLines.length;
 }
@@ -26179,11 +26206,9 @@ async function loadConfig() {
         models: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('nim_models')),
         mistralApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_api_key') || '',
         mistralBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
-        mistralModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_models') ||
-            'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        mistralModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('mistral_models') || ''),
         groqApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_api_key') || '',
-        groqModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_models') ||
-            'openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile'),
+        groqModels: splitCSV(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_models') || ''),
         groqBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('groq_base_url') || 'https://api.groq.com/openai/v1',
         openRouterApiKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_api_key') || '',
         openRouterBaseUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('openrouter_base_url') || 'https://openrouter.ai/api/v1',
@@ -27870,21 +27895,29 @@ function sweScore(tagged) {
     return tagged.scoreOverride ?? (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_11__/* .getSweBenchScore */ .__)(tagged.id);
 }
 /**
- * Effective score used to pick the winning model in a parallel batch: raw
- * SWE-bench score minus a latency penalty. This prefers the highest-SWE
- * model but lets a much faster model win when the SWE gap is small — i.e.
- * "highest SWE, but relatively fast". The penalty is intentionally small so
- * SWE dominates; it only overrides for pathologically slow models.
+ * Effective score used to pick the winning model in a parallel batch.
+ * Below 60s the SWE-bench score is the only signal — SWE dominates so a
+ * stronger model is never preempted by a faster but lower-scoring one in
+ * the same parallel window. Past 60s a multiplicative penalty kicks in
+ * (linear down to 0.7× at 120s, then 0.5× above). Mirrors the latency
+ * penalty in bench-reorder so the runtime winner-selection stays
+ * consistent with the chain ordering the benchmark produces.
  */
-const LATENCY_PENALTY_PER_SEC = 0.1;
 function effectiveScore(tagged, latencyMs) {
-    return sweScore(tagged) - LATENCY_PENALTY_PER_SEC * (latencyMs / 1000);
+    const swe = sweScore(tagged);
+    if (latencyMs <= 60_000)
+        return swe;
+    if (latencyMs <= 120_000) {
+        const ratio = (latencyMs - 60_000) / 60_000;
+        return swe * (1.0 - 0.3 * ratio);
+    }
+    return swe * 0.5;
 }
-async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal) {
+async function runModelChainForBatch(chain, clients, batch, systemMessage, responseFormat, config, modelTimeoutMs = 60_000, signal, skipModels) {
     const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
     const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
     const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
-    const availableChain = chain.filter(tagged => clients[tagged.provider]);
+    const availableChain = chain.filter(tagged => clients[tagged.provider] && (!skipModels || !skipModels.has(tagged.id)));
     let batchReview = null;
     let batchUsedModel = '';
     let batchLastRawContent = '';
@@ -28105,19 +28138,21 @@ function detectLanguage(files) {
 }
 async function prioritizeChain(chain, clients) {
     try {
-        const probed = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_10__/* .probeModels */ .Zh)(chain, clients);
-        if (probed) {
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+        const outcome = await (0,_model_chain_js__WEBPACK_IMPORTED_MODULE_10__/* .probeModels */ .Zh)(chain, clients);
+        if (outcome.head) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Probe: ${outcome.head.id} (${outcome.head.provider}) — fastest available`);
         }
         else {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Probe: no model available, using SWE-bench chain order`);
         }
+        return outcome;
     }
     catch (probeErr) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Model probing failed, using original chain order: ${probeErr}`);
+        return { head: null, skip: new Map() };
     }
 }
-async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config) {
+async function executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config, skipModels) {
     const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
     const batchResults = [];
     const modelTimeoutMs = config.modelTimeout * 1000;
@@ -28125,7 +28160,7 @@ async function executeReview(chain, clients, filesToReview, filesDiffMap, batche
         if (batches.length > 1) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
         }
-        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal);
+        const runBatch = (signal) => runModelChainForBatch(chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal, skipModels);
         let result;
         try {
             result = config.chainTimeout > 0
@@ -28342,7 +28377,11 @@ async function run() {
     const detectedLanguage = detectLanguage(filesToReview);
     if (detectedLanguage)
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Detected language: ${detectedLanguage}`);
-    await prioritizeChain(chain, clients);
+    const probeOutcome = await prioritizeChain(chain, clients);
+    if (probeOutcome.skip.size > 0) {
+        const skipList = [...probeOutcome.skip.entries()].map(([id, status]) => `${id} (${status})`).join(', ');
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
+    }
     const filesDiffMap = {};
     for (const file of filesToReview)
         filesDiffMap[file] = filesDiff[file] || '';
@@ -28364,7 +28403,7 @@ async function run() {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Could not load previous findings; continuing without carry-over context: ${err instanceof Error ? err.message : String(err)}`);
     }
     const systemMessage = (0,_prompts_js__WEBPACK_IMPORTED_MODULE_8__/* .buildSystemMessage */ .HB)(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules, previousFindingsBlock);
-    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
+    const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config, probeOutcome.skip.size > 0 ? new Set(probeOutcome.skip.keys()) : undefined);
     const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent, commitSha });
     await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }
@@ -28528,6 +28567,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 const PROBE_CONCURRENCY = 3;
 async function probeModels(chain, clients) {
     const available = [];
+    const skip = new Map();
     for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
         const batch = chain.slice(i, i + PROBE_CONCURRENCY);
         const probes = batch.map(async (tagged) => {
@@ -28537,14 +28577,17 @@ async function probeModels(chain, clients) {
             let timer;
             try {
                 const start = Date.now();
-                const ok = await Promise.race([
+                const result = await Promise.race([
                     client.probeModel(tagged.id),
                     new Promise((_, reject) => {
                         timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
                     }),
                 ]);
-                if (ok)
+                if (result.ok)
                     return { model: tagged, latency: Date.now() - start };
+                if (result.permanent) {
+                    skip.set(tagged.id, result.status ?? 0);
+                }
                 return null;
             }
             catch {
@@ -28562,7 +28605,7 @@ async function probeModels(chain, clients) {
         }
     }
     if (available.length === 0)
-        return null;
+        return { head: null, skip };
     available.sort((a, b) => a.latency - b.latency);
     // Cap the promotion: a lower-SWE model that happens to answer the probe
     // faster must not be allowed to leapfrog a higher-SWE chain head. The
@@ -28583,10 +28626,10 @@ async function probeModels(chain, clients) {
         const fastest = available[0];
         const fastestScore = fastest.model.scoreOverride ?? (0,_bench_reorder_js__WEBPACK_IMPORTED_MODULE_0__/* .getSweBenchScore */ .__)(fastest.model.id);
         if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
-            return null;
+            return { head: null, skip };
         }
     }
-    return available[0].model;
+    return { head: available[0].model, skip };
 }
 
 __webpack_async_result__();
@@ -28988,10 +29031,12 @@ class OpenAIClient {
                 temperature: 0,
                 maxTokens: 8,
             });
-            return true;
+            return { ok: true, permanent: false };
         }
-        catch {
-            return false;
+        catch (err) {
+            const status = err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw ? err.status : undefined;
+            const permanent = status === 410 || status === 403 || status === 413;
+            return { ok: false, permanent, status };
         }
     }
     async listModels() {
