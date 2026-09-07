@@ -393,7 +393,12 @@ export function providerName(target) {
  */
 export function wasModelAttempted() {
     const benchModels = process.env.BENCH_MODELS;
-    return Boolean(benchModels && benchModels.trim().length > 0);
+    if (benchModels && benchModels.trim().length > 0)
+        return true;
+    // BENCH_AUTO_FREE auto-discovers models from the catalog. If the catalog
+    // returns zero rows (e.g. provider outage, all models behind a paywall)
+    // we still attempted a benchmark — treat as all-fail rather than skipping.
+    return process.env.BENCH_AUTO_FREE === 'true';
 }
 /**
  * Classify an empty benchmark result.

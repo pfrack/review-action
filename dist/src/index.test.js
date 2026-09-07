@@ -449,9 +449,9 @@ describe('prioritizeChain', () => {
         ];
         const originalOrder = chain.map(m => m.id);
         const clients = {
-            nim: { probeModel: async () => true },
-            mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } },
-            groq: { probeModel: async () => true },
+            nim: { probeModel: async () => ({ ok: true, permanent: false }) },
+            mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return { ok: true, permanent: false }; } },
+            groq: { probeModel: async () => ({ ok: true, permanent: false }) },
             openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         await prioritizeChain(chain, clients);
@@ -464,8 +464,8 @@ describe('prioritizeChain', () => {
         ];
         const originalOrder = chain.map(m => m.id);
         const clients = {
-            nim: { probeModel: async () => true },
-            mistral: { probeModel: async () => true },
+            nim: { probeModel: async () => ({ ok: true, permanent: false }) },
+            mistral: { probeModel: async () => ({ ok: true, permanent: false }) },
             groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         await prioritizeChain(chain, clients);

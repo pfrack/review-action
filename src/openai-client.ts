@@ -449,16 +449,17 @@ export class OpenAIClient {
     }
   }
 
-  async probeModel(model: string): Promise<ProbeResult> {
+  async probeModel(model: string, opts: { signal?: AbortSignal } = {}): Promise<ProbeResult> {
     try {
       await this.chat(model, [{ role: 'user', content: 'Say hi' }], {
         temperature: 0,
         maxTokens: 8,
+        signal: opts.signal,
       });
       return { ok: true, permanent: false };
     } catch (err) {
       const status = err instanceof RetryableError ? err.status : undefined;
-      const permanent = status === 410 || status === 403 || status === 413;
+      const permanent = status === 410;
       return { ok: false, permanent, status };
     }
   }

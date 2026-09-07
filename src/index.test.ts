@@ -538,9 +538,9 @@ describe('prioritizeChain', () => {
     const originalOrder = chain.map(m => m.id);
 
     const clients: Record<Provider, OpenAIClient | null> = {
-      nim: { probeModel: async () => true } as unknown as OpenAIClient,
-      mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } } as unknown as OpenAIClient,
-      groq: { probeModel: async () => true } as unknown as OpenAIClient,
+      nim: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return { ok: true, permanent: false }; } } as unknown as OpenAIClient,
+      groq: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
       openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
@@ -556,8 +556,8 @@ describe('prioritizeChain', () => {
     const originalOrder = chain.map(m => m.id);
 
     const clients: Record<Provider, OpenAIClient | null> = {
-      nim: { probeModel: async () => true } as unknown as OpenAIClient,
-      mistral: { probeModel: async () => true } as unknown as OpenAIClient,
+      nim: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
       groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 

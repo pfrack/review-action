@@ -26009,7 +26009,12 @@ function providerName(target) {
  */
 function wasModelAttempted() {
     const benchModels = process.env.BENCH_MODELS;
-    return Boolean(benchModels && benchModels.trim().length > 0);
+    if (benchModels && benchModels.trim().length > 0)
+        return true;
+    // BENCH_AUTO_FREE auto-discovers models from the catalog. If the catalog
+    // returns zero rows (e.g. provider outage, all models behind a paywall)
+    // we still attempted a benchmark — treat as all-fail rather than skipping.
+    return process.env.BENCH_AUTO_FREE === 'true';
 }
 /**
  * Classify an empty benchmark result.
@@ -28440,7 +28445,8 @@ async function run() {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
     }
     const skippedCount = probeOutcome.skip.size;
-    const attemptedCount = chain.length - skippedCount;
+    const withClientCount = chain.filter(t => clients[t.provider]).length;
+    const attemptedCount = withClientCount - skippedCount;
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Skipped ${skippedCount} dead models, attempted ${attemptedCount} healthy models`);
     const filesDiffMap = {};
     for (const file of filesToReview)
@@ -28634,15 +28640,11 @@ async function probeModels(chain, clients) {
             const client = clients[tagged.provider];
             if (!client)
                 return null;
-            let timer;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
             try {
                 const start = Date.now();
-                const result = await Promise.race([
-                    client.probeModel(tagged.id),
-                    new Promise((_, reject) => {
-                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-                    }),
-                ]);
+                const result = await client.probeModel(tagged.id, { signal: controller.signal });
                 if (result.ok)
                     return { model: tagged, latency: Date.now() - start };
                 if (result.permanent) {
@@ -28654,8 +28656,7 @@ async function probeModels(chain, clients) {
                 return null;
             }
             finally {
-                if (timer)
-                    clearTimeout(timer);
+                clearTimeout(timer);
             }
         });
         const results = await Promise.all(probes);
@@ -29085,17 +29086,18 @@ class OpenAIClient {
             reader.releaseLock();
         }
     }
-    async probeModel(model) {
+    async probeModel(model, opts = {}) {
         try {
             await this.chat(model, [{ role: 'user', content: 'Say hi' }], {
                 temperature: 0,
                 maxTokens: 8,
+                signal: opts.signal,
             });
             return { ok: true, permanent: false };
         }
         catch (err) {
             const status = err instanceof _retry_js__WEBPACK_IMPORTED_MODULE_1__/* .RetryableError */ .dw ? err.status : undefined;
-            const permanent = status === 410 || status === 403 || status === 413;
+            const permanent = status === 410;
             return { ok: false, permanent, status };
         }
     }

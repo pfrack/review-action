@@ -167,7 +167,7 @@ export async function readmitCatalogModels(opts: {
   const reAdmitted: string[] = [];
 
   const outcomes = await mapWithConcurrency(candidates, concurrency, async (model) => {
-    const ok = await opts.client.probeModel(model);
+    const ok = (await opts.client.probeModel(model)).ok;
     if (!ok) {
       process.stderr.write(`  ${model}: probe fail, skipping\n`);
       return { model, admitted: false, result: null as BenchmarkResult | null };
@@ -316,7 +316,7 @@ async function probe(baseURL: string, apiKey: string, models: string[]): Promise
 
   for (const model of models) {
     process.stderr.write(`  ${model} ...`);
-    const ok = await client.probeModel(model);
+    const ok = (await client.probeModel(model)).ok;
     if (ok) {
       process.stderr.write(' ok\n');
       console.log(`${model} ok`);
@@ -564,7 +564,7 @@ async function main(): Promise<void> {
         if (models.includes(candidate)) continue;
 
         process.stderr.write(`  Probing ${candidate} ...`);
-        const ok = await client.probeModel(candidate);
+        const ok = (await client.probeModel(candidate)).ok;
         if (!ok) {
           process.stderr.write(' FAIL, skipping\n');
           continue;
@@ -630,7 +630,7 @@ async function main(): Promise<void> {
         const batch = toRecheck.slice(i, i + concurrency);
         const outcomes = await Promise.all(batch.map(async (model) => {
           process.stderr.write(`  Probing ${model} ...`);
-          const ok = await client.probeModel(model);
+          const ok = (await client.probeModel(model)).ok;
           if (!ok) {
             process.stderr.write(' still down\n');
             return { model, status: 'down' as const };

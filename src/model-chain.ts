@@ -163,15 +163,11 @@ export async function probeModels(
     const probes = batch.map(async (tagged) => {
       const client = clients[tagged.provider];
       if (!client) return null;
-      let timer: NodeJS.Timeout | undefined;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
       try {
         const start = Date.now();
-        const result = await Promise.race([
-          client.probeModel(tagged.id),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-          }),
-        ]);
+        const result = await client.probeModel(tagged.id, { signal: controller.signal });
         if (result.ok) return { model: tagged, latency: Date.now() - start };
         if (result.permanent) {
           skip.set(tagged.id, result.status ?? 0);
@@ -180,7 +176,7 @@ export async function probeModels(
       } catch {
         return null;
       } finally {
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
       }
     });
 

@@ -96,15 +96,11 @@ export async function probeModels(chain, clients) {
             const client = clients[tagged.provider];
             if (!client)
                 return null;
-            let timer;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
             try {
                 const start = Date.now();
-                const result = await Promise.race([
-                    client.probeModel(tagged.id),
-                    new Promise((_, reject) => {
-                        timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-                    }),
-                ]);
+                const result = await client.probeModel(tagged.id, { signal: controller.signal });
                 if (result.ok)
                     return { model: tagged, latency: Date.now() - start };
                 if (result.permanent) {
@@ -116,8 +112,7 @@ export async function probeModels(chain, clients) {
                 return null;
             }
             finally {
-                if (timer)
-                    clearTimeout(timer);
+                clearTimeout(timer);
             }
         });
         const results = await Promise.all(probes);

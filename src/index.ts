@@ -748,7 +748,8 @@ export async function run(): Promise<void> {
     core.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
   }
   const skippedCount = probeOutcome.skip.size;
-  const attemptedCount = chain.length - skippedCount;
+  const withClientCount = chain.filter(t => clients[t.provider]).length;
+  const attemptedCount = withClientCount - skippedCount;
   core.info(`Skipped ${skippedCount} dead models, attempted ${attemptedCount} healthy models`);
   const filesDiffMap: Record<string, string> = {};
   for (const file of filesToReview) filesDiffMap[file] = filesDiff[file] || '';
