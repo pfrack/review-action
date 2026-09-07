@@ -285,11 +285,11 @@ Add the observability layer: surface the winner's tier in logs, summarize dead m
 
 #### Automated
 
-- [x] 2.1 Hardcoded fallback constants removed from `src/config.ts`
-- [x] 2.2 Empty provider input handled gracefully (zero models, no crash)
-- [x] 2.3 No references to removed constants in `src/` or `dist/`
-- [x] 2.4 Type check passes: `npm run typecheck`
-- [x] 2.5 Full test suite passes: `npm test`
+- [x] 2.1 Hardcoded fallback constants removed from `src/config.ts` — 2c4e8b1
+- [x] 2.2 Empty provider input handled gracefully (zero models, no crash) — 2c4e8b1
+- [x] 2.3 No references to removed constants in `src/` or `dist/` — 2c4e8b1
+- [x] 2.4 Type check passes: `npm run typecheck` — 2c4e8b1
+- [x] 2.5 Full test suite passes: `npm test` — 2c4e8b1
 
 #### Manual
 

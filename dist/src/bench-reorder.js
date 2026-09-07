@@ -380,6 +380,54 @@ function readCurrentModelsFromAction(actionPath, target) {
     return match[1].split(',').map(s => s.trim()).filter(s => s !== '');
 }
 /**
+ * Derive the human-readable provider name from an action target
+ * (e.g. 'groq_models' → 'groq').
+ */
+export function providerName(target) {
+    return target.replace(/_models$/, '');
+}
+/**
+ * Determine whether any models were explicitly configured for this run.
+ * Used to distinguish a genuine all-fail (models attempted, all dead) from a
+ * first run where no models were benched at all.
+ */
+export function wasModelAttempted() {
+    const benchModels = process.env.BENCH_MODELS;
+    return Boolean(benchModels && benchModels.trim().length > 0);
+}
+/**
+ * Classify an empty benchmark result.
+ *
+ * When the table has zero data rows we face two possibilities:
+ *   1. First run — no models were benched (BENCH_MODELS unset). Preserve the
+ *      current skip-and-exit-green behavior so the pipeline doesn't fail on a
+ *      fresh provider.
+ *   2. All-fail — models were configured but every one failed permanently.
+ *      Exit non-zero so the workflow fails and alerts fire instead of silently
+ *      leaving dead models in defaults.
+ *
+ * When rows exist but every model has tokensPerSec === 0 (all failed to produce
+ * output), rankModels returns an empty list — that is also an all-fail.
+ */
+export function classifyAllModelFailure(rows, ranked, target) {
+    if (rows.length === 0) {
+        if (wasModelAttempted()) {
+            return {
+                failed: true,
+                message: `All ${providerName(target)} models failed — check provider status or model availability. Refusing to commit empty defaults.`,
+            };
+        }
+        return { failed: false, message: 'No benchmark data rows found — no models to bench. Skipping reorder.' };
+    }
+    if (ranked.length === 0) {
+        return {
+            failed: true,
+            message: `All ${providerName(target)} models failed — check provider status or model availability. Refusing to commit empty defaults.`,
+        };
+    }
+    return { failed: false, message: '' };
+}
+/**
  * Main entry point — reads table from stdin, ranks, updates action.yml.
  * With --two-tier, uses two-tier ranking (known models first, then new by latency).
  */
@@ -410,10 +458,6 @@ async function main() {
         process.exit(1);
     }
     const rows = parseMarkdownTable(table);
-    if (rows.length === 0) {
-        console.warn('No benchmark data rows found — all models may have failed. Skipping reorder.');
-        process.exit(0);
-    }
     // Extract latencies
     const latencies = {};
     for (const row of rows) {
@@ -433,6 +477,17 @@ async function main() {
     else {
         ranked = rankModels(rows, latencies, fetchedScoresMap);
         console.log(`Model ranking for ${target} (SWE-bench score):`);
+    }
+    // Check for all-model-fail AFTER ranking — a non-empty table where every
+    // model produced zero tokens (tokensPerSec === 0) also ranks to an empty list.
+    const allFail = classifyAllModelFailure(rows, ranked, target);
+    if (allFail.failed) {
+        console.error(allFail.message);
+        process.exit(1);
+    }
+    if (rows.length === 0) {
+        console.warn(allFail.message);
+        process.exit(0);
     }
     const summaryLines = [
         `\n## Model Ranking (${target})\n`,
