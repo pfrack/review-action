@@ -375,16 +375,19 @@ export class OpenAIClient {
             reader.releaseLock();
         }
     }
-    async probeModel(model) {
+    async probeModel(model, opts = {}) {
         try {
             await this.chat(model, [{ role: 'user', content: 'Say hi' }], {
                 temperature: 0,
                 maxTokens: 8,
+                signal: opts.signal,
             });
-            return true;
+            return { ok: true, permanent: false };
         }
-        catch {
-            return false;
+        catch (err) {
+            const status = err instanceof RetryableError ? err.status : undefined;
+            const permanent = status === 410;
+            return { ok: false, permanent, status };
         }
     }
     async listModels() {

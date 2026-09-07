@@ -432,7 +432,7 @@ function makeMockClient(probeResult, delayMs = 0) {
         probeModel: async (_model) => {
             if (delayMs > 0)
                 await new Promise(r => setTimeout(r, delayMs));
-            return probeResult;
+            return { ok: probeResult, permanent: false };
         },
     };
 }
@@ -442,7 +442,7 @@ function makeVariableLatencyClient(latencies, probeResult = true) {
             const delay = latencies[model] ?? 0;
             if (delay > 0)
                 await new Promise(r => setTimeout(r, delay));
-            return probeResult;
+            return { ok: probeResult, permanent: false };
         },
     };
 }
@@ -454,7 +454,7 @@ function makeClients(model, client) {
     return clients;
 }
 describe('probeModels', () => {
-    it('returns null when all probes fail', async () => {
+    it('returns null head when all probes fail', async () => {
         const chain = [
             { id: 'model-a', provider: 'nim' },
             { id: 'model-b', provider: 'mistral' },
@@ -462,7 +462,7 @@ describe('probeModels', () => {
         const clients = makeClients(chain[0], makeMockClient(false));
         clients.mistral = makeMockClient(false);
         const result = await probeModels(chain, clients);
-        assert.strictEqual(result, null);
+        assert.strictEqual(result.head, null);
     });
     it('returns the fastest available model', async () => {
         const chain = [
@@ -472,8 +472,8 @@ describe('probeModels', () => {
         const clients = makeClients(chain[0], makeMockClient(true, 50));
         clients.mistral = makeMockClient(true, 10);
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'model-fast');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'model-fast');
     });
     it('skips models whose provider client is null', async () => {
         const chain = [
@@ -482,15 +482,15 @@ describe('probeModels', () => {
         ];
         const clients = makeClients(chain[0], makeMockClient(true));
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'model-a');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'model-a');
     });
-    it('returns null when chain is empty', async () => {
+    it('returns null head when chain is empty', async () => {
         const clients = {
             nim: null, mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels([], clients);
-        assert.strictEqual(result, null);
+        assert.strictEqual(result.head, null);
     });
     it('does not promote a fastest probe whose SWE score is well below the chain head', async () => {
         // deepseek-v4-pro (0.806) is the head, mistral-medium-3.5 (0.776) is fastest.
@@ -505,7 +505,7 @@ describe('probeModels', () => {
             groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
-        assert.strictEqual(result, null);
+        assert.strictEqual(result.head, null);
     });
     it('promotes a fastest probe that is competitive with the chain head', async () => {
         // deepseek-v4-pro (0.806) is the head, deepseek-v4-flash (0.790) is fastest.
@@ -522,8 +522,8 @@ describe('probeModels', () => {
             mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-flash');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'deepseek-ai/deepseek-v4-flash');
     });
     it('promotes a fastest probe that beats the chain head on SWE score', async () => {
         // Hypothetical scenario where the head is a low-SWE model and a higher-SWE
@@ -544,8 +544,8 @@ describe('probeModels', () => {
             mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-pro');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'deepseek-ai/deepseek-v4-pro');
     });
     it('returns the head itself when the head is the fastest probed model', async () => {
         // The head is fastest — no reordering happens later (fastestIndex is 0)
@@ -560,8 +560,8 @@ describe('probeModels', () => {
             groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
         };
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'deepseek-ai/deepseek-v4-pro');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'deepseek-ai/deepseek-v4-pro');
     });
     it('does not promote a faster probe over a custom head when scoreOverride protects it', async () => {
         // Custom head has scoreOverride=0.99 (user knows their model is great).
@@ -576,7 +576,7 @@ describe('probeModels', () => {
             groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
         };
         const result = await probeModels(chain, clients);
-        assert.strictEqual(result, null);
+        assert.strictEqual(result.head, null);
     });
     it('promotes a faster probe over a custom head when scoreOverride is the default 0.5', async () => {
         // With default scoreOverride=0.5 on a custom head, any non-custom
@@ -593,8 +593,8 @@ describe('probeModels', () => {
             groq: makeVariableLatencyClient({ 'llama-3.3-70b-versatile': 10 }),
         };
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'llama-3.3-70b-versatile');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'llama-3.3-70b-versatile');
     });
     it('respects scoreOverride on the fastest model too (override wins over table score)', async () => {
         // Fastest model is a custom model whose scoreOverride is artificially
@@ -611,7 +611,7 @@ describe('probeModels', () => {
             mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null,
         };
         const result = await probeModels(chain, clients);
-        assert.ok(result);
-        assert.strictEqual(result.id, 'my-custom-model');
+        assert.ok(result.head);
+        assert.strictEqual(result.head.id, 'my-custom-model');
     });
 });

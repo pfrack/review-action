@@ -461,7 +461,7 @@ describe('readmitCatalogModels', () => {
         const client = {
             probeModel: () => track(async () => {
                 await new Promise((r) => setTimeout(r, 10));
-                return true;
+                return { ok: true, permanent: false };
             }),
             chat: () => track(async () => {
                 await new Promise((r) => setTimeout(r, 10));
@@ -493,5 +493,46 @@ describe('readmitCatalogModels', () => {
         assert.strictEqual(results.length, 4);
         assert.ok(maxInFlight <= 2, `max in-flight was ${maxInFlight}`);
         assert.ok(maxInFlight >= 2, `expected batching, max in-flight was ${maxInFlight}`);
+    });
+    it('does NOT re-admit models whose probe returns 410 (regression for inverted boolean check)', async () => {
+        actionPath = makeActionYml(testDir, []);
+        const availableModels = new Set([
+            'stepfun-ai/step-3.7-flash',
+        ]);
+        let probeCalls = 0;
+        let benchCalls = 0;
+        handle = await startMockServer((req, res) => {
+            let body = '';
+            req.on('data', (chunk) => body += chunk);
+            req.on('end', () => {
+                const payload = JSON.parse(body);
+                const isProbe = payload.messages?.[0]?.content === 'Say hi';
+                if (isProbe) {
+                    probeCalls += 1;
+                    res.writeHead(410, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: { message: 'Gone' } }));
+                    return;
+                }
+                benchCalls += 1;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    choices: [{ message: { content: 'ok' } }],
+                    usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 },
+                }));
+            });
+        });
+        const client = new OpenAIClient(handle.url, 'test-key');
+        const { results, reAdmitted } = await readmitCatalogModels({
+            availableModels,
+            actionPath,
+            client,
+            benchPrompt: BENCH_PROMPT,
+            iterations: 1,
+            limit: 10,
+        });
+        assert.strictEqual(probeCalls, 1, 'probe should be attempted exactly once');
+        assert.strictEqual(benchCalls, 0, 'benchmark should NOT run when probe returns 410');
+        assert.deepStrictEqual(reAdmitted, [], '410-returning model must not be re-admitted');
+        assert.deepStrictEqual(results, []);
     });
 });

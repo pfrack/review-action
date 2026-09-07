@@ -8,7 +8,7 @@ import { listReviewThreads } from './github-graphql.js';
 import { formatPreviousFindings } from './previous-findings.js';
 import { buildSystemPrompt, buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
-import { buildCombinedChain, type Provider, type TaggedModel } from './model-chain.js';
+import { buildCombinedChain, type Provider, type TaggedModel, type ProbeOutcome } from './model-chain.js';
 import { probeModels } from './model-chain.js';
 import { getSweBenchScore } from './bench-reorder.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
@@ -256,12 +256,13 @@ export async function runModelChainForBatch(
   config: Config,
   modelTimeoutMs = 60_000,
   signal?: AbortSignal,
+  skipModels?: Set<string>,
 ): Promise<BatchResult> {
   const combinedDiff = batch.files.map(f => `\n--- ${f} ---\n${batch.diffs[f]}\n`).join('');
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${combinedDiff}\n\`\`\``;
   const maxTokens = computeMaxTokens(combinedDiff, config.maxTokens);
 
-  const availableChain = chain.filter(tagged => clients[tagged.provider]);
+  const availableChain = chain.filter(tagged => clients[tagged.provider] && (!skipModels || !skipModels.has(tagged.id)));
 
   let batchReview: ReviewType | null = null;
   let batchUsedModel = '';
@@ -332,6 +333,7 @@ export async function runModelChainForBatch(
       batchReview = { findings: winner.findings, summary: winner.summary };
       batchUsedModel = winner.usedModel;
       batchDropped = winner.dropped;
+      core.info(`Winner: ${winner.usedModel} (tier: ${winner.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${winnerScore.toFixed(3)})`);
     } else if (fallbackContent) {
       // All parallel attempts failed but we captured raw content.
       // Continue to remaining chain sequentially; fallthrough overwrites
@@ -391,6 +393,7 @@ export async function runModelChainForBatch(
           batchReview = { findings: result.findings, summary: result.summary };
           batchUsedModel = result.usedModel;
           batchDropped = result.dropped;
+          core.info(`Winner: ${result.usedModel} (tier: ${result.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${effectiveScore(tagged, result.latencyMs).toFixed(3)})`);
           break;
         }
         // Validation failed after retry — preserve lastRawContent
@@ -482,16 +485,18 @@ export function detectLanguage(files: string[]): string | undefined {
     .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
 }
 
-export async function prioritizeChain(chain: { id: string; provider: Provider }[], clients: Record<Provider, OpenAIClient | null>): Promise<void> {
+export async function prioritizeChain(chain: { id: string; provider: Provider }[], clients: Record<Provider, OpenAIClient | null>): Promise<ProbeOutcome> {
   try {
-    const probed = await probeModels(chain, clients);
-    if (probed) {
-      core.info(`Probe: ${probed.id} (${probed.provider}) — fastest available`);
+    const outcome = await probeModels(chain, clients);
+    if (outcome.head) {
+      core.info(`Probe: ${outcome.head.id} (${outcome.head.provider}) — fastest available`);
     } else {
       core.info(`Probe: no model available, using SWE-bench chain order`);
     }
+    return outcome;
   } catch (probeErr) {
     core.warning(`Model probing failed, using original chain order: ${probeErr}`);
+    return { head: null, skip: new Map() };
   }
 }
 
@@ -503,6 +508,7 @@ export async function executeReview(
   batches: FileBatch[],
   systemMessage: string,
   config: Config,
+  skipModels?: Set<string>,
 ): Promise<{ review: ReviewType; usedModel: string; lastRawContent: string; validationDropped: number; batchCount: number }> {
   const work = batches.length > 1 ? batches : [{ files: filesToReview, diffs: filesDiffMap }];
   const batchResults: BatchResult[] = [];
@@ -512,7 +518,7 @@ export async function executeReview(
       core.info(`Processing batch ${batchResults.length + 1}/${batches.length} (${batch.files.length} files)`);
     }
     const runBatch = (signal?: AbortSignal) => runModelChainForBatch(
-      chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal,
+      chain, clients, batch, systemMessage, 'json_schema', config, modelTimeoutMs, signal, skipModels,
     );
     let result: BatchResult | null;
     try {
@@ -736,7 +742,15 @@ export async function run(): Promise<void> {
   core.info(`Reviewing ${filesToReview.length} files...`);
   const detectedLanguage = detectLanguage(filesToReview);
   if (detectedLanguage) core.info(`Detected language: ${detectedLanguage}`);
-  await prioritizeChain(chain, clients);
+  const probeOutcome = await prioritizeChain(chain, clients);
+  if (probeOutcome.skip.size > 0) {
+    const skipList = [...probeOutcome.skip.entries()].map(([id, status]) => `${id} (${status})`).join(', ');
+    core.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
+  }
+  const skippedCount = probeOutcome.skip.size;
+  const withClientCount = chain.filter(t => clients[t.provider]).length;
+  const attemptedCount = withClientCount - skippedCount;
+  core.info(`Skipped ${skippedCount} dead models, attempted ${attemptedCount} healthy models`);
   const filesDiffMap: Record<string, string> = {};
   for (const file of filesToReview) filesDiffMap[file] = filesDiff[file] || '';
   const batches = filesToReview.length > 50 ? batchFiles(filesDiffMap, 50) : [];
@@ -756,7 +770,7 @@ export async function run(): Promise<void> {
     core.warning(`Could not load previous findings; continuing without carry-over context: ${err instanceof Error ? err.message : String(err)}`);
   }
   const systemMessage = buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, filteredRules, previousFindingsBlock);
-  const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config);
+  const result = await executeReview(chain, clients, filesToReview, filesDiffMap, batches, systemMessage, config, probeOutcome.skip.size > 0 ? new Set(probeOutcome.skip.keys()) : undefined);
   const counts = await dispatchOutput({ repo, prNumber, token, config, review: result.review, reviewableFiles, filesToReview, truncated, usedModel: result.usedModel, lastRawContent: result.lastRawContent, commitSha });
   await writeMetrics({ pr_number: prNumber, model_used: result.usedModel.split('/').pop() || result.usedModel, findings_count: counts, files_reviewed: filesToReview.length, review_duration_ms: Date.now() - reviewStartTime, validation_dropped: result.validationDropped, batch_count: result.batchCount });
 }

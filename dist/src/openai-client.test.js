@@ -435,7 +435,7 @@ describe('OpenAIClient', () => {
         const client = new OpenAIClient('https://example.com/v1/', 'key');
         assert.strictEqual(client.baseURL, 'https://example.com/v1');
     });
-    it('probeModel returns true on success', async () => {
+    it('probeModel returns ok on success', async () => {
         const mock = await startMockServer((_req, res) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -445,20 +445,73 @@ describe('OpenAIClient', () => {
         });
         try {
             const client = new OpenAIClient(mock.url, 'key');
-            assert.strictEqual(await client.probeModel('model'), true);
+            const result = await client.probeModel('model');
+            assert.strictEqual(result.ok, true);
+            assert.strictEqual(result.permanent, false);
         }
         finally {
             mock.close();
         }
     });
-    it('probeModel returns false on error', async () => {
+    it('probeModel returns permanent=true on 410', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(410);
+            res.end('gone');
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.probeModel('model');
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.permanent, true);
+            assert.strictEqual(result.status, 410);
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('probeModel returns permanent=false on 403 (transient: ambiguous, may be rate-limit)', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(403);
+            res.end('forbidden');
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.probeModel('model');
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.permanent, false);
+            assert.strictEqual(result.status, 403);
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('probeModel returns permanent=false on 413 (transient: ambiguous, may be request-shape)', async () => {
+        const mock = await startMockServer((_req, res) => {
+            res.writeHead(413);
+            res.end('too large');
+        });
+        try {
+            const client = new OpenAIClient(mock.url, 'key');
+            const result = await client.probeModel('model');
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.permanent, false);
+            assert.strictEqual(result.status, 413);
+        }
+        finally {
+            mock.close();
+        }
+    });
+    it('probeModel returns permanent=false on 500', async () => {
         const mock = await startMockServer((_req, res) => {
             res.writeHead(500);
             res.end('error');
         });
         try {
             const client = new OpenAIClient(mock.url, 'key');
-            assert.strictEqual(await client.probeModel('model'), false);
+            const result = await client.probeModel('model');
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.permanent, false);
+            assert.strictEqual(result.status, 500);
         }
         finally {
             mock.close();

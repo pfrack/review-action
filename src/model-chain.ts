@@ -146,32 +146,37 @@ export function buildCombinedChain(opts: ChainOptions): TaggedModel[] {
 const PROBE_TIMEOUT_MS = 10_000;
 const PROBE_CONCURRENCY = 3;
 
+export interface ProbeOutcome {
+  head: TaggedModel | null;
+  skip: Map<string, number>;
+}
+
 export async function probeModels(
   chain: TaggedModel[],
   clients: Record<Provider, OpenAIClient | null>,
-): Promise<TaggedModel | null> {
+): Promise<ProbeOutcome> {
   const available: { model: TaggedModel; latency: number }[] = [];
+  const skip = new Map<string, number>();
 
   for (let i = 0; i < chain.length; i += PROBE_CONCURRENCY) {
     const batch = chain.slice(i, i + PROBE_CONCURRENCY);
     const probes = batch.map(async (tagged) => {
       const client = clients[tagged.provider];
       if (!client) return null;
-      let timer: NodeJS.Timeout | undefined;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
       try {
         const start = Date.now();
-        const ok = await Promise.race([
-          client.probeModel(tagged.id),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-          }),
-        ]);
-        if (ok) return { model: tagged, latency: Date.now() - start };
+        const result = await client.probeModel(tagged.id, { signal: controller.signal });
+        if (result.ok) return { model: tagged, latency: Date.now() - start };
+        if (result.permanent) {
+          skip.set(tagged.id, result.status ?? 0);
+        }
         return null;
       } catch {
         return null;
       } finally {
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
       }
     });
 
@@ -181,7 +186,7 @@ export async function probeModels(
     }
   }
 
-  if (available.length === 0) return null;
+  if (available.length === 0) return { head: null, skip };
   available.sort((a, b) => a.latency - b.latency);
 
   // Cap the promotion: a lower-SWE model that happens to answer the probe
@@ -203,9 +208,9 @@ export async function probeModels(
     const fastest = available[0];
     const fastestScore = fastest.model.scoreOverride ?? getSweBenchScore(fastest.model.id);
     if (fastestScore < headScore - PROBE_PROMOTE_MAX_HEAD_GAP) {
-      return null;
+      return { head: null, skip };
     }
   }
 
-  return available[0].model;
+  return { head: available[0].model, skip };
 }

@@ -538,9 +538,9 @@ describe('prioritizeChain', () => {
     const originalOrder = chain.map(m => m.id);
 
     const clients: Record<Provider, OpenAIClient | null> = {
-      nim: { probeModel: async () => true } as unknown as OpenAIClient,
-      mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return true; } } as unknown as OpenAIClient,
-      groq: { probeModel: async () => true } as unknown as OpenAIClient,
+      nim: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => { await new Promise(r => setTimeout(r, 1)); return { ok: true, permanent: false }; } } as unknown as OpenAIClient,
+      groq: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
       openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
@@ -556,8 +556,8 @@ describe('prioritizeChain', () => {
     const originalOrder = chain.map(m => m.id);
 
     const clients: Record<Provider, OpenAIClient | null> = {
-      nim: { probeModel: async () => true } as unknown as OpenAIClient,
-      mistral: { probeModel: async () => true } as unknown as OpenAIClient,
+      nim: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
+      mistral: { probeModel: async () => ({ ok: true, permanent: false }) } as unknown as OpenAIClient,
       groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
     };
 
@@ -1078,5 +1078,89 @@ describe('dispatchOutput — comment_mode branch', () => {
     } finally {
       mock.restore();
     }
+  });
+});
+
+describe('EOL model skip — dead models excluded, healthy wins', () => {
+  it('excludes permanently-failed models from chain execution; healthy wins', async () => {
+    const config = makeConfig({ parallelAttempts: 1 });
+    const messages: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (data: any) => {
+      if (typeof data === 'string') messages.push(data);
+      return true;
+    };
+
+    const chain: TaggedModel[] = [
+      { id: 'stepfun-ai/step-3.7-flash', provider: 'nim' },
+      { id: 'nvidia/llama-3.3-nemotron-super-49b-v1.5', provider: 'nim' },
+      { id: 'mistralai/mistral-nemotron', provider: 'nim' },
+    ];
+
+    const deadModels = new Set(['stepfun-ai/step-3.7-flash', 'nvidia/llama-3.3-nemotron-super-49b-v1.5']);
+
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: {
+        probeModel: async (model: string) => {
+          if (deadModels.has(model)) return { ok: false, permanent: true, status: 410 };
+          return { ok: true, permanent: false };
+        },
+        chat: async (_model: string, _msgs: ChatMessage[], opts?: ChatOptions): Promise<ChatResult> => {
+          if (opts?.signal?.aborted) {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            throw err;
+          }
+          return { ...VALID_CHAT_RESULT, latency: 100 };
+        },
+      } as unknown as OpenAIClient,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    try {
+      const result = await runModelChainForBatch(
+        chain, clients, TEST_BATCH, 'system', 'json_schema', config, 5000,
+        undefined, new Set(deadModels),
+      );
+
+      // The dead models must NOT be the winner
+      assert.ok(!deadModels.has(result.usedModel), `dead model ${result.usedModel} should not have won`);
+      assert.strictEqual(result.usedModel, 'mistralai/mistral-nemotron', 'healthy model should win');
+      assert.strictEqual(result.findings.length, 1, 'healthy model should produce findings');
+
+      // Winner tier log should appear for the healthy (paid-tier) winner
+      const winnerLog = messages.find(m => m.includes('Winner:') && m.includes('mistralai/mistral-nemotron'));
+      assert.ok(winnerLog, `expected winner log, got: ${JSON.stringify(messages)}`);
+      assert.ok(winnerLog.includes('tier: paid'), 'non-free winner should log tier: paid');
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  });
+
+  it('prioritizeChain returns permanent-failure skip set for dead models', async () => {
+    const chain: TaggedModel[] = [
+      { id: 'stepfun-ai/step-3.7-flash', provider: 'nim' },
+      { id: 'nvidia/llama-3.3-nemotron-super-49b-v1.5', provider: 'nim' },
+      { id: 'mistralai/mistral-nemotron', provider: 'nim' },
+    ];
+
+    const deadModels = new Set(['stepfun-ai/step-3.7-flash', 'nvidia/llama-3.3-nemotron-super-49b-v1.5']);
+
+    const clients: Record<Provider, OpenAIClient | null> = {
+      nim: {
+        probeModel: async (model: string) => {
+          if (deadModels.has(model)) return { ok: false, permanent: true, status: 410 };
+          return { ok: true, permanent: false };
+        },
+      } as unknown as OpenAIClient,
+      mistral: null, groq: null, openrouter: null, kilocode: null, nousresearch: null, custom: null,
+    };
+
+    const outcome = await prioritizeChain(chain, clients);
+
+    assert.strictEqual(outcome.skip.size, 2, 'both dead models should be in the skip set');
+    assert.ok(outcome.skip.has('stepfun-ai/step-3.7-flash'), 'stepfun should be skipped');
+    assert.ok(outcome.skip.has('nvidia/llama-3.3-nemotron-super-49b-v1.5'), 'nemotron should be skipped');
+    assert.strictEqual(outcome.skip.get('stepfun-ai/step-3.7-flash'), 410, 'stepfun skip should record 410 status');
   });
 });

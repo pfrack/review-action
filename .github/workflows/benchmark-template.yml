@@ -124,6 +124,9 @@ jobs:
             echo "No benchmark table found, skipping reorder"
           fi
 
+      - name: Rebuild bundle
+        run: npm run build
+
       - name: Commit updated model order
         if: github.ref == 'refs/heads/main'
         env:
@@ -133,6 +136,7 @@ jobs:
           if [ "${{ inputs.discover_new }}" = "true" ]; then git add src/bench-reorder.ts; fi
           if [ -n "${{ inputs.removed_path }}" ] && [ -f "${{ inputs.removed_path }}" ]; then git add "${{ inputs.removed_path }}"; fi
           if [ -n "${{ inputs.history_path }}" ] && [ -f "${{ inputs.history_path }}" ]; then git add "${{ inputs.history_path }}"; fi
+          git add dist/
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

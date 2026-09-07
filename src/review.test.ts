@@ -88,7 +88,7 @@ describe('loadConfig — mistral fields', () => {
     }, async () => {
       const config = await loadConfig();
       assert.strictEqual(config.mistralApiKey, '');
-      assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
+      assert.deepStrictEqual(config.mistralModels, []);
     });
   });
 });

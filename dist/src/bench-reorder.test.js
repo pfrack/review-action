@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, updateActionYmlNousResearch, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable } from './bench-reorder.js';
+import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, updateActionYmlNousResearch, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable, classifyAllModelFailure, providerName, wasModelAttempted } from './bench-reorder.js';
 import { startMockServer } from './test-utils.js';
 describe('updateActionYml groq target', () => {
     it('correctly replaces groq_models default', () => {
@@ -847,6 +847,113 @@ inputs:
         }
         finally {
             rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+describe('bench-reorder classifyAllModelFailure', () => {
+    const oriBenchModels = process.env.BENCH_MODELS;
+    const target = 'groq_models';
+    function setBenchModels(value) {
+        if (value === undefined)
+            delete process.env.BENCH_MODELS;
+        else
+            process.env.BENCH_MODELS = value;
+    }
+    function restore() {
+        setBenchModels(oriBenchModels);
+    }
+    it('returns failed when no rows and models were attempted (all-fail)', () => {
+        setBenchModels('openai/gpt-oss-120b');
+        try {
+            const result = classifyAllModelFailure([], [], target);
+            assert.strictEqual(result.failed, true);
+            assert.ok(result.message.includes('All groq models failed'));
+            assert.ok(result.message.includes('Refusing to commit empty defaults'));
+        }
+        finally {
+            restore();
+        }
+    });
+    it('returns NOT failed when no rows and no models attempted (first run)', () => {
+        setBenchModels(undefined);
+        try {
+            const result = classifyAllModelFailure([], [], target);
+            assert.strictEqual(result.failed, false);
+            assert.ok(result.message.includes('no models to bench'));
+        }
+        finally {
+            restore();
+        }
+    });
+    it('returns failed when rows exist but all have zero tokensPerSec', () => {
+        setBenchModels(undefined);
+        try {
+            const rows = [
+                { model: 'model-a', ttftMs: 100, latencyMs: 5000, tokensPerSec: 0, errors: 2 },
+                { model: 'model-b', ttftMs: 200, latencyMs: 6000, tokensPerSec: 0, errors: 2 },
+            ];
+            const result = classifyAllModelFailure(rows, [], target);
+            assert.strictEqual(result.failed, true);
+            assert.ok(result.message.includes('All groq models failed'));
+        }
+        finally {
+            restore();
+        }
+    });
+    it('returns NOT failed when ranked models exist', () => {
+        setBenchModels('openai/gpt-oss-120b');
+        try {
+            const rows = [
+                { model: 'model-a', ttftMs: 100, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+            ];
+            const result = classifyAllModelFailure(rows, ['model-a'], target);
+            assert.strictEqual(result.failed, false);
+        }
+        finally {
+            restore();
+        }
+    });
+});
+describe('providerName', () => {
+    it('strips the _models suffix', () => {
+        assert.strictEqual(providerName('nim_models'), 'nim');
+        assert.strictEqual(providerName('groq_models'), 'groq');
+        assert.strictEqual(providerName('openrouter_models'), 'openrouter');
+    });
+});
+describe('wasModelAttempted', () => {
+    const ori = process.env.BENCH_MODELS;
+    function restore() {
+        if (ori === undefined)
+            delete process.env.BENCH_MODELS;
+        else
+            process.env.BENCH_MODELS = ori;
+    }
+    it('returns true when BENCH_MODELS is non-empty', () => {
+        process.env.BENCH_MODELS = 'openai/gpt-oss-120b';
+        try {
+            assert.strictEqual(wasModelAttempted(), true);
+        }
+        finally {
+            restore();
+        }
+    });
+    it('returns false when BENCH_MODELS is unset', () => {
+        delete process.env.BENCH_MODELS;
+        try {
+            assert.strictEqual(wasModelAttempted(), false);
+        }
+        finally {
+            restore();
+        }
+    });
+    it('returns false when BENCH_MODELS is whitespace-only', () => {
+        process.env.BENCH_MODELS = '   ';
+        try {
+            assert.strictEqual(wasModelAttempted(), false);
+        }
+        finally {
+            restore();
         }
     });
 });
