@@ -278,6 +278,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
             batchReview = { findings: winner.findings, summary: winner.summary };
             batchUsedModel = winner.usedModel;
             batchDropped = winner.dropped;
+            core.info(`Winner: ${winner.usedModel} (tier: ${winner.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${winnerScore.toFixed(3)})`);
         }
         else if (fallbackContent) {
             // All parallel attempts failed but we captured raw content.
@@ -335,6 +336,7 @@ export async function runModelChainForBatch(chain, clients, batch, systemMessage
                     batchReview = { findings: result.findings, summary: result.summary };
                     batchUsedModel = result.usedModel;
                     batchDropped = result.dropped;
+                    core.info(`Winner: ${result.usedModel} (tier: ${result.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${effectiveScore(tagged, result.latencyMs).toFixed(3)})`);
                     break;
                 }
                 // Validation failed after retry — preserve lastRawContent
@@ -678,6 +680,9 @@ export async function run() {
         const skipList = [...probeOutcome.skip.entries()].map(([id, status]) => `${id} (${status})`).join(', ');
         core.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
     }
+    const skippedCount = probeOutcome.skip.size;
+    const attemptedCount = chain.length - skippedCount;
+    core.info(`Skipped ${skippedCount} dead models, attempted ${attemptedCount} healthy models`);
     const filesDiffMap = {};
     for (const file of filesToReview)
         filesDiffMap[file] = filesDiff[file] || '';

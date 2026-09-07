@@ -300,11 +300,11 @@ Add the observability layer: surface the winner's tier in logs, summarize dead m
 
 #### Automated
 
-- [ ] 3.1 `npm run build` runs in bench workflow after reorder
-- [ ] 3.2 `dist/` changes committed alongside `action.yml`
-- [ ] 3.3 All-model-fail exits non-zero with clear error message
-- [ ] 3.4 Type check passes: `npm run typecheck`
-- [ ] 3.5 Full test suite passes: `npm test`
+- [x] 3.1 `npm run build` runs in bench workflow after reorder — a91ecd4
+- [x] 3.2 `dist/` changes committed alongside `action.yml` — a91ecd4
+- [x] 3.3 All-model-fail exits non-zero with clear error message — a91ecd4
+- [x] 3.4 Type check passes: `npm run typecheck` — a91ecd4
+- [x] 3.5 Full test suite passes: `npm test` — a91ecd4
 
 #### Manual
 

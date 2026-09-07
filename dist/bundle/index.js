@@ -28037,6 +28037,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
             batchReview = { findings: winner.findings, summary: winner.summary };
             batchUsedModel = winner.usedModel;
             batchDropped = winner.dropped;
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Winner: ${winner.usedModel} (tier: ${winner.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${winnerScore.toFixed(3)})`);
         }
         else if (fallbackContent) {
             // All parallel attempts failed but we captured raw content.
@@ -28094,6 +28095,7 @@ async function runModelChainForBatch(chain, clients, batch, systemMessage, respo
                     batchReview = { findings: result.findings, summary: result.summary };
                     batchUsedModel = result.usedModel;
                     batchDropped = result.dropped;
+                    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Winner: ${result.usedModel} (tier: ${result.usedModel.endsWith(':free') ? 'free' : 'paid'}, effectiveScore: ${effectiveScore(tagged, result.latencyMs).toFixed(3)})`);
                     break;
                 }
                 // Validation failed after retry — preserve lastRawContent
@@ -28437,6 +28439,9 @@ async function run() {
         const skipList = [...probeOutcome.skip.entries()].map(([id, status]) => `${id} (${status})`).join(', ');
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Skipping ${probeOutcome.skip.size} models: ${skipList}`);
     }
+    const skippedCount = probeOutcome.skip.size;
+    const attemptedCount = chain.length - skippedCount;
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Skipped ${skippedCount} dead models, attempted ${attemptedCount} healthy models`);
     const filesDiffMap = {};
     for (const file of filesToReview)
         filesDiffMap[file] = filesDiff[file] || '';
