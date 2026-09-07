@@ -315,11 +315,11 @@ Add the observability layer: surface the winner's tier in logs, summarize dead m
 
 #### Automated
 
-- [ ] 3.8 Winner tier logged after selection (`free|paid`, effectiveScore)
-- [ ] 3.9 Dead-model skip summary logged (`Skipped N dead models, attempted M healthy`)
-- [ ] 3.10 EOL integration test passes (dead models skipped, healthy wins)
-- [ ] 3.11 Type check passes: `npm run typecheck`
-- [ ] 3.12 Full test suite passes: `npm test`
+- [x] 3.8 Winner tier logged after selection (`free|paid`, effectiveScore) — 3a49321
+- [x] 3.9 Dead-model skip summary logged (`Skipped N dead models, attempted M healthy`) — 3a49321
+- [x] 3.10 EOL integration test passes (dead models skipped, healthy wins) — 3a49321
+- [x] 3.11 Type check passes: `npm run typecheck` — 3a49321
+- [x] 3.12 Full test suite passes: `npm test` — 3a49321
 
 #### Manual
 
