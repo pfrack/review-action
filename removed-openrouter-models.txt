@@ -1,2 +1,5 @@
+poolside/laguna-s-2.1:free
+poolside/laguna-xs-2.1:free
+google/gemma-4-31b-it:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free

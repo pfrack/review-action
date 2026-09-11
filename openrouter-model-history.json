@@ -21,6 +21,7 @@
   },
   "openrouter": {
     "models": [
+      "inclusionai/ling-3.0-flash-vl:free",
       "nex-agi/nex-n2.5-mini:free",
       "nex-agi/nex-n2.5-pro:free",
       "inclusionai/ling-3.0-flash-sante:free",

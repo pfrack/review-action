@@ -25773,6 +25773,7 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (measured/estimated scores)
+    'inclusionai/ling-3.0-flash-vl:free': 0.5,
     'nex-agi/nex-n2.5-mini:free': 0.5,
     'nex-agi/nex-n2.5-pro:free': 0.5,
     'inclusionai/ling-3.0-flash-sante:free': 0.5,
