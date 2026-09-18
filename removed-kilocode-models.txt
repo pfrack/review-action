@@ -1,0 +1,2 @@
+thinkingmachines/inkling-small:free
+z-ai/glm-5.2:free

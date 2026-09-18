@@ -1,0 +1,151 @@
+name: 'NIM Code Review'
+description: 'AI-powered code review using NVIDIA NIM models with fallback. Set `comment_mode: inline` to post line-anchored review comments (requires `pull-requests: write`; falls back to summary mode automatically if unavailable)'
+branding:
+  icon: 'search'
+  color: 'green'
+inputs:
+  nim_api_key:
+    description: 'NVIDIA NIM API key'
+    required: false
+    default: ''
+  nim_base_url:
+    description: 'NIM API base URL'
+    default: 'https://integrate.api.nvidia.com/v1'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'nvidia/nemotron-3-ultra-550b-a55b,nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b,poolside/laguna-xs-2.1'
+  mistral_api_key:
+    description: 'Mistral API key (enables Mistral models in fallback chain)'
+    default: ''
+  mistral_base_url:
+    description: 'Mistral API base URL'
+    default: 'https://api.mistral.ai/v1'
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'codestral-2508'
+  groq_api_key:
+    description: 'Groq API key (enables Groq models in fallback chain)'
+    default: ''
+  groq_base_url:
+    description: 'Groq API base URL'
+    default: 'https://api.groq.com/openai/v1'
+  groq_models:
+    description: 'Comma-separated Groq model fallback chain'
+    default: 'openai/gpt-oss-120b'
+  openrouter_api_key:
+    description: 'OpenRouter API key'
+    required: false
+    default: ''
+  openrouter_base_url:
+    description: 'OpenRouter API base URL'
+    default: 'https://openrouter.ai/api/v1'
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain (defaults to all free-tier models from provider when empty)'
+    default: 'poolside/laguna-s-2.1:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-content-safety:free,inclusionai/ling-3.0-flash-fin:free,inclusionai/ling-3.0-flash-sante:free,openrouter/free,inclusionai/ling-3.0-flash-vl:free,nex-agi/nex-n2.5-pro:free,nex-agi/nex-n2.5-mini:free,nvidia/nemotron-3.5-lightning:free,dots-studio/dots-3-note-preview:free,google/gemma-4-31b-it:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-26b-a4b-it:free,liquid/lfm-2.5-2.6b:free,z-ai/glm-5.2:free,qwen/qwen3.8-27b:free,deepseek/deepseek-v4-flash-0731:free'
+  openrouter_free_only:
+    description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
+    default: 'false'
+  kilocode_api_key:
+    description: 'Kilo Gateway API key'
+    required: false
+    default: ''
+  kilocode_base_url:
+    description: 'Kilo Gateway API base URL'
+    default: 'https://api.kilo.ai/api/gateway'
+  kilocode_models:
+    description: 'Comma-separated Kilo model fallback chain (defaults to all free-tier models from provider when empty)'
+    default: 'poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,poolside/laguna-xs-2.1:free,nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-content-safety:free,openrouter/free,inclusionai/ling-3.0-flash-fin:free,inclusionai/ling-3.0-flash-sante:free,nex-agi/nex-n2.5-mini:free,nex-agi/nex-n2.5-pro:free,kilo-auto/free,inclusionai/ling-3.0-flash-vl:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,liquid/lfm-2.5-2.6b:free'
+  kilocode_free_only:
+    description: 'Filter Kilo models to only use free-tier (:free suffix) models'
+    default: 'false'
+  nousresearch_api_key:
+    description: 'NousResearch inference API key (enables NousResearch free-tier models in fallback chain)'
+    required: false
+    default: ''
+  nousresearch_base_url:
+    description: 'NousResearch inference API base URL'
+    default: 'https://inference-api.nousresearch.com/v1'
+  nousresearch_models:
+    description: 'Comma-separated NousResearch model fallback chain (defaults to all free-tier models from provider when empty)'
+    default: 'poolside/laguna-s-2.1:free,poolside/laguna-xs-2.1:free,meituan/longcat-2.0:free,inclusionai/ling-3.0-flash-fin:free,inclusionai/ling-3.0-flash-sante:free'
+  nousresearch_free_only:
+    description: 'Filter NousResearch models to only use free-tier (:free suffix) models'
+    default: 'false'
+  custom_models:
+    description: 'Comma-separated custom model IDs for the custom API endpoint (multiple models enable fallback)'
+    required: false
+    default: ''
+  custom_models_base_url:
+    description: 'Base URL for custom_models (defaults to custom_api_url if not set)'
+    default: ''
+  custom_api_url:
+    description: 'Custom OpenAI-compatible API base URL (tried before NIM models)'
+    required: false
+    default: ''
+  custom_model:
+    description: 'Model name for the custom API endpoint'
+    required: false
+    default: ''
+  custom_api_key:
+    description: 'API key for the custom endpoint (can be empty for local/keyless endpoints)'
+    required: false
+    default: ''
+  custom_swe_score:
+    description: 'SWE-bench score assigned to the custom model(s) (default 0.5). Used by the probe-based chain reorder cap so you can stop a faster-but-worse provider model from leapfrogging your custom head. Set to a value above your worst provider model (e.g. 0.99) to fully protect the custom head from probe promotion.'
+    required: false
+    default: '0.5'
+  max_files:
+    description: 'Max files to review per PR'
+    default: '100'
+  exclude_patterns:
+    description: 'Comma-separated glob patterns to skip'
+    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod,dist/*'
+  nim_system_prompt:
+    description: 'Custom system prompt (appended to default or replaces it)'
+    default: ''
+  nim_prompt_mode:
+    description: 'How to use custom prompt: append (default, appends after default) or replace (replaces default entirely)'
+    default: 'append'
+  custom_rules:
+    description: 'Custom review rules (one per line, e.g., "Always check for SQL injection")'
+    required: false
+    default: ''
+  revalidate_findings:
+    description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
+    required: false
+    default: 'false'
+  strict_revalidation:
+    description: 'Drop all findings when LLM revalidation fails instead of passing them through unverified'
+    required: false
+    default: 'false'
+  drop_unreferenced:
+    description: 'Drop findings whose backtick-wrapped identifier or explicit `function X`/`variable X` reference is not present in the diff. Default true. Set false to keep them as soft warnings (legacy behavior).'
+    required: false
+    default: 'true'
+  model_timeout:
+    description: 'Timeout in seconds for each individual model call (0 = no per-model limit)'
+    required: false
+    default: '90'
+  chain_timeout:
+    description: 'Overall timeout in seconds for the full model chain (0 = unlimited, keeps trying all models)'
+    required: false
+    default: '0'
+  max_tokens:
+    description: 'Override the adaptive output token limit for each model call. 0 = auto-scale based on diff size (default). Range 256-16384.'
+    required: false
+    default: '0'
+  parallel_attempts:
+    description: 'Number of models to try in parallel via staggered starts. Default 3 (light parallel). Set to 1 for fully sequential. Range 2-5 enables staggered parallel fallback: the head model starts immediately, and each subsequent model starts after parallel_threshold seconds if no winner has emerged.'
+    required: false
+    default: '3'
+  parallel_threshold:
+    description: 'Seconds to wait before starting the next model in parallel (when parallel_attempts > 1). The head model always starts first; this controls how long to wait before launching fallback copies.'
+    required: false
+    default: '40'
+  comment_mode:
+    description: 'Comment output mode: "summary" (one body comment, default) or "inline" (line-anchored review comments via the GitHub Reviews API). Inline mode requires `pull-requests: write` permission and falls back to summary mode if the GraphQL cleanup call fails.'
+    required: false
+    default: 'summary'
+runs:
+  using: 'node24'
+  main: 'dist/bundle/index.js'

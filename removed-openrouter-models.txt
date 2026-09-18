@@ -1,0 +1,2 @@
+thinkingmachines/inkling-small:free
+thinkingmachines/inkling:free

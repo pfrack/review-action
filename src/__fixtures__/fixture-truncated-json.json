@@ -1,0 +1,5 @@
+{
+  "rawResponse": "{\"findings\":[{\"file\":\"src/main.ts\",\"severity\":\"Critical\",\"line_start\":10,\"issue\":\"Unclosed bracket",
+  "shouldParse": false,
+  "notes": "Truncated JSON — simulates finish_reason: 'length' mid-response"
+}
