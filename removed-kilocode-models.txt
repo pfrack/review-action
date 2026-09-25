@@ -1,0 +1,4 @@
+nvidia/nemotron-3-ultra-550b-a55b:free
+qwen/qwen3.8-27b:free
+thinkingmachines/inkling-small:free
+z-ai/glm-5.2:free

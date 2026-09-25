@@ -1,0 +1,28 @@
+name: Daily Model Benchmark - NousResearch
+
+on:
+  schedule:
+    - cron: '50 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-reorder
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.NOUSRESEARCH_API_KEY }}
+    with:
+      provider: nousresearch
+      action_target: nousresearch_models
+      base_url: 'https://inference-api.nousresearch.com/v1'
+      auto_free: true
+      two_tier: true
+      discover_new: true
+      removed_path: removed-nousresearch-models.txt
+      history_path: nousresearch-model-history.json
+      scores_file: fetched-scores.json
