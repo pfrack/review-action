@@ -1,4 +1,9 @@
-google/gemma-4-26b-a4b-it:free
+dots-studio/dots-3-note-preview:free
+nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+liquid/lfm-2.5-2.6b:free
+poolside/laguna-s-2.1:free
+google/gemma-4-31b-it:free
 qwen/qwen3.8-27b:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
+google/gemma-4-26b-a4b-it:free
