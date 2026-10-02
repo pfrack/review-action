@@ -21,6 +21,7 @@
   },
   "openrouter": {
     "models": [
+      "apodex/apodex-1.1-mini:free",
       "inclusionai/ling-3.0-flash-sante:free",
       "qwen/qwen3.8-27b:free",
       "dots-studio/dots-3-note-preview:free",
