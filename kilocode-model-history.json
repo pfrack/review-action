@@ -18,12 +18,12 @@
   "kilocode": {
     "models": [
       "kilo-auto/free",
-      "poolside/laguna-s-2.1:free",
+      "stepfun/step-3.7-flash:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "dots-studio/dots-3-note-preview:free",
+      "poolside/laguna-s-2.1:free",
       "apodex/apodex-1.1-mini:free",
       "inclusionai/ling-3.0-flash-sante:free",
-      "qwen/qwen3.8-27b:free",
       "liquid/lfm-2.5-2.6b:free",
       "nvidia/nemotron-3.5-lightning:free",
       "thinkingmachines/inkling-small:free",
@@ -32,8 +32,7 @@
       "nvidia/nemotron-3.5-content-safety:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
-      "openrouter/free",
-      "stepfun/step-3.7-flash:free"
+      "openrouter/free"
     ]
   }
 }
