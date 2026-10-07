@@ -1,4 +1,5 @@
-google/gemma-4-31b-it:free
+poolside/laguna-s-2.1:free
+nvidia/nemotron-3-ultra-550b-a55b:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
-google/gemma-4-26b-a4b-it:free
+google/gemma-4-31b-it:free
