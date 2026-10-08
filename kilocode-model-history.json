@@ -18,7 +18,6 @@
   "kilocode": {
     "models": [
       "kilo-auto/free",
-      "stepfun/step-3.7-flash:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "dots-studio/dots-3-note-preview:free",
       "poolside/laguna-s-2.1:free",
@@ -31,7 +30,8 @@
       "nvidia/nemotron-3.5-content-safety:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
-      "openrouter/free"
+      "openrouter/free",
+      "stepfun/step-3.7-flash:free"
     ]
   }
 }
