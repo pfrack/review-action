@@ -1,5 +1,5 @@
-poolside/laguna-s-2.1:free
-nvidia/nemotron-3-ultra-550b-a55b:free
+google/gemma-4-26b-a4b-it:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
+nvidia/nemotron-3-ultra-550b-a55b:free
 google/gemma-4-31b-it:free
