@@ -1,3 +1,4 @@
+inclusionai/ling-3.0-flash-sante:free
 upstage/solar-mini4:free
 stepfun/step-5-preview:free
 meituan/longcat-2.0:free
