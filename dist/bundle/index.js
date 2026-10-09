@@ -25773,6 +25773,7 @@ const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (measured/estimated scores)
+    'stepfun/step-5-preview-free': 0.5,
     'apodex/apodex-1.1-mini:free': 0.5,
     'meituan/longcat-2.5-preview:free': 0.5,
     'qwen/qwen3.8-27b:free': 0.5,
