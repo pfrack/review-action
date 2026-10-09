@@ -22,7 +22,6 @@
   "openrouter": {
     "models": [
       "apodex/apodex-1.1-mini:free",
-      "inclusionai/ling-3.0-flash-sante:free",
       "dots-studio/dots-3-note-preview:free",
       "liquid/lfm-2.5-2.6b:free",
       "nvidia/nemotron-3.5-lightning:free",
