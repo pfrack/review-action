@@ -1,0 +1,667 @@
+import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { OpenAIClient } from './openai-client.js';
+import { runBenchmark, formatMarkdownTable } from './bench.js';
+import { SWE_BENCH_SCORES, fetchSweBenchScores } from './bench-reorder.js';
+import { readRemovedModels, writeRemovedModels } from './removed-models.js';
+import { splitCSV } from './config.js';
+import { loadHistory, saveHistory, detectNewModels, detectRemovedModels, updateHistory } from './model-history.js';
+function envOrDefault(key, def) {
+    return process.env[key] || def;
+}
+function parsePositiveIntEnv(key, def) {
+    const raw = envOrDefault(key, String(def));
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 1)
+        throw new Error(`${key} must be a positive integer`);
+    return n;
+}
+const SYNTHETIC_REVIEW_PROMPT = `You are a helpful coding assistant. Review the following code snippet for bugs, security issues, and performance problems. Respond in concise markdown with findings.
+
+\`\`\`python
+def process_order(items, discount):
+    total = 0.0
+    for item in items:
+        total += item.price * item.quantity
+    total = total * (1 - discount)
+    tax = total * 0.08
+    return {
+        'items': items,
+        'subtotal': total,
+        'tax': tax,
+        'total': total + tax,
+    }
+\`\`\``;
+const TARGET_COUNT = 7;
+/**
+ * Run an async map over `items` with bounded concurrency, preserving input
+ * order in the result. Each batch is awaited before the next starts, so the
+ * result array always matches `items` order regardless of completion times.
+ */
+export async function mapWithConcurrency(items, concurrency, fn) {
+    const results = [];
+    for (let i = 0; i < items.length; i += concurrency) {
+        const batch = items.slice(i, i + concurrency);
+        const outcomes = await Promise.all(batch.map(fn));
+        results.push(...outcomes);
+    }
+    return results;
+}
+/**
+ * Classify benchmark-failed models using the probe as the availability signal:
+ *   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
+ *   probe-fail  + catalog-listed  → transient (re-probed next run)
+ *   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
+ * `availableModels` is optional: when absent (e.g. catalog fetch failed), a
+ * probe-fail is treated as permanently unavailable — the model is excluded
+ * and dropped from the removal set.
+ */
+export async function classifyFailedModels(failed, probeModel, availableModels) {
+    const demoted = [];
+    const transient = [];
+    const permanent = [];
+    for (const model of failed) {
+        const probeStart = Date.now();
+        const probeOk = await probeModel(model);
+        const probeLatency = Date.now() - probeStart;
+        if (probeOk) {
+            demoted.push({ model, probeLatency });
+        }
+        else if (availableModels && availableModels.has(model)) {
+            transient.push(model);
+        }
+        else {
+            permanent.push(model);
+        }
+    }
+    return { demoted, transient, permanent };
+}
+/**
+ * Read current models from action.yml for a given provider target.
+ * Target is the action.yml input key (e.g. 'openrouter_models').
+ */
+function readCurrentModels(actionPath, target = 'nim_models') {
+    const content = readFileSync(actionPath, 'utf-8');
+    const pattern = new RegExp(`${target}:\\n\\s+description:[^\\n]*\\n\\s+default:\\s*'([^']*)'`);
+    const match = content.match(pattern);
+    if (!match)
+        return [];
+    return splitCSV(match[1]);
+}
+/**
+ * Resolve the provider name from ACTION_TARGET env var.
+ * Maps 'openrouter_models' -> 'openrouter', 'kilocode_models' -> 'kilocode', etc.
+ */
+function resolveProvider() {
+    const target = process.env.ACTION_TARGET || 'nim_models';
+    return target.replace(/_models$/, '');
+}
+/**
+ * Get SWE-bench ranked candidates not already in the active list.
+ * When availableModels is provided, only returns candidates present
+ * in the provider catalog (avoids cross-provider mismatches).
+ */
+function getReplacements(activeModels, availableModels) {
+    const activeSet = new Set(activeModels);
+    return Object.entries(SWE_BENCH_SCORES)
+        .filter(([model]) => !activeSet.has(model))
+        .filter(([model]) => !availableModels || availableModels.has(model))
+        .sort((a, b) => b[1] - a[1])
+        .map(([model]) => model);
+}
+/**
+ * Catalog-driven re-admission pass (NIM only).
+ *
+ * Probes all SWE_BENCH_SCORES models that are (a) in the live NIM catalog
+ * and (b) not currently in action.yml's model list. Models that pass the
+ * probe are benchmarked and their results are added to the output.
+ *
+ * This replaces the file-based removed-models recheck path for NIM:
+ * each run re-discovers catalog-listed models instead of persisting
+ * ejections across runs.
+ */
+export async function readmitCatalogModels(opts) {
+    const limit = opts.limit ?? 5;
+    const concurrency = opts.concurrency ?? 3;
+    const currentModels = new Set(readCurrentModels(opts.actionPath));
+    // NIM SWE_BENCH_SCORES models in the catalog but not in action.yml
+    const candidates = Object.entries(SWE_BENCH_SCORES)
+        .filter(([model]) => opts.availableModels.has(model))
+        .filter(([model]) => !currentModels.has(model))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([model]) => model);
+    const results = [];
+    const reAdmitted = [];
+    const outcomes = await mapWithConcurrency(candidates, concurrency, async (model) => {
+        const ok = (await opts.client.probeModel(model)).ok;
+        if (!ok) {
+            process.stderr.write(`  ${model}: probe fail, skipping\n`);
+            return { model, admitted: false, result: null };
+        }
+        process.stderr.write(`  ${model}: probe ok, benchmarking...\n`);
+        const result = await runBenchmark(opts.client, model, {
+            prompt: opts.benchPrompt,
+            iterations: opts.iterations,
+            temperature: 0.2,
+            maxTokens: 1024,
+        });
+        const errCount = result.iterations.filter(it => it.error !== null).length;
+        if (errCount === opts.iterations) {
+            process.stderr.write(`  ${model}: FAILED\n`);
+            return { model, admitted: false, result: null };
+        }
+        process.stderr.write(`  ${model}: done (${errCount} errors)\n`);
+        return { model, admitted: true, result };
+    });
+    for (const o of outcomes) {
+        if (o.admitted && o.result) {
+            results.push(o.result);
+            reAdmitted.push(o.model);
+        }
+    }
+    return { results, reAdmitted };
+}
+/**
+ * Normalize a model id for comparison: lowercase, strip org prefix, strip
+ * common suffixes (instruct, chat, base, etc.) and non-alphanumerics.
+ */
+export function normalizeModelId(id) {
+    return id
+        .toLowerCase()
+        .replace(/:free$/i, '')
+        .replace(/^[^/]+\//, '')
+        .replace(/-(instruct|chat|base|it|bf16|fp8|fp16|preview|free)$/i, '')
+        .replace(/[^a-z0-9]/g, '');
+}
+/**
+ * Deterministic match between a NIM model id and a leaderboard entry.
+ * Returns the matched score and strategy, or null if no plausible match.
+ *
+ * Strategies tried in order:
+ *   1. exact id match
+ *   2. case-insensitive id match
+ *   3. normalized id match (strip org + common suffixes)
+ *   4. unique substring match in either direction on the normalized form
+ */
+export function deterministicMatch(nimModelId, leaderboard) {
+    const lc = nimModelId.toLowerCase();
+    // 1. exact match
+    const exact = leaderboard.find(e => e.modelId === nimModelId);
+    if (exact)
+        return { score: exact.score, strategy: 'exact', matchedId: exact.modelId };
+    // 2. case-insensitive match
+    const ci = leaderboard.find(e => e.modelId.toLowerCase() === lc);
+    if (ci)
+        return { score: ci.score, strategy: 'case-insensitive', matchedId: ci.modelId };
+    // 3. normalized match (strip org + suffix)
+    const norm = normalizeModelId(nimModelId);
+    const normMatches = leaderboard.filter(e => normalizeModelId(e.modelId) === norm);
+    if (normMatches.length === 1) {
+        const m = normMatches[0];
+        return { score: m.score, strategy: 'normalized', matchedId: m.modelId };
+    }
+    // 4. unique substring match on normalized forms (require near-equal length)
+    const substrMatches = leaderboard.filter(e => {
+        const a = normalizeModelId(e.modelId);
+        if (a === norm)
+            return false;
+        const shorter = a.length < norm.length ? a : norm;
+        const longer = a.length < norm.length ? norm : a;
+        if (!longer.includes(shorter))
+            return false;
+        return longer.length - shorter.length <= 2;
+    });
+    if (substrMatches.length === 1) {
+        const m = substrMatches[0];
+        return { score: m.score, strategy: 'substring', matchedId: m.modelId };
+    }
+    if (substrMatches.length > 1) {
+        process.stderr.write(`    ambiguous substring matches for ${nimModelId}: ${substrMatches.map(m => m.modelId).join(', ')}\n`);
+    }
+    return null;
+}
+/**
+ * Use an LLM to match a NIM model ID to a SWE-bench score.
+ *
+ * Tries deterministic matching first (exact, case-insensitive, normalized,
+ * substring). Falls back to an LLM only when no deterministic match is found.
+ * Returns the matched score or null if no match found.
+ */
+export async function matchModelScore(client, nimModelId, leaderboard, matcherModel) {
+    const det = deterministicMatch(nimModelId, leaderboard);
+    if (det) {
+        process.stderr.write(`    ${nimModelId} → ${det.matchedId} (${det.strategy}) score=${det.score}\n`);
+        return det.score;
+    }
+    process.stderr.write(`    ${nimModelId}: no deterministic match, falling back to LLM\n`);
+    const topModels = leaderboard.slice(0, 30).map(e => `"${e.modelId}": ${e.score}`);
+    const prompt = `Given these SWE-bench Verified scores:\n${topModels.join('\n')}\n\nWhat is the score for NIM model '${nimModelId}'? Return just the numeric score (e.g. 0.75) or "none" if no match.`;
+    try {
+        const result = await client.chat(matcherModel, [
+            { role: 'user', content: prompt },
+        ], { temperature: 0, maxTokens: 16 });
+        const text = result.content.trim().toLowerCase();
+        if (text === 'none' || text === 'n/a') {
+            process.stderr.write(`    LLM: no match for ${nimModelId}\n`);
+            return null;
+        }
+        const score = parseFloat(text);
+        if (isNaN(score) || score < 0 || score > 1) {
+            process.stderr.write(`    LLM: invalid score "${text}" for ${nimModelId} (rejected, plausible range is 0-1)\n`);
+            return null;
+        }
+        process.stderr.write(`    LLM: matched ${nimModelId} → score ${score}\n`);
+        return score;
+    }
+    catch (err) {
+        process.stderr.write(`    LLM match failed for ${nimModelId}: ${err}\n`);
+        return null;
+    }
+}
+async function probe(baseURL, apiKey, models) {
+    const client = new OpenAIClient(baseURL, apiKey);
+    for (const model of models) {
+        process.stderr.write(`  ${model} ...`);
+        const ok = (await client.probeModel(model)).ok;
+        if (ok) {
+            process.stderr.write(' ok\n');
+            console.log(`${model} ok`);
+        }
+        else {
+            process.stderr.write(' FAIL\n');
+            console.log(`${model} FAIL`);
+        }
+    }
+}
+async function main() {
+    const apiKey = process.env.BENCH_API_KEY;
+    if (!apiKey) {
+        throw new Error('BENCH_API_KEY is required');
+    }
+    const baseURL = envOrDefault('BENCH_BASE_URL', 'https://integrate.api.nvidia.com/v1');
+    const actionPath = envOrDefault('ACTION_PATH', 'action.yml');
+    const client = new OpenAIClient(baseURL, apiKey);
+    const isNim = baseURL.includes('nvidia.com');
+    // Fetch provider catalog to distinguish transient vs permanent failures
+    let availableModels = null;
+    try {
+        const models = await client.listModels();
+        availableModels = new Set(models);
+        process.stderr.write(`Provider has ${models.length} models available\n`);
+    }
+    catch (err) {
+        process.stderr.write(`Warning: could not fetch model list: ${err}\n`);
+    }
+    // Track removed-models in memory for this run. NIM no longer uses a
+    // removed-models file; re-admission is catalog-driven via
+    // readmitCatalogModels. OR/Kilo jobs set REMOVED_MODELS_PATH and retain
+    // the file-based flow.
+    const removedModelsPath = process.env.REMOVED_MODELS_PATH;
+    let removedModels = [];
+    if (removedModelsPath && existsSync(removedModelsPath)) {
+        removedModels = readRemovedModels(removedModelsPath);
+        if (availableModels) {
+            const before = removedModels.length;
+            removedModels = removedModels.filter(m => availableModels.has(m));
+            if (removedModels.length !== before) {
+                process.stderr.write(`Cleaned ${before - removedModels.length} permanently removed model(s) from removed-models.txt\n`);
+            }
+        }
+    }
+    // Determine models to benchmark
+    let models;
+    const modelsEnv = process.env.BENCH_MODELS;
+    if (modelsEnv) {
+        models = splitCSV(modelsEnv);
+    }
+    else if (process.env.BENCH_AUTO_FREE === 'true') {
+        // Hybrid discovery: combine known models from action.yml with new free models from catalog
+        if (availableModels) {
+            const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+            const existingModels = readCurrentModels(actionPath, process.env.ACTION_TARGET || 'openrouter_models');
+            const existingSet = new Set(existingModels);
+            const newFreeModels = freeModels.filter(m => !existingSet.has(m));
+            models = [...existingModels, ...newFreeModels];
+            process.stderr.write(`Hybrid discovery: ${existingModels.length} known + ${newFreeModels.length} new free = ${models.length} total\n`);
+        }
+        else {
+            models = [];
+            process.stderr.write('No provider catalog available, cannot auto-discover models\n');
+        }
+    }
+    else {
+        // Read current top from action.yml
+        models = readCurrentModels(actionPath);
+        if (models.length === 0) {
+            // First run — seed from SWE-bench top models
+            models = Object.entries(SWE_BENCH_SCORES)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, TARGET_COUNT)
+                .map(([model]) => model);
+            process.stderr.write(`First run — seeding with top ${TARGET_COUNT} SWE-bench models\n`);
+        }
+        else {
+            process.stderr.write(`Benchmarking current ${models.length} models from action.yml\n`);
+        }
+    }
+    // --probe mode runs before model discovery so a probe-only invocation
+    // does not trigger LLM-based score matching for newly-found models.
+    if (process.argv.includes('--probe')) {
+        await probe(baseURL, apiKey, models);
+        return;
+    }
+    // Discover new models and fetch SWE-bench scores
+    const fetchedScores = new Map();
+    const discoveredModels = [];
+    if (availableModels) {
+        const knownModels = new Set([...Object.keys(SWE_BENCH_SCORES), ...models]);
+        const newModels = [...availableModels].filter(m => !knownModels.has(m));
+        if (newModels.length > 0) {
+            process.stderr.write(`\nDiscovered ${newModels.length} new model(s) not in SWE-bench table\n`);
+            const leaderboard = await fetchSweBenchScores();
+            if (leaderboard.length > 0) {
+                // Use the first model from the active list as the matcher
+                const matcherModel = models[0];
+                if (matcherModel) {
+                    const maxDiscover = parseInt(envOrDefault('BENCH_MAX_DISCOVER', '30'), 10);
+                    for (const nimModel of newModels.slice(0, maxDiscover)) {
+                        process.stderr.write(`  Matching ${nimModel} ...`);
+                        const score = await matchModelScore(client, nimModel, leaderboard, matcherModel);
+                        if (score !== null) {
+                            process.stderr.write(` score=${score}\n`);
+                            fetchedScores.set(nimModel, score);
+                            discoveredModels.push(nimModel);
+                        }
+                        else {
+                            process.stderr.write(' no match\n');
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Add discovered models to the benchmark list
+    if (discoveredModels.length > 0) {
+        models = [...models, ...discoveredModels];
+    }
+    const iterations = parsePositiveIntEnv('BENCH_ITERATIONS', 2);
+    const benchPrompt = envOrDefault('BENCH_PROMPT', SYNTHETIC_REVIEW_PROMPT);
+    const concurrency = parsePositiveIntEnv('BENCH_CONCURRENCY', 1);
+    process.stderr.write(`\nBenchmarking ${models.length} models with ${iterations} iterations (concurrency ${concurrency})...\n\n`);
+    // Benchmark current models
+    const results = [];
+    const failed = [];
+    const outcomes = await mapWithConcurrency(models, concurrency, async (model) => {
+        const start = Date.now();
+        try {
+            const result = await runBenchmark(client, model, {
+                prompt: benchPrompt,
+                iterations,
+                temperature: 0.2,
+                maxTokens: 1024,
+            });
+            const elapsed = Date.now() - start;
+            const errCount = result.iterations.filter(it => it.error !== null).length;
+            const allFailed = errCount === iterations;
+            const line = allFailed
+                ? `  ${model} ... FAILED (${Math.round(elapsed / 1000)}s)`
+                : `  ${model} ... done in ${Math.round(elapsed / 1000)}s (${errCount} errors)`;
+            process.stderr.write(line + '\n');
+            return { model, result, allFailed };
+        }
+        catch (err) {
+            // runBenchmark should normally return a result with error fields, but a
+            // thrown rejection (e.g. client setup failure) must not abort the whole
+            // suite. Capture it as a fully-failed result so the model is classified.
+            process.stderr.write(`  ${model} ... ERROR: ${err.message}\n`);
+            return {
+                model,
+                result: { model, iterations: [] },
+                allFailed: true,
+            };
+        }
+    });
+    for (const o of outcomes) {
+        results.push(o.result);
+        if (o.allFailed)
+            failed.push(o.model);
+    }
+    // Catalog-driven re-admission (NIM only) — probes catalog models not in
+    // action.yml and benchmarks those that pass the probe. Replaces the
+    // file-based removed-models recheck path for NIM.
+    if (isNim && availableModels) {
+        const readmitLimit = parsePositiveIntEnv('BENCH_READMIT_LIMIT', 5);
+        const { results: reAdmittedResults, reAdmitted } = await readmitCatalogModels({
+            availableModels,
+            actionPath,
+            client,
+            benchPrompt,
+            iterations,
+            limit: readmitLimit,
+            concurrency,
+        });
+        results.push(...reAdmittedResults);
+        if (reAdmitted.length > 0) {
+            process.stderr.write(`Re-admitted ${reAdmitted.length} catalog model(s): ${reAdmitted.join(', ')}\n`);
+        }
+    }
+    // Classify failures using the probe as the availability signal.
+    // Three-way classification:
+    //   probe-pass  + catalog-listed → demoted (slow but healthy, kept in table)
+    //   probe-fail  + catalog-listed  → transient (re-probed next run)
+    //   probe-fail  + not-in-catalog   → permanently unavailable (excluded)
+    const { demoted, transient } = await classifyFailedModels(failed, model => client.probeModel(model).then(r => r.ok), availableModels ?? undefined);
+    for (const { model, probeLatency } of demoted) {
+        process.stderr.write(`  ${model}: demoted — slow but healthy (probe ok, ${Math.round(probeLatency / 1000)}s)\n`);
+        // Replace the all-failed result with a synthetic result using probe
+        // latency so the model appears in the table and is ranked by effective
+        // score (with latency penalty) instead of being dropped entirely.
+        const idx = results.findIndex(r => r.model === model);
+        if (idx >= 0) {
+            results.splice(idx, 1);
+        }
+        results.push({
+            model,
+            iterations: [{
+                    ttft: 0,
+                    latency: probeLatency,
+                    completionTokens: 8,
+                    tokensPerSec: 8 / (probeLatency / 1000),
+                    error: null,
+                }],
+        });
+    }
+    for (const model of transient) {
+        process.stderr.write(`  ${model}: transient — will re-probe next run\n`);
+    }
+    // Keep only transient models in `failed` for the replacement logic below
+    failed.length = 0;
+    failed.push(...transient);
+    // Replace remaining failed models (transient only) with next best from SWE-bench.
+    // Replacement uses the hardcoded SWE-bench table which is NIM-specific,
+    // so only run it for NIM endpoints.
+    if (failed.length > 0 && isNim) {
+        process.stderr.write(`\n${failed.length} model(s) failed. Finding replacements...\n`);
+        const replacements = getReplacements(models, availableModels ?? undefined);
+        for (const deadModel of failed) {
+            let replaced = false;
+            for (const candidate of replacements) {
+                if (models.includes(candidate))
+                    continue;
+                process.stderr.write(`  Probing ${candidate} ...`);
+                const ok = (await client.probeModel(candidate)).ok;
+                if (!ok) {
+                    process.stderr.write(' FAIL, skipping\n');
+                    continue;
+                }
+                process.stderr.write(' ok, benchmarking...');
+                const result = await runBenchmark(client, candidate, {
+                    prompt: benchPrompt,
+                    iterations,
+                    temperature: 0.2,
+                    maxTokens: 1024,
+                });
+                const errCount = result.iterations.filter(it => it.error !== null).length;
+                if (errCount === iterations) {
+                    process.stderr.write(' FAILED\n');
+                    continue;
+                }
+                process.stderr.write(` done (replacing ${deadModel})\n`);
+                results.push(result);
+                // Replace in models list
+                const idx = models.indexOf(deadModel);
+                models[idx] = candidate;
+                replaced = true;
+                break;
+            }
+            if (!replaced) {
+                process.stderr.write(`  No replacement found for ${deadModel}\n`);
+            }
+        }
+    }
+    // Recheck previously removed models.
+    // NIM no longer uses a removed-models file — re-admission is catalog-driven
+    // via readmitCatalogModels above. OR/Kilo jobs set REMOVED_MODELS_PATH and
+    // retain the file-based recheck path.
+    if (removedModelsPath && removedModels.length > 0) {
+        // Skip models that are already in the active list — they will be
+        // benchmarked as part of the main run, so rechecking here would duplicate
+        // work. Also drops them from the removed-models file below.
+        const activeSet = new Set(models);
+        const toRecheck = removedModels.filter(m => !activeSet.has(m));
+        const alreadyActive = removedModels.filter(m => activeSet.has(m));
+        if (alreadyActive.length > 0) {
+            process.stderr.write(`\nSkipping recheck for ${alreadyActive.length} model(s) already in active list: ${alreadyActive.join(', ')}\n`);
+        }
+        if (toRecheck.length === 0) {
+            // Nothing to recheck; just persist the cleanup.
+            const finalRemoved = new Set([...transient]);
+            writeRemovedModels([...finalRemoved], removedModelsPath);
+            removedModels = [...finalRemoved];
+        }
+        else {
+            process.stderr.write(`\nRechecking ${toRecheck.length} previously removed model(s)...\n`);
+            const recovered = [];
+            const stillFailed = [];
+            const concurrency = parsePositiveIntEnv('BENCH_RECHECK_CONCURRENCY', 3);
+            // Process models in batches of `concurrency`
+            for (let i = 0; i < toRecheck.length; i += concurrency) {
+                const batch = toRecheck.slice(i, i + concurrency);
+                const outcomes = await Promise.all(batch.map(async (model) => {
+                    process.stderr.write(`  Probing ${model} ...`);
+                    const ok = (await client.probeModel(model)).ok;
+                    if (!ok) {
+                        process.stderr.write(' still down\n');
+                        return { model, status: 'down' };
+                    }
+                    process.stderr.write(' back! benchmarking...');
+                    const result = await runBenchmark(client, model, {
+                        prompt: benchPrompt,
+                        iterations,
+                        temperature: 0.2,
+                        maxTokens: 1024,
+                    });
+                    const errCount = result.iterations.filter(it => it.error !== null).length;
+                    if (errCount === iterations) {
+                        process.stderr.write(' FAILED\n');
+                        return { model, status: 'failed' };
+                    }
+                    process.stderr.write(' ok\n');
+                    return { model, status: 'recovered', result };
+                }));
+                for (const outcome of outcomes) {
+                    if (outcome.status === 'recovered') {
+                        recovered.push(outcome.model);
+                        results.push(outcome.result);
+                    }
+                    else {
+                        stillFailed.push(outcome.model);
+                    }
+                }
+            }
+            // Persist the final removed-models state once. recovered models are
+            // dropped, recheck-still-failed models are kept, already-active models
+            // are dropped (they are now in the main list), and any new transient
+            // failures from this run are merged in (deduplicated).
+            const finalRemoved = new Set(stillFailed);
+            for (const m of transient)
+                finalRemoved.add(m);
+            writeRemovedModels([...finalRemoved], removedModelsPath);
+            removedModels = [...finalRemoved];
+            if (recovered.length > 0) {
+                process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
+            }
+        }
+    }
+    else if (removedModelsPath && transient.length > 0) {
+        // No recheck needed, but persist transient failures for file-based providers.
+        const finalRemoved = new Set([...removedModels, ...transient]);
+        writeRemovedModels([...finalRemoved], removedModelsPath);
+    }
+    // NIM (no REMOVED_MODELS_PATH): nothing to persist — re-admission is
+    // catalog-driven each run via readmitCatalogModels.
+    // Update model history for hybrid discovery
+    if (process.env.BENCH_AUTO_FREE === 'true' && availableModels) {
+        const provider = resolveProvider();
+        const historyPath = process.env.MODEL_HISTORY_PATH || 'model-history.json';
+        const history = loadHistory(historyPath);
+        const freeModels = [...availableModels].filter(m => m.toLowerCase().includes('free'));
+        const newModels = detectNewModels(history, provider, freeModels);
+        const removedModelsHist = detectRemovedModels(history, provider, freeModels);
+        if (newModels.length > 0) {
+            process.stderr.write(`  New models detected: ${newModels.join(', ')}\n`);
+        }
+        if (removedModelsHist.length > 0) {
+            process.stderr.write(`  Removed models detected: ${removedModelsHist.join(', ')}\n`);
+        }
+        const updated = updateHistory(history, provider, freeModels);
+        saveHistory(updated, historyPath);
+        process.stderr.write(`  Updated history for ${provider}: ${freeModels.length} active models\n`);
+    }
+    // Output results table
+    const successResults = results.filter(r => {
+        const errCount = r.iterations.filter(it => it.error !== null).length;
+        return errCount < r.iterations.length;
+    });
+    const table = formatMarkdownTable(successResults);
+    // Pass fetched scores to bench-reorder via a dedicated file (preferred) or
+    // an HTML comment fallback for backward compatibility.
+    if (fetchedScores.size > 0) {
+        const scoresObj = {};
+        fetchedScores.forEach((v, k) => { scoresObj[k] = v; });
+        const json = JSON.stringify(scoresObj);
+        const scoresFile = process.env.BENCH_SCORES_FILE;
+        if (scoresFile) {
+            try {
+                writeFileSync(scoresFile, json + '\n', 'utf-8');
+                process.stderr.write(`Wrote ${fetchedScores.size} fetched score(s) to ${scoresFile}\n`);
+            }
+            catch (err) {
+                process.stderr.write(`Warning: could not write ${scoresFile}: ${err}; falling back to HTML comment\n`);
+                console.log(`<!-- FETCHED_SCORES: ${json} -->`);
+            }
+        }
+        else {
+            console.log(`<!-- FETCHED_SCORES: ${json} -->`);
+        }
+    }
+    console.log(table);
+    // Write to GITHUB_STEP_SUMMARY if set
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+        try {
+            appendFileSync(summaryPath, `\n## NIM Model Benchmark\n\n${table}\n`);
+        }
+        catch (err) {
+            process.stderr.write(`Warning: could not open GITHUB_STEP_SUMMARY: ${err}\n`);
+        }
+    }
+}
+// Only run when executed directly
+const isMainModule = process.argv[1]?.endsWith('bench-entry.js');
+if (isMainModule) {
+    main().catch(err => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+    });
+}

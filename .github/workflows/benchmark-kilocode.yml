@@ -1,0 +1,28 @@
+name: Daily Model Benchmark - Kilocode
+
+on:
+  schedule:
+    - cron: '40 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-reorder
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.KILO_API_KEY }}
+    with:
+      provider: kilocode
+      action_target: kilocode_models
+      base_url: 'https://api.kilo.ai/api/gateway'
+      auto_free: true
+      two_tier: true
+      discover_new: true
+      removed_path: removed-kilocode-models.txt
+      history_path: kilocode-model-history.json
+      scores_file: fetched-scores.json

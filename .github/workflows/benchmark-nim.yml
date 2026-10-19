@@ -1,0 +1,23 @@
+name: Daily Model Benchmark - NIM
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-nim
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.NIM_API_KEY }}
+    with:
+      provider: nim
+      action_target: nim_models
+      concurrency: '3'
+      move_tag: true

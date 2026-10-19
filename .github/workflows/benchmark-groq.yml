@@ -1,0 +1,25 @@
+name: Daily Model Benchmark - Groq
+
+on:
+  schedule:
+    - cron: '20 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-groq
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    with:
+      provider: groq
+      action_target: groq_models
+      base_url: 'https://api.groq.com/openai/v1'
+      models: 'openai/gpt-oss-120b,moonshotai/kimi-k2-instruct,llama-3.3-70b-versatile'
+      removed_path: removed-groq-models.txt
+      move_tag: true
