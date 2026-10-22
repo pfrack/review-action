@@ -21,6 +21,7 @@
       "minimax/minimax-m3.1-flash:free",
       "nvidia/nemotron-3.5-super-vl:free",
       "reflection/beam-free",
+      "recursive/flint-v1.0:free",
       "xingchen-agi/xing4.0-29b-a4b:free",
       "dots-studio/dots-3-note-preview:free",
       "liquid/lfm-2.5-2.6b:free",
