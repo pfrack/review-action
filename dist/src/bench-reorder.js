@@ -157,6 +157,7 @@ export const SWE_BENCH_SCORES = {
     'codestral-2508': 0.650,
     'codestral-latest': 0.650,
     // OpenRouter free-tier models (measured/estimated scores)
+    'recursive/flint-v1.0:free': 0.5,
     'ornith/ornith-1.5-122b:free': 0.5,
     'reflection/beam-free': 0.5,
     'minimax/minimax-m3.1-flash:free': 0.5,
