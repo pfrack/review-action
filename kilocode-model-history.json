@@ -18,7 +18,6 @@
   "kilocode": {
     "models": [
       "kilo-auto/free",
-      "minimax/minimax-m3.1-flash:free",
       "nvidia/nemotron-3.5-super-vl:free",
       "reflection/beam-free",
       "recursive/flint-v1.0:free",
