@@ -1,3 +1,5 @@
+google/gemma-4-31b-it:free
+xingchen-agi/xing4.0-29b-a4b:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
 google/gemma-4-26b-a4b-it:free
