@@ -1,4 +1,4 @@
-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+google/gemma-4-31b-it:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
 nvidia/nemotron-3-super-120b-a12b:free
