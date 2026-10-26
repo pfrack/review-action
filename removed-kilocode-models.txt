@@ -1,2 +1,2 @@
-xingchen-agi/xing4.0-29b-a4b:free
+nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 nvidia/nemotron-3-super-120b-a12b:free
