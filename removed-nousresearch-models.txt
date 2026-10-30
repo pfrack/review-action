@@ -1,2 +1,3 @@
+ornith/ornith-1.5-122b:free
 upstage/solar-mini4:free
 stepfun/step-3.7-flash:free
