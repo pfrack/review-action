@@ -1,5 +1,6 @@
-nvidia/nemotron-3.5-content-safety:free
+xingchen-agi/xing4.0-29b-a4b:free
+google/gemma-4-31b-it:free
 recursive/flint-v1.0:free
-google/gemma-4-26b-a4b-it:free
 thinkingmachines/inkling-small:free
 thinkingmachines/inkling:free
+nvidia/nemotron-3.5-content-safety:free
