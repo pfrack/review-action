@@ -1,3 +1,5 @@
-ornith/ornith-1.5-122b:free
+poolside/laguna-s-2.1:free
+poolside/laguna-xs-2.1:free
 upstage/solar-mini4:free
 stepfun/step-3.7-flash:free
+ornith/ornith-1.5-122b:free
