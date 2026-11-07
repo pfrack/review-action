@@ -1,0 +1,5 @@
+xingchen-agi/xing4.0-29b-a4b:free
+recursive/flint-v1.0:free
+thinkingmachines/inkling-small:free
+thinkingmachines/inkling:free
+nvidia/nemotron-3.5-content-safety:free

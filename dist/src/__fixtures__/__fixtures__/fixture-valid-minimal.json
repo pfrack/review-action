@@ -1,0 +1,10 @@
+{
+  "rawResponse": "{\"findings\":[{\"file\":\"app.py\",\"severity\":\"Suggestion\",\"issue\":\"Add type hints to function parameters\",\"critical_action\":\"not applicable\",\"warning_action\":\"not applicable\",\"suggestion_action\":\"Optionally annotate function parameters with explicit types to improve readability and tooling support.\"}]}",
+  "expectedParsed": {
+    "findings": [
+      {"file": "app.py", "severity": "Suggestion", "issue": "Add type hints to function parameters", "critical_action": "not applicable", "warning_action": "not applicable", "suggestion_action": "Optionally annotate function parameters with explicit types to improve readability and tooling support."}
+    ]
+  },
+  "shouldParse": true,
+  "notes": "Minimal valid response with only required fields"
+}

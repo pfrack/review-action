@@ -1,0 +1,10 @@
+{
+  "nousresearch": {
+    "models": [
+      "upstage/solar-mini4:free",
+      "stepfun/step-3.7-flash:free",
+      "meituan/longcat-2.5:free",
+      "reflection/beam-1.0-501b-a23b:free"
+    ]
+  }
+}

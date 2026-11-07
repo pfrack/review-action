@@ -1,0 +1,5 @@
+{
+  "rawResponse": "I've reviewed the code changes. The implementation looks good overall. There are no critical issues to report.",
+  "shouldParse": false,
+  "notes": "Plain text prose instead of JSON — should fail safeParse"
+}
