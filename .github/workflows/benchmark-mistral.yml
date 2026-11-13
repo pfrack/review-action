@@ -1,0 +1,25 @@
+name: Daily Model Benchmark - Mistral
+
+on:
+  schedule:
+    - cron: '10 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark-template.yml
+    concurrency:
+      group: benchmark-mistral
+      cancel-in-progress: false
+    secrets:
+      BENCH_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+    with:
+      provider: mistral
+      action_target: mistral_models
+      base_url: 'https://api.mistral.ai/v1'
+      models: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+      removed_path: removed-mistral-models.txt
+      move_tag: true
