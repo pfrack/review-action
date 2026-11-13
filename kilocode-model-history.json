@@ -19,14 +19,16 @@
     "models": [
       "kilo-auto/free",
       "nvidia/nemotron-3.5-super-vl:free",
-      "thinkingmachines/inkling-2-small:free",
+      "baidu/ernie-5.5-flash-preview:free",
       "liquid/lfm-3-1.7b:free",
+      "particle-ai/particle-1:free",
       "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
       "cohere/north-mini-code:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "openrouter/free"
+      "openrouter/free",
+      "reflection/beam-free"
     ]
   }
 }
