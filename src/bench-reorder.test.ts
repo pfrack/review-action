@@ -1,0 +1,1085 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { parseMarkdownTable, rankModels, rankModelsTwoTier, getSweBenchScore, getEffectiveScore, fetchSweBenchScores, parseSweBenchResponse, updateActionYml, updateActionYmlMistral, updateActionYmlOpenRouter, updateActionYmlKilocode, updateActionYmlNousResearch, readFetchedScores, stripFetchedScoresComment, discoverNewModels, patchScoresTable, classifyAllModelFailure, providerName, wasModelAttempted, type ParsedRow } from './bench-reorder.js';
+import { startMockServer } from './test-utils.js';
+
+describe('updateActionYml groq target', () => {
+  it('correctly replaces groq_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  groq_models:
+    description: 'Comma-separated Groq model fallback chain'
+    default: 'openai/gpt-oss-120b,llama-3.3-70b-versatile'
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'mistral-medium-3.5'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+      updateActionYml(actionPath, ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'], 'groq_models');
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'llama-3.3-70b-versatile,openai/gpt-oss-120b'"));
+      assert.ok(result.includes("default: 'mistral-medium-3.5'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('parseMarkdownTable', () => {
+  it('parses a well-formed benchmark table', () => {
+    const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
+|-------|---------------|------------------|---------------------|--------|
+| \`meta/llama-3.3-70b-instruct\` | 250ms | 2.50s | 45.2 | 0 |
+| \`deepseek-ai/deepseek-v4-pro\` | 180ms | 1.80s | 62.1 | 0 |
+| \`nvidia/llama-3.1-nemotron-70b-instruct\` | 300ms | 3.00s | 38.5 | 1 |`;
+
+    const rows = parseMarkdownTable(table);
+    assert.strictEqual(rows.length, 3);
+    assert.strictEqual(rows[0].model, 'meta/llama-3.3-70b-instruct');
+    assert.strictEqual(rows[0].latencyMs, 2500);
+    assert.strictEqual(rows[0].tokensPerSec, 45.2);
+    assert.strictEqual(rows[1].model, 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(rows[2].errors, 1);
+  });
+
+  it('handles N/A values', () => {
+    const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
+|-------|---------------|------------------|---------------------|--------|
+| \`broken/model\` | N/A | N/A | 0.0 | 5 |`;
+
+    const rows = parseMarkdownTable(table);
+    assert.strictEqual(rows[0].latencyMs, Infinity);
+  });
+
+  it('returns empty for empty input', () => {
+    assert.strictEqual(parseMarkdownTable('').length, 0);
+  });
+});
+
+describe('getSweBenchScore', () => {
+  it('returns known score', () => {
+    assert.strictEqual(getSweBenchScore('deepseek-ai/deepseek-v4-pro'), 0.806);
+  });
+
+  it('returns 0.5 for unknown', () => {
+    assert.strictEqual(getSweBenchScore('unknown/model'), 0.5);
+  });
+});
+
+describe('getEffectiveScore', () => {
+  it('no penalty under 60s', () => {
+    const lat = { 'deepseek-ai/deepseek-v4-pro': 30_000 };
+    assert.strictEqual(getEffectiveScore('deepseek-ai/deepseek-v4-pro', lat), 0.806);
+  });
+
+  it('moderate penalty between 60-120s', () => {
+    const lat = { 'deepseek-ai/deepseek-v4-pro': 90_000 };
+    const score = getEffectiveScore('deepseek-ai/deepseek-v4-pro', lat);
+    assert.ok(score < 0.806);
+    assert.ok(score > 0.806 * 0.7);
+  });
+
+  it('heavy penalty over 120s', () => {
+    const lat = { 'deepseek-ai/deepseek-v4-pro': 150_000 };
+    assert.strictEqual(getEffectiveScore('deepseek-ai/deepseek-v4-pro', lat), 0.806 * 0.5);
+  });
+
+  it('no penalty when no latency data', () => {
+    assert.strictEqual(getEffectiveScore('deepseek-ai/deepseek-v4-pro', {}), 0.806);
+  });
+});
+
+describe('rankModels', () => {
+  it('ranks by SWE-bench when latency is fine', () => {
+    const rows: ParsedRow[] = [
+      { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 100, errors: 0 },
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 10000, tokensPerSec: 50, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 200, latencyMs: 8000, tokensPerSec: 80, errors: 0 },
+    ];
+    const latencies = { 'meta/llama-3.3-70b-instruct': 5000, 'deepseek-ai/deepseek-v4-pro': 10000, 'minimaxai/minimax-m3': 8000 };
+
+    const ranked = rankModels(rows, latencies);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'minimaxai/minimax-m3');
+    assert.strictEqual(ranked[2], 'meta/llama-3.3-70b-instruct');
+  });
+
+  it('ranks by effective score with latency penalty applied', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 150_000, tokensPerSec: 30, errors: 0 },
+      { model: 'stepfun-ai/step-3.7-flash', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+    ];
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 150_000, 'stepfun-ai/step-3.7-flash': 5000 };
+
+    const ranked = rankModels(rows, latencies);
+    // deepseek: SWE 0.806, latency 150s → heavy penalty 0.5 → eff 0.403
+    // stepfun:  SWE 0.744, latency 5s  → no penalty 1.0   → eff 0.744
+    assert.strictEqual(ranked[0], 'stepfun-ai/step-3.7-flash');
+    assert.strictEqual(ranked[1], 'deepseek-ai/deepseek-v4-pro');
+  });
+
+  it('ranks fast lower-SWE model above slow higher-SWE model under latency penalty', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 130_000, tokensPerSec: 20, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 200, latencyMs: 70_000, tokensPerSec: 40, errors: 0 },
+    ];
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 130_000, 'minimaxai/minimax-m3': 70_000 };
+
+    const ranked = rankModels(rows, latencies);
+    // deepseek: SWE 0.806, 130s → heavy penalty 0.5 → eff 0.403
+    // minimax:  SWE 0.805, 70s  → linear penalty (0.7 + ratio adjustment) → eff ~0.805 * (1.0 - 0.3 * 0.167) ≈ 0.755
+    assert.strictEqual(ranked[0], 'minimaxai/minimax-m3');
+    assert.strictEqual(ranked[1], 'deepseek-ai/deepseek-v4-pro');
+  });
+
+  it('includes model with partial errors when tokensPerSec > 0', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 0, latencyMs: 47_800, tokensPerSec: 35, errors: 1 },
+    ];
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'minimaxai/minimax-m3': 47_800 };
+
+    const ranked = rankModels(rows, latencies);
+    assert.strictEqual(ranked.length, 2);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'minimaxai/minimax-m3');
+  });
+
+  it('excludes fully failed models (tokensPerSec = 0)', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      { model: 'dead/model', ttftMs: 0, latencyMs: 0, tokensPerSec: 0, errors: 5 },
+    ];
+
+    const ranked = rankModels(rows);
+    assert.strictEqual(ranked.length, 1);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+  });
+});
+
+describe('getSweBenchScore — Mistral direct-API IDs', () => {
+  it('returns 0.776 for mistral-medium-3.5', () => {
+    assert.strictEqual(getSweBenchScore('mistral-medium-3.5'), 0.776);
+  });
+
+  it('returns 0.776 for mistral-medium-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-medium-latest'), 0.776);
+  });
+
+  it('returns 0.720 for mistral-large-2512', () => {
+    assert.strictEqual(getSweBenchScore('mistral-large-2512'), 0.720);
+  });
+
+  it('returns 0.720 for mistral-large-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-large-latest'), 0.720);
+  });
+
+  it('returns 0.680 for mistral-small-2603', () => {
+    assert.strictEqual(getSweBenchScore('mistral-small-2603'), 0.680);
+  });
+
+  it('returns 0.680 for mistral-small-latest', () => {
+    assert.strictEqual(getSweBenchScore('mistral-small-latest'), 0.680);
+  });
+
+  it('returns 0.650 for codestral-2508', () => {
+    assert.strictEqual(getSweBenchScore('codestral-2508'), 0.650);
+  });
+
+  it('returns 0.650 for codestral-latest', () => {
+    assert.strictEqual(getSweBenchScore('codestral-latest'), 0.650);
+  });
+});
+
+describe('getSweBenchScore — OpenRouter and Kilo free-tier estimated scores', () => {
+  it('returns 0.65 for deepseek/deepseek-r1:free', () => {
+    assert.strictEqual(getSweBenchScore('deepseek/deepseek-r1:free'), 0.65);
+  });
+
+  it('returns 0.55 for meta-llama/llama-4-maverick:free', () => {
+    assert.strictEqual(getSweBenchScore('meta-llama/llama-4-maverick:free'), 0.55);
+  });
+
+  it('returns 0.60 for google/gemini-2.0-flash-exp:free', () => {
+    assert.strictEqual(getSweBenchScore('google/gemini-2.0-flash-exp:free'), 0.60);
+  });
+
+  it('returns 0.55 for kilo-auto/balanced:free', () => {
+    assert.strictEqual(getSweBenchScore('kilo-auto/balanced:free'), 0.55);
+  });
+
+  it('returns 0.60 for kilo-auto/frontier:free', () => {
+    assert.strictEqual(getSweBenchScore('kilo-auto/frontier:free'), 0.60);
+  });
+});
+
+describe('updateActionYmlMistral', () => {
+  it('correctly replaces mistral_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  mistral_models:
+    description: 'Comma-separated Mistral model fallback chain'
+    default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlMistral(actionPath, ['codestral-2508', 'mistral-medium-3.5']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'codestral-2508,mistral-medium-3.5'"));
+      // nim_models should be unchanged
+      assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not modify file when mistral_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlMistral(actionPath, ['codestral-2508']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.strictEqual(result, content); // unchanged
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('updateActionYmlOpenRouter', () => {
+  it('correctly replaces openrouter_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free,meta-llama/llama-4-maverick:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlOpenRouter(actionPath, ['deepseek/deepseek-r1:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'deepseek/deepseek-r1:free'"));
+      assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not modify file when openrouter_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlOpenRouter(actionPath, ['deepseek/deepseek-r1:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.strictEqual(result, content); // unchanged
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('updateActionYmlKilocode', () => {
+  it('correctly replaces kilocode_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  kilocode_models:
+    description: 'Comma-separated Kilo model fallback chain'
+    default: 'kilo-auto/balanced:free,kilo-auto/frontier:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlKilocode(actionPath, ['kilo-auto/frontier:free', 'kilo-auto/balanced:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'kilo-auto/frontier:free,kilo-auto/balanced:free'"));
+      assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not modify file when kilocode_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlKilocode(actionPath, ['kilo-auto/frontier:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.strictEqual(result, content); // unchanged
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('updateActionYmlNousResearch', () => {
+  it('correctly replaces nousresearch_models default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nousresearch_models:
+    description: 'Comma-separated NousResearch model fallback chain'
+    default: 'poolside/laguna-s-2.1:free,tencent/hy3:free'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlNousResearch(actionPath, ['tencent/hy3:free', 'poolside/laguna-s-2.1:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.ok(result.includes("default: 'tencent/hy3:free,poolside/laguna-s-2.1:free'"));
+      assert.ok(result.includes("default: 'deepseek-ai/deepseek-v4-pro'"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not modify file when nousresearch_models block not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'bench-test-'));
+    try {
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const content = `name: 'NIM Code Review'
+inputs:
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'deepseek-ai/deepseek-v4-pro'
+`;
+
+      writeFileSync(actionPath, content, 'utf-8');
+
+      updateActionYmlNousResearch(actionPath, ['tencent/hy3:free']);
+
+      const result = readFileSync(actionPath, 'utf-8');
+      assert.strictEqual(result, content); // unchanged
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns NousResearch free-tier measured/estimated scores from SWE_BENCH_SCORES', () => {
+    assert.strictEqual(getSweBenchScore('poolside/laguna-s-2.1:free'), 0.75);            // estimated — 118B
+    assert.strictEqual(getSweBenchScore('poolside/laguna-xs-2.1:free'), 0.709);    // rank 59
+    assert.strictEqual(getSweBenchScore('upstage/solar-pro4:free'), 0.706);       // rank 62
+    assert.strictEqual(getSweBenchScore('meituan/longcat-2.0:free'), 0.70);       // matches rank 64
+    assert.strictEqual(getSweBenchScore('tencent/hy3:free'), 0.78);              // rank 21
+    assert.strictEqual(getSweBenchScore('stepfun/step-3.7-flash:free'), 0.744);   // matches rank 40
+  });
+
+  it('returns updated FreeTier scores (measured from leaderboard)', () => {
+    assert.strictEqual(getSweBenchScore('z-ai/glm-5.2:free'), 0.778);              // matches glm-5, rank 24
+    assert.strictEqual(getSweBenchScore('cohere/north-mini-code:free'), 0.676);   // matches rank 74
+    assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-ultra-550b-a55b:free'), 0.707); // rank 61
+    assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-super-120b-a12b:free'), 0.5373); // rank 92
+    assert.strictEqual(getSweBenchScore('nvidia/nemotron-3.5-lightning:free'), 0.516); // rank 94
+    assert.strictEqual(getSweBenchScore('nvidia/nemotron-3-nano-30b-a3b:free'), 0.388); // rank 103
+  });
+
+  it('keeps 0.5 for routing/specialized models', () => {
+    assert.strictEqual(getSweBenchScore('kilo-auto/free'), 0.5);                    // routing model
+    assert.strictEqual(getSweBenchScore('openrouter/free'), 0.5);                 // routing model
+    assert.strictEqual(getSweBenchScore('nvidia/nemotron-3.5-content-safety:free'), 0.5); // specialized
+  });
+});
+
+describe('getSweBenchScore with fetched scores', () => {
+  it('prefers fetched scores over hardcoded', () => {
+    const fetched = new Map([['deepseek-ai/deepseek-v4-pro', 0.999]]);
+    assert.strictEqual(getSweBenchScore('deepseek-ai/deepseek-v4-pro', fetched), 0.999);
+  });
+
+  it('falls back to hardcoded when fetched does not have model', () => {
+    const fetched = new Map([['other/model', 0.9]]);
+    assert.strictEqual(getSweBenchScore('deepseek-ai/deepseek-v4-pro', fetched), 0.806);
+  });
+
+  it('falls back to 0.5 when neither fetched nor hardcoded has model', () => {
+    const fetched = new Map([['other/model', 0.9]]);
+    assert.strictEqual(getSweBenchScore('unknown/model', fetched), 0.5);
+  });
+
+  it('works without fetched scores parameter', () => {
+    assert.strictEqual(getSweBenchScore('deepseek-ai/deepseek-v4-pro'), 0.806);
+    assert.strictEqual(getSweBenchScore('unknown/model'), 0.5);
+  });
+});
+
+describe('rankModels with fetched scores', () => {
+  it('ranks new model with fetched score above 0.5 defaults', () => {
+    const rows: ParsedRow[] = [
+      { model: 'new-vendor/new-model', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+    ];
+    const latencies = { 'new-vendor/new-model': 5000, 'meta/llama-3.3-70b-instruct': 5000 };
+    const fetched = new Map([['new-vendor/new-model', 0.75]]);
+
+    const ranked = rankModels(rows, latencies, fetched);
+    // new model: 0.75, llama: 0.62 → new model should be first
+    assert.strictEqual(ranked[0], 'new-vendor/new-model');
+    assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+  });
+
+  it('without fetched scores, new model gets 0.5 and ranks lower', () => {
+    const rows: ParsedRow[] = [
+      { model: 'new-vendor/new-model', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+    ];
+    const latencies = { 'new-vendor/new-model': 5000, 'meta/llama-3.3-70b-instruct': 5000 };
+
+    const ranked = rankModels(rows, latencies);
+    // new model: 0.5, llama: 0.62 → llama should be first
+    assert.strictEqual(ranked[0], 'meta/llama-3.3-70b-instruct');
+    assert.strictEqual(ranked[1], 'new-vendor/new-model');
+  });
+});
+
+describe('parseSweBenchResponse', () => {
+  it('parses and filters API response correctly', () => {
+    const data = {
+      results: [
+        { model_id: 'model-a', score: 0.85, organization_id: 'org-a' },
+        { model_id: 'model-b', score: 0.72, organization_id: 'org-b' },
+        { model_id: 'model-c', score: 0.4, organization_id: 'org-c' }, // below 0.5
+      ],
+    };
+
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].modelId, 'model-a');
+    assert.strictEqual(result[0].score, 0.85);
+    assert.strictEqual(result[0].org, 'org-a');
+    assert.strictEqual(result[1].modelId, 'model-b');
+    assert.ok(!result.some(e => e.modelId === 'model-c'));
+  });
+
+  it('sorts by score descending', () => {
+    const data = {
+      results: [
+        { model_id: 'low', score: 0.55 },
+        { model_id: 'high', score: 0.9 },
+        { model_id: 'mid', score: 0.7 },
+      ],
+    };
+
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result[0].modelId, 'high');
+    assert.strictEqual(result[1].modelId, 'mid');
+    assert.strictEqual(result[2].modelId, 'low');
+  });
+
+  it('limits to top 30', () => {
+    const results = Array.from({ length: 50 }, (_, i) => ({
+      model_id: `model-${i}`,
+      score: 0.6 + i * 0.005,
+    }));
+
+    const result = parseSweBenchResponse({ results });
+    assert.strictEqual(result.length, 30);
+  });
+
+  it('handles empty results', () => {
+    const result = parseSweBenchResponse({ results: [] });
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('handles missing organization_id', () => {
+    const data = { results: [{ model_id: 'model-a', score: 0.8 }] };
+    const result = parseSweBenchResponse(data);
+    assert.strictEqual(result[0].org, '');
+  });
+});
+
+describe('fetchSweBenchScores', () => {
+  it('returns empty array on network failure (graceful degradation)', async () => {
+    const originalUrl = process.env.SWE_BENCH_API_URL;
+    process.env.SWE_BENCH_API_URL = 'http://localhost:1';
+    try {
+      const result = await fetchSweBenchScores();
+      assert.ok(Array.isArray(result));
+      // Should not throw
+    } finally {
+      if (originalUrl === undefined) delete process.env.SWE_BENCH_API_URL;
+      else process.env.SWE_BENCH_API_URL = originalUrl;
+    }
+  });
+});
+
+describe('fetchSweBenchScores — retry on transient failure', () => {
+  const originalUrl = process.env.SWE_BENCH_API_URL;
+
+  it('retries on 500 and succeeds', async () => {
+    let callCount = 0;
+    const mock = await startMockServer((_req, res) => {
+      callCount++;
+      if (callCount === 1) {
+        res.writeHead(500);
+        res.end('Internal Server Error');
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          results: [
+            { model_id: 'model-a', score: 0.85 },
+            { model_id: 'model-b', score: 0.72 },
+          ],
+        }));
+      }
+    });
+    process.env.SWE_BENCH_API_URL = mock.url;
+    try {
+      const result = await fetchSweBenchScores();
+      assert.strictEqual(callCount, 2);
+      assert.strictEqual(result.length, 2);
+      assert.strictEqual(result[0].modelId, 'model-a');
+    } finally {
+      if (originalUrl === undefined) delete process.env.SWE_BENCH_API_URL;
+      else process.env.SWE_BENCH_API_URL = originalUrl;
+      mock.close();
+    }
+  });
+
+  it('gracefully returns empty array on non-JSON 200 body', async () => {
+    const mock = await startMockServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body>502 Bad Gateway</body></html>');
+    });
+    process.env.SWE_BENCH_API_URL = mock.url;
+    try {
+      const result = await fetchSweBenchScores();
+      assert.ok(Array.isArray(result));
+      assert.strictEqual(result.length, 0);
+    } finally {
+      if (originalUrl === undefined) delete process.env.SWE_BENCH_API_URL;
+      else process.env.SWE_BENCH_API_URL = originalUrl;
+      mock.close();
+    }
+  });
+});
+
+describe('readFetchedScores', () => {
+  it('reads scores from a file when path is provided', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'fetched-scores-'));
+    try {
+      const scoresFile = join(tmpDir, 'scores.json');
+      writeFileSync(scoresFile, JSON.stringify({ 'new-vendor/new-model': 0.75, 'foo/bar': 0.8 }), 'utf-8');
+
+      const result = readFetchedScores('irrelevant stdin content', scoresFile);
+      assert.strictEqual(result.size, 2);
+      assert.strictEqual(result.get('new-vendor/new-model'), 0.75);
+      assert.strictEqual(result.get('foo/bar'), 0.8);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to HTML comment in stdin when no file path is provided', () => {
+    const input = `<!-- FETCHED_SCORES: {"new-vendor/new-model": 0.91} -->
+| Model | Latency |
+|-------|---------|
+| \`x/y\` | 100ms |`;
+
+    const result = readFetchedScores(input, undefined);
+    assert.strictEqual(result.size, 1);
+    assert.strictEqual(result.get('new-vendor/new-model'), 0.91);
+  });
+
+  it('returns empty map when no scores source is available', () => {
+    const result = readFetchedScores('plain table, no scores', undefined);
+    assert.strictEqual(result.size, 0);
+  });
+
+  it('returns empty map when scores file is missing', () => {
+    const result = readFetchedScores('any', '/nonexistent/path/should-not-exist.json');
+    assert.strictEqual(result.size, 0);
+  });
+
+  it('returns empty map when JSON in stdin comment is malformed', () => {
+    const input = `<!-- FETCHED_SCORES: {not valid json} -->`;
+    const result = readFetchedScores(input, undefined);
+    assert.strictEqual(result.size, 0);
+  });
+
+  it('does not match FETCHED_SCORES when embedded mid-line in the table', () => {
+    // The regex is anchored to ^…$ with the `m` flag, so an HTML-comment-shaped
+    // fragment inside a table cell must not be treated as a scores envelope.
+    const input = `| Model | Latency |
+|-------|---------|
+| \`<!-- FETCHED_SCORES: {"x/y": 0.99} -->\` | 100ms |`;
+
+    const result = readFetchedScores(input, undefined);
+    assert.strictEqual(result.size, 0);
+  });
+});
+
+describe('stripFetchedScoresComment', () => {
+  it('is a no-op when scores file is set', () => {
+    const input = '<!-- FETCHED_SCORES: {"x/y": 0.5} -->\ntable here';
+    const result = stripFetchedScoresComment(input, '/some/file.json');
+    assert.strictEqual(result, input);
+  });
+
+  it('removes the FETCHED_SCORES comment line when scores file is not set', () => {
+    const input = `<!-- FETCHED_SCORES: {"x/y": 0.5} -->
+| Model | Latency |
+|-------|---------|
+| \`a/b\` | 100ms |`;
+
+    const result = stripFetchedScoresComment(input, undefined);
+    assert.ok(!result.includes('FETCHED_SCORES'));
+    assert.ok(result.includes('| Model |'));
+    assert.ok(result.includes('`a/b`'));
+  });
+
+  it('leaves the input untouched when no comment is present', () => {
+    const input = '| Model |\n|-------|\n| `x` |';
+    const result = stripFetchedScoresComment(input, undefined);
+    assert.strictEqual(result, input);
+  });
+});
+
+describe('discoverNewModels', () => {
+  it('returns models not in SWE_BENCH_SCORES with 0.5 score', () => {
+    const result = discoverNewModels(['deepseek-ai/deepseek-v4-pro', 'brand-new/model-free']);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].model, 'brand-new/model-free');
+    assert.strictEqual(result[0].score, 0.5);
+  });
+
+  it('returns empty when all models are known', () => {
+    const result = discoverNewModels(['deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']);
+    assert.strictEqual(result.length, 0);
+  });
+});
+
+describe('patchScoresTable', () => {
+  it('inserts new entries into the scores table', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+    try {
+      const srcPath = join(tmpDir, 'test.ts');
+      const content = `export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  // OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+};`;
+      writeFileSync(srcPath, content, 'utf-8');
+      const count = patchScoresTable(srcPath, [{ model: 'new/model:free', score: 0.5 }]);
+      assert.strictEqual(count, 1);
+      const result = readFileSync(srcPath, 'utf-8');
+      assert.ok(result.includes("'new/model:free': 0.5"));
+      assert.ok(result.includes("'deepseek/deepseek-r1:free': 0.65"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not splice new entries into function body when the marker string also appears as a literal in source', () => {
+    // Regression: content.indexOf(marker) used to match the marker string
+    // inside patchScoresTable's own ternary (the `marker = section === ...`
+    // block), which spliced the new score line into the function body and
+    // produced `TS1005: ';' expected` on the next tsc run. The real table
+    // is always after the function, so lastIndexOf must be used.
+    const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+    try {
+      const srcPath = join(tmpDir, 'test.ts');
+      // Fixture mirrors the real bench-reorder.ts layout: patchScoresTable
+      // is defined FIRST, the SWE_BENCH_SCORES table (with the marker
+      // comments) comes AFTER. So the marker string appears twice: once
+      // as a literal inside the function, once as a real comment in the
+      // table. lastIndexOf must skip the function-body literal.
+      const content = `export function patchScoresTable(sourcePath: string, entries: { model: string; score: number }[], section?: 'openrouter' | 'kilo'): number {
+  const content = readFileSync(sourcePath, 'utf-8');
+  const marker = section === 'kilo'
+    ? '// Kilo free-tier models (estimated scores)'
+    : section === 'openrouter'
+      ? '// OpenRouter free-tier models (estimated scores)'
+      : entries.some(e => e.model.startsWith('kilo-auto/'))
+        ? '// Kilo free-tier models (estimated scores)'
+        : '// OpenRouter free-tier models (estimated scores)';
+  const idx = content.indexOf(marker);
+  if (idx === -1) return 0;
+  return 0;
+}
+
+export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  // OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+  // Kilo free-tier models (estimated scores)
+  'kilo-auto/balanced:free': 0.55,
+};
+`;
+      writeFileSync(srcPath, content, 'utf-8');
+      const count = patchScoresTable(srcPath, [{ model: 'brand-new/model-free', score: 0.5 }]);
+      assert.strictEqual(count, 1);
+      const updated = readFileSync(srcPath, 'utf-8');
+
+      assert.ok(updated.includes("'brand-new/model-free': 0.5,"), 'new entry should be present in file');
+      const fnBodyMatch = updated.match(/export function patchScoresTable[\s\S]*?\n}/);
+      assert.ok(fnBodyMatch, 'function body should still be present');
+      const fnBody = fnBodyMatch[0];
+      assert.ok(
+        !/^\s*'brand-new\/model-free':\s*0\.5,\s*$/m.test(fnBody),
+        'new entry must not be spliced into the function body (root cause of bench-reorder.ts:554 stray)',
+      );
+      const fnEndIdx = (fnBodyMatch.index ?? 0) + fnBodyMatch[0].length;
+      const newEntryIdx = updated.indexOf("'brand-new/model-free': 0.5,");
+      assert.ok(newEntryIdx >= fnEndIdx, 'new entry should be in the table, after the function body');
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 0 when marker not found', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'patch-test-'));
+    try {
+      const srcPath = join(tmpDir, 'test.ts');
+      writeFileSync(srcPath, 'const x = {};', 'utf-8');
+      const count = patchScoresTable(srcPath, [{ model: 'new/model', score: 0.5 }]);
+      assert.strictEqual(count, 0);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('rankModelsTwoTier', () => {
+  it('ranks known models above new models', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'brand-new/model-a', ttftMs: 200, latencyMs: 2000, tokensPerSec: 80, errors: 0 },
+    ];
+    const known = new Set(['deepseek-ai/deepseek-v4-pro']);
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'brand-new/model-a': 2000 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'brand-new/model-a');
+  });
+
+  it('sorts known tier by SWE score descending', () => {
+    const rows: ParsedRow[] = [
+      { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+    ];
+    const known = new Set(['meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-v4-pro']);
+    const latencies = { 'meta/llama-3.3-70b-instruct': 5000, 'deepseek-ai/deepseek-v4-pro': 5000 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+  });
+
+  it('sorts new tier by latency ascending', () => {
+    const rows: ParsedRow[] = [
+      { model: 'new/slow', ttftMs: 200, latencyMs: 10000, tokensPerSec: 80, errors: 0 },
+      { model: 'new/fast', ttftMs: 200, latencyMs: 1000, tokensPerSec: 80, errors: 0 },
+    ];
+    const known = new Set<string>();
+    const latencies = { 'new/slow': 10000, 'new/fast': 1000 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    assert.strictEqual(ranked[0], 'new/fast');
+    assert.strictEqual(ranked[1], 'new/slow');
+  });
+
+  it('preserves input order when effective scores are equal (known tier)', () => {
+    const rows: ParsedRow[] = [
+      { model: 'unknown/a', ttftMs: 200, latencyMs: 8000, tokensPerSec: 80, errors: 0 },
+      { model: 'unknown/b', ttftMs: 200, latencyMs: 2000, tokensPerSec: 80, errors: 0 },
+    ];
+    const known = new Set(['unknown/a', 'unknown/b']);
+    const latencies = { 'unknown/a': 8000, 'unknown/b': 2000 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    // Both have SWE 0.5, latency under 60s → same effective score.
+    // No secondary tiebreaker; stable sort preserves input order.
+    assert.strictEqual(ranked[0], 'unknown/a');
+    assert.strictEqual(ranked[1], 'unknown/b');
+  });
+
+  it('excludes fully failed models', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'dead/model', ttftMs: 0, latencyMs: 0, tokensPerSec: 0, errors: 5 },
+    ];
+    const known = new Set(['deepseek-ai/deepseek-v4-pro']);
+
+    const ranked = rankModelsTwoTier(rows, known);
+    assert.strictEqual(ranked.length, 1);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+  });
+
+  it('respects fetched scores for known tier sorting', () => {
+    const rows: ParsedRow[] = [
+      { model: 'new-vendor/model-x', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+      { model: 'meta/llama-3.3-70b-instruct', ttftMs: 200, latencyMs: 5000, tokensPerSec: 80, errors: 0 },
+    ];
+    const known = new Set(['new-vendor/model-x', 'meta/llama-3.3-70b-instruct']);
+    const fetched = new Map([['new-vendor/model-x', 0.9]]);
+
+    const ranked = rankModelsTwoTier(rows, known, undefined, fetched);
+    assert.strictEqual(ranked[0], 'new-vendor/model-x');
+    assert.strictEqual(ranked[1], 'meta/llama-3.3-70b-instruct');
+  });
+
+  it('relaxes alive filter: partial-error model with tokensPerSec > 0 stays in ranking', () => {
+    const rows: ParsedRow[] = [
+      { model: 'deepseek-ai/deepseek-v4-pro', ttftMs: 200, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      { model: 'minimaxai/minimax-m3', ttftMs: 0, latencyMs: 47_800, tokensPerSec: 35, errors: 1 },
+    ];
+    const known = new Set(['deepseek-ai/deepseek-v4-pro', 'minimaxai/minimax-m3']);
+    const latencies = { 'deepseek-ai/deepseek-v4-pro': 5000, 'minimaxai/minimax-m3': 47_800 };
+
+    const ranked = rankModelsTwoTier(rows, known, latencies);
+    assert.strictEqual(ranked.length, 2);
+    assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+    assert.strictEqual(ranked[1], 'minimaxai/minimax-m3');
+  });
+});
+
+describe('integration: discover → patch scores → rank two-tier → update action.yml', () => {
+  it('full pipeline: new models added to scores table and ranked below known', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'integration-test-'));
+    try {
+      const srcPath = join(tmpDir, 'bench-reorder.ts');
+      const actionPath = join(tmpDir, 'action.yml');
+
+      const sourceContent = `export const SWE_BENCH_SCORES: Record<string, number> = {
+  'deepseek-ai/deepseek-v4-pro': 0.806,
+  'z-ai/glm-5.2': 0.778,
+// OpenRouter free-tier models (estimated scores)
+  'deepseek/deepseek-r1:free': 0.65,
+};`;
+      writeFileSync(srcPath, sourceContent, 'utf-8');
+
+      const actionContent = `name: 'NIM Code Review'
+inputs:
+  openrouter_models:
+    description: 'Comma-separated OpenRouter model fallback chain'
+    default: 'deepseek/deepseek-r1:free'
+`;
+      writeFileSync(actionPath, actionContent, 'utf-8');
+
+      const table = `| Model | TTFT (median) | Latency (median) | Tokens/sec (median) | Errors |
+|-------|---------------|------------------|---------------------|--------|
+| \`deepseek-ai/deepseek-v4-pro\` | 180ms | 1.80s | 62.1 | 0 |
+| \`brand-new/model-free\` | 200ms | 2.00s | 50.0 | 0 |
+| \`deepseek/deepseek-r1:free\` | 250ms | 2.50s | 40.0 | 0 |`;
+
+      const rows = parseMarkdownTable(table);
+
+      const newEntries = discoverNewModels(rows.map(r => r.model));
+      assert.strictEqual(newEntries.length, 1);
+      assert.strictEqual(newEntries[0].model, 'brand-new/model-free');
+      assert.strictEqual(newEntries[0].score, 0.5);
+
+      const patched = patchScoresTable(srcPath, newEntries);
+      assert.strictEqual(patched, 1);
+      const updatedSource = readFileSync(srcPath, 'utf-8');
+      assert.ok(updatedSource.includes("'brand-new/model-free': 0.5"));
+
+      const knownModels = new Set(['deepseek/deepseek-r1:free', 'deepseek-ai/deepseek-v4-pro']);
+      assert.ok(knownModels.has('deepseek/deepseek-r1:free'));
+      assert.ok(knownModels.has('deepseek-ai/deepseek-v4-pro'));
+      assert.ok(!knownModels.has('brand-new/model-free'));
+
+      const latencies: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.latencyMs !== Infinity && row.latencyMs > 0) {
+          latencies[row.model] = row.latencyMs;
+        }
+      }
+
+      const ranked = rankModelsTwoTier(rows, knownModels, latencies);
+      assert.strictEqual(ranked[0], 'deepseek-ai/deepseek-v4-pro');
+      assert.ok(ranked.indexOf('deepseek/deepseek-r1:free') < ranked.indexOf('brand-new/model-free'));
+
+      updateActionYml(actionPath, ranked, 'openrouter_models');
+      const updatedAction = readFileSync(actionPath, 'utf-8');
+      assert.ok(updatedAction.includes('deepseek-ai/deepseek-v4-pro,deepseek/deepseek-r1:free,brand-new/model-free'));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('bench-reorder classifyAllModelFailure', () => {
+  const oriBenchModels = process.env.BENCH_MODELS;
+  const target = 'groq_models';
+
+  function setBenchModels(value: string | undefined) {
+    if (value === undefined) delete process.env.BENCH_MODELS;
+    else process.env.BENCH_MODELS = value;
+  }
+
+  function restore() {
+    setBenchModels(oriBenchModels);
+  }
+
+  it('returns failed when no rows and models were attempted (all-fail)', () => {
+    setBenchModels('openai/gpt-oss-120b');
+    try {
+      const result = classifyAllModelFailure([], [], target);
+      assert.strictEqual(result.failed, true);
+      assert.ok(result.message.includes('All groq models failed'));
+      assert.ok(result.message.includes('Refusing to commit empty defaults'));
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns NOT failed when no rows and no models attempted (first run)', () => {
+    setBenchModels(undefined);
+    try {
+      const result = classifyAllModelFailure([], [], target);
+      assert.strictEqual(result.failed, false);
+      assert.ok(result.message.includes('no models to bench'));
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns failed when rows exist but all have zero tokensPerSec', () => {
+    setBenchModels(undefined);
+    try {
+      const rows: ParsedRow[] = [
+        { model: 'model-a', ttftMs: 100, latencyMs: 5000, tokensPerSec: 0, errors: 2 },
+        { model: 'model-b', ttftMs: 200, latencyMs: 6000, tokensPerSec: 0, errors: 2 },
+      ];
+      const result = classifyAllModelFailure(rows, [], target);
+      assert.strictEqual(result.failed, true);
+      assert.ok(result.message.includes('All groq models failed'));
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns NOT failed when ranked models exist', () => {
+    setBenchModels('openai/gpt-oss-120b');
+    try {
+      const rows: ParsedRow[] = [
+        { model: 'model-a', ttftMs: 100, latencyMs: 5000, tokensPerSec: 50, errors: 0 },
+      ];
+      const result = classifyAllModelFailure(rows, ['model-a'], target);
+      assert.strictEqual(result.failed, false);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('providerName', () => {
+  it('strips the _models suffix', () => {
+    assert.strictEqual(providerName('nim_models'), 'nim');
+    assert.strictEqual(providerName('groq_models'), 'groq');
+    assert.strictEqual(providerName('openrouter_models'), 'openrouter');
+  });
+});
+
+describe('wasModelAttempted', () => {
+  const ori = process.env.BENCH_MODELS;
+
+  function restore() {
+    if (ori === undefined) delete process.env.BENCH_MODELS;
+    else process.env.BENCH_MODELS = ori;
+  }
+
+  it('returns true when BENCH_MODELS is non-empty', () => {
+    process.env.BENCH_MODELS = 'openai/gpt-oss-120b';
+    try {
+      assert.strictEqual(wasModelAttempted(), true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns false when BENCH_MODELS is unset', () => {
+    delete process.env.BENCH_MODELS;
+    try {
+      assert.strictEqual(wasModelAttempted(), false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns false when BENCH_MODELS is whitespace-only', () => {
+    process.env.BENCH_MODELS = '   ';
+    try {
+      assert.strictEqual(wasModelAttempted(), false);
+    } finally {
+      restore();
+    }
+  });
+});

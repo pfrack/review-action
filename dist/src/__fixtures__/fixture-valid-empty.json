@@ -1,0 +1,8 @@
+{
+  "rawResponse": "{\"findings\":[]}",
+  "expectedParsed": {
+    "findings": []
+  },
+  "shouldParse": true,
+  "notes": "Empty findings array — model found no issues"
+}

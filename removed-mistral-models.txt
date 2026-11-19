@@ -1,0 +1,2 @@
+mistral-medium-3.5
+mistral-small-2603
