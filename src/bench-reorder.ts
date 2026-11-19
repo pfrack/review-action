@@ -183,6 +183,7 @@ export const SWE_BENCH_SCORES: Record<string, number> = {
   'codestral-2508': 0.650,
   'codestral-latest': 0.650,
   // OpenRouter free-tier models (measured/estimated scores)
+  'qwen/qwen4-max:free': 0.5,
   'tencent/hy4-flash:free': 0.5,
   'inclusionai/ling-3.2-flash:free': 0.5,
   'particle-ai/particle-1:free': 0.5,
