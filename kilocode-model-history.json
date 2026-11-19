@@ -18,9 +18,11 @@
   "kilocode": {
     "models": [
       "kilo-auto/free",
+      "inclusionai/ling-3.2-flash:free",
       "baidu/ernie-5.5-flash-preview:free",
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
+      "recursive/flint-v1.0:free",
       "nvidia/nemotron-3.5-super-vl:free",
       "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
