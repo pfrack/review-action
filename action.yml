@@ -41,7 +41,7 @@ inputs:
     default: 'https://openrouter.ai/api/v1'
   openrouter_models:
     description: 'Comma-separated OpenRouter model fallback chain (defaults to all free-tier models from provider when empty)'
-    default: 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-super-vl:free,recursive/flint-v1.0:free,baidu/ernie-5.5-flash-preview:free,openrouter/free,liquid/lfm-3-1.7b:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-26b-a4b-it:free'
+    default: 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3.5-super-vl:free,recursive/flint-v1.0:free,baidu/ernie-5.5-flash-preview:free,openrouter/free,liquid/lfm-3-1.7b:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,particle-ai/particle-1:free,inclusionai/ling-3.2-flash:free'
   openrouter_free_only:
     description: 'Filter OpenRouter models to only use free-tier (:free suffix) models'
     default: 'false'

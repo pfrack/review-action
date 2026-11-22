@@ -1,3 +1,2 @@
-particle-ai/particle-1:free
+google/gemma-4-26b-a4b-it:free
 google/gemma-4-31b-it:free
-inclusionai/ling-3.2-flash:free
