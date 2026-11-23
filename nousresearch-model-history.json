@@ -4,7 +4,6 @@
       "upstage/solar-mini4:free",
       "tencent/hy4-flash:free",
       "stepfun/step-3.7-flash:free",
-      "qwen/qwen4-max:free",
       "meituan/longcat-2.5:free"
     ]
   }
