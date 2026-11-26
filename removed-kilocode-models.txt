@@ -1,0 +1,12 @@
+nvidia/nemotron-3-ultra-550b-a55b:free
+nvidia/nemotron-3.5-lightning:free
+openrouter/free
+kilo-auto/free
+nvidia/nemotron-3.5-super-vl:free
+reflection/beam-free
+baidu/ernie-5.5-flash-preview:free
+liquid/lfm-3-1.7b:free
+recursive/flint-v1.0:free
+particle-ai/particle-1:free
+inclusionai/ling-3.2-flash:free
+nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
