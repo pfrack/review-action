@@ -21,7 +21,6 @@
   },
   "openrouter": {
     "models": [
-      "inclusionai/ling-3.2-flash:free",
       "baidu/ernie-5.5-flash-preview:free",
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
